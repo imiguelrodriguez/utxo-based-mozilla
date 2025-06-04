@@ -4,7 +4,7 @@ support-files = [
   "test_contextmenu_links.html",
   "subtst_contextmenu.html",
   "subtst_contextmenu_input.html",
-  "subtst_contextmenu_add_search_engine.html",
+  "subtst_contextmenu_keyword.html",
   "subtst_contextmenu_xul.xhtml",
   "ctxmenu-image.png",
   "../general/head.js",
@@ -47,8 +47,7 @@ skip-if = ["os == 'linux'"]
 ["browser_contextmenu_inspect.js"]
 skip-if = ["os == 'linux' && socketprocess_networking"]
 
-["browser_contextmenu_add_search_engine.js"]
-support-files = ["subtst_contextmenu_add_search_engine.html"]
+["browser_contextmenu_keyword.js"]
 skip-if = ["os == 'linux'"] # disabled on Linux due to bug 513558
 
 ["browser_contextmenu_linkopen.js"]
@@ -60,9 +59,6 @@ skip-if = ["os == 'linux' && socketprocess_networking"]
 
 ["browser_contextmenu_save_blocked.js"]
 skip-if = ["os == 'linux' && socketprocess_networking"]
-
-["browser_contextmenu_share_linux.js"]
-run-if = ["os == 'linux'"]
 
 ["browser_contextmenu_share_macosx.js"]
 https_first_disabled = true
@@ -91,10 +87,6 @@ support-files = [
   "firebird.png^headers^",
 ]
 skip-if = ["os == 'linux' && socketprocess_networking"]
-
-["browser_copy_link_to_highlight.js"]
-
-["browser_save_image.js"]
 
 ["browser_strip_on_share_link.js"]
 

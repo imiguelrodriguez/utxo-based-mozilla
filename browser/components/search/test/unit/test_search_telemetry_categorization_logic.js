@@ -9,12 +9,10 @@
 "use strict";
 
 ChromeUtils.defineESModuleGetters(this, {
-  SERPCategorization:
-    "moz-src:///browser/components/search/SERPCategorization.sys.mjs",
-  SERPDomainToCategoriesMap:
-    "moz-src:///browser/components/search/SERPCategorization.sys.mjs",
-  CATEGORIZATION_SETTINGS:
-    "moz-src:///browser/components/search/SERPCategorization.sys.mjs",
+  SearchSERPCategorization: "resource:///modules/SearchSERPTelemetry.sys.mjs",
+  SearchSERPDomainToCategoriesMap:
+    "resource:///modules/SearchSERPTelemetry.sys.mjs",
+  SearchSERPTelemetryUtils: "resource:///modules/SearchSERPTelemetry.sys.mjs",
 });
 
 ChromeUtils.defineLazyGetter(this, "gCryptoHash", () => {
@@ -117,11 +115,11 @@ add_setup(async () => {
     "browser.search.serpEventTelemetryCategorization.enabled",
     true
   );
-  await SERPDomainToCategoriesMap.init();
+  await SearchSERPDomainToCategoriesMap.init();
 });
 
 add_task(async function test_categorization_simple() {
-  await SERPDomainToCategoriesMap.overrideMapForTests(
+  await SearchSERPDomainToCategoriesMap.overrideMapForTests(
     TEST_DOMAIN_TO_CATEGORIES_MAP_SIMPLE
   );
 
@@ -138,23 +136,19 @@ add_task(async function test_categorization_simple() {
     "test10.com",
   ]);
 
-  let resultsToReport =
-    await SERPCategorization.applyCategorizationLogic(domains);
+  let resultsToReport = await SearchSERPCategorization.applyCategorizationLogic(
+    domains
+  );
 
   Assert.deepEqual(
     resultsToReport,
-    {
-      category: "2",
-      num_domains: "10",
-      num_inconclusive: "0",
-      num_unknown: "0",
-    },
+    { category: "2", num_domains: 10, num_inconclusive: 0, num_unknown: 0 },
     "Should report the correct values for categorizing the SERP."
   );
 });
 
 add_task(async function test_categorization_inconclusive() {
-  await SERPDomainToCategoriesMap.overrideMapForTests(
+  await SearchSERPDomainToCategoriesMap.overrideMapForTests(
     TEST_DOMAIN_TO_CATEGORIES_MAP_INCONCLUSIVE
   );
 
@@ -171,16 +165,17 @@ add_task(async function test_categorization_inconclusive() {
     "test20.com",
   ]);
 
-  let resultsToReport =
-    await SERPCategorization.applyCategorizationLogic(domains);
+  let resultsToReport = await SearchSERPCategorization.applyCategorizationLogic(
+    domains
+  );
 
   Assert.deepEqual(
     resultsToReport,
     {
-      category: CATEGORIZATION_SETTINGS.INCONCLUSIVE,
-      num_domains: "10",
-      num_inconclusive: "10",
-      num_unknown: "0",
+      category: SearchSERPTelemetryUtils.CATEGORIZATION.INCONCLUSIVE,
+      num_domains: 10,
+      num_inconclusive: 10,
+      num_unknown: 0,
     },
     "Should report the correct values for categorizing the SERP."
   );
@@ -189,7 +184,7 @@ add_task(async function test_categorization_inconclusive() {
 add_task(async function test_categorization_unknown() {
   // Reusing TEST_DOMAIN_TO_CATEGORIES_MAP_SIMPLE since none of this task's
   // domains will be keys within it.
-  await SERPDomainToCategoriesMap.overrideMapForTests(
+  await SearchSERPDomainToCategoriesMap.overrideMapForTests(
     TEST_DOMAIN_TO_CATEGORIES_MAP_SIMPLE
   );
 
@@ -206,23 +201,24 @@ add_task(async function test_categorization_unknown() {
     "test30.com",
   ]);
 
-  let resultsToReport =
-    await SERPCategorization.applyCategorizationLogic(domains);
+  let resultsToReport = await SearchSERPCategorization.applyCategorizationLogic(
+    domains
+  );
 
   Assert.deepEqual(
     resultsToReport,
     {
-      category: CATEGORIZATION_SETTINGS.INCONCLUSIVE,
-      num_domains: "10",
-      num_inconclusive: "0",
-      num_unknown: "10",
+      category: SearchSERPTelemetryUtils.CATEGORIZATION.INCONCLUSIVE,
+      num_domains: 10,
+      num_inconclusive: 0,
+      num_unknown: 10,
     },
     "Should report the correct values for categorizing the SERP."
   );
 });
 
 add_task(async function test_categorization_unknown_and_inconclusive() {
-  await SERPDomainToCategoriesMap.overrideMapForTests(
+  await SearchSERPDomainToCategoriesMap.overrideMapForTests(
     TEST_DOMAIN_TO_CATEGORIES_MAP_UNKNOWN_AND_INCONCLUSIVE
   );
 
@@ -239,16 +235,17 @@ add_task(async function test_categorization_unknown_and_inconclusive() {
     "test40.com",
   ]);
 
-  let resultsToReport =
-    await SERPCategorization.applyCategorizationLogic(domains);
+  let resultsToReport = await SearchSERPCategorization.applyCategorizationLogic(
+    domains
+  );
 
   Assert.deepEqual(
     resultsToReport,
     {
-      category: CATEGORIZATION_SETTINGS.INCONCLUSIVE,
-      num_domains: "10",
-      num_inconclusive: "5",
-      num_unknown: "5",
+      category: SearchSERPTelemetryUtils.CATEGORIZATION.INCONCLUSIVE,
+      num_domains: 10,
+      num_inconclusive: 5,
+      num_unknown: 5,
     },
     "Should report the correct values for categorizing the SERP."
   );
@@ -256,7 +253,7 @@ add_task(async function test_categorization_unknown_and_inconclusive() {
 
 // Tests a mixture of categorized, inconclusive and unknown domains.
 add_task(async function test_categorization_all_types() {
-  await SERPDomainToCategoriesMap.overrideMapForTests(
+  await SearchSERPDomainToCategoriesMap.overrideMapForTests(
     TEST_DOMAIN_TO_CATEGORIES_MAP_ALL_TYPES
   );
 
@@ -275,23 +272,24 @@ add_task(async function test_categorization_all_types() {
     "test60.com",
   ]);
 
-  let resultsToReport =
-    await SERPCategorization.applyCategorizationLogic(domains);
+  let resultsToReport = await SearchSERPCategorization.applyCategorizationLogic(
+    domains
+  );
 
   Assert.deepEqual(
     resultsToReport,
     {
       category: "3",
-      num_domains: "10",
-      num_inconclusive: "2",
-      num_unknown: "3",
+      num_domains: 10,
+      num_inconclusive: 2,
+      num_unknown: 3,
     },
     "Should report the correct values for categorizing the SERP."
   );
 });
 
 add_task(async function test_categorization_tie() {
-  await SERPDomainToCategoriesMap.overrideMapForTests(
+  await SearchSERPDomainToCategoriesMap.overrideMapForTests(
     TEST_DOMAIN_TO_CATEGORIES_MAP_TIE
   );
 
@@ -308,11 +306,12 @@ add_task(async function test_categorization_tie() {
     "test50.com",
   ]);
 
-  let resultsToReport =
-    await SERPCategorization.applyCategorizationLogic(domains);
+  let resultsToReport = await SearchSERPCategorization.applyCategorizationLogic(
+    domains
+  );
 
   Assert.equal(
-    ["1", "2"].includes(resultsToReport.category),
+    [1, 2].includes(resultsToReport.category),
     true,
     "Category should be one of the 2 categories with the max score."
   );
@@ -320,16 +319,16 @@ add_task(async function test_categorization_tie() {
   Assert.deepEqual(
     resultsToReport,
     {
-      num_domains: "10",
-      num_inconclusive: "0",
-      num_unknown: "0",
+      num_domains: 10,
+      num_inconclusive: 0,
+      num_unknown: 0,
     },
     "Should report the correct counts for the various domain types."
   );
 });
 
 add_task(async function test_rank_penalization_equal_scores() {
-  await SERPDomainToCategoriesMap.overrideMapForTests(
+  await SearchSERPDomainToCategoriesMap.overrideMapForTests(
     TEST_DOMAIN_TO_CATEGORIES_MAP_RANK_PENALIZATION_1
   );
 
@@ -346,39 +345,31 @@ add_task(async function test_rank_penalization_equal_scores() {
     "test60.com",
   ]);
 
-  let resultsToReport =
-    await SERPCategorization.applyCategorizationLogic(domains);
+  let resultsToReport = await SearchSERPCategorization.applyCategorizationLogic(
+    domains
+  );
 
   Assert.deepEqual(
     resultsToReport,
-    {
-      category: "1",
-      num_domains: "10",
-      num_inconclusive: "0",
-      num_unknown: "0",
-    },
+    { category: "1", num_domains: 10, num_inconclusive: 0, num_unknown: 0 },
     "Should report the correct values for categorizing the SERP."
   );
 });
 
 add_task(async function test_rank_penalization_highest_score_lower_on_page() {
-  await SERPDomainToCategoriesMap.overrideMapForTests(
+  await SearchSERPDomainToCategoriesMap.overrideMapForTests(
     TEST_DOMAIN_TO_CATEGORIES_MAP_RANK_PENALIZATION_2
   );
 
   let domains = new Set(["test61.com", "test62.com"]);
 
-  let resultsToReport =
-    await SERPCategorization.applyCategorizationLogic(domains);
+  let resultsToReport = await SearchSERPCategorization.applyCategorizationLogic(
+    domains
+  );
 
   Assert.deepEqual(
     resultsToReport,
-    {
-      category: "2",
-      num_domains: "2",
-      num_inconclusive: "0",
-      num_unknown: "0",
-    },
+    { category: "2", num_domains: 2, num_inconclusive: 0, num_unknown: 0 },
     "Should report the correct values for categorizing the SERP."
   );
 });

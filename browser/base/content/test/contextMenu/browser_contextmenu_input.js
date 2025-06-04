@@ -105,7 +105,10 @@ add_task(async function test_text_input_disabled() {
 
 add_task(async function test_password_input() {
   await SpecialPowers.pushPrefEnv({
-    set: [["signon.generation.enabled", false]],
+    set: [
+      ["signon.generation.enabled", false],
+      ["layout.forms.reveal-password-context-menu.enabled", true],
+    ],
   });
   todo(
     false,
@@ -296,10 +299,6 @@ add_task(
           ...(hasPocket ? ["context-pocket", true] : []),
           "context-selectall",
           null,
-          "---",
-          null,
-          "context-take-screenshot",
-          true,
           "---",
           null,
           "context-viewsource",

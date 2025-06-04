@@ -438,7 +438,6 @@ export class ASRouterAdminInner extends React.PureComponent {
       "spotlight",
       "cfr_doorhanger",
       "feature_callout",
-      "pb_newtab",
     ].includes(msg.template);
 
     let itemClassName = "message-item";
@@ -1217,7 +1216,7 @@ export class ASRouterAdminInner extends React.PureComponent {
   }
 
   onChangeAttributionParameters(event) {
-    const { name: eventName, value } = event.target;
+    const { eventName, value } = event.target;
 
     this.setState(({ attributionParameters }) => {
       const updatedParameters = { ...attributionParameters };

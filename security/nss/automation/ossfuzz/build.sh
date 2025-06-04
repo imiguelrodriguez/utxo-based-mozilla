@@ -7,7 +7,7 @@
 ################################################################################
 
 # List of targets disabled for oss-fuzz.
-declare -A disabled=()
+declare -A disabled=([pkcs8]=1)
 
 # List of targets we want to fuzz in TLS and non-TLS mode.
 declare -A tls_targets=([tls-client]=1 [tls-server]=1 [dtls-client]=1 [dtls-server]=1)
@@ -53,9 +53,3 @@ for name in "${!tls_targets[@]}"; do
         copy_fuzzer nssfuzz-$name $name
     fi
 done
-
-# Fuzz introspector picks up files in the out/Debug directory as fuzz
-# targets, messing up the generated reports.
-# To avoid this, we clear the build directory at the end. NSS libraries
-# are statically linked to the fuzz targets.
-rm -rf out/

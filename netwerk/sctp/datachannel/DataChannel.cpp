@@ -212,7 +212,7 @@ class DataChannelRegistry {
     MOZ_DIAGNOSTIC_ASSERT(NS_IsMainThread());
 
     if (NS_WARN_IF(!mConnections.empty())) {
-      MOZ_DIAGNOSTIC_CRASH("mConnections not empty");
+      MOZ_DIAGNOSTIC_ASSERT(false);
       mConnections.clear();
     }
 

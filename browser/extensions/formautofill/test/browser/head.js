@@ -84,22 +84,6 @@ const ADDRESS_FORM_WITH_PAGE_NAVIGATION_BUTTONS =
   "address/capture_address_on_page_navigation.html";
 const FORM_IFRAME_SANDBOXED_URL =
   "https://example.org" + HTTP_TEST_PATH + "autocomplete_iframe_sandboxed.html";
-const FORMS_WITH_DYNAMIC_FORM_CHANGE =
-  "https://example.org" + HTTP_TEST_PATH + "dynamic_forms.html";
-const FORMS_REPLACING_ALL_FIELDS_ON_INPUT =
-  "https://example.org" + HTTP_TEST_PATH + "dynamic_forms.html";
-const FORM_WITH_USER_INITIATED_FORM_CHANGE =
-  "https://example.org" +
-  HTTP_TEST_PATH +
-  "dynamic_form_changing_on_user_interaction.html";
-const FORMLESS_FIELDS_WITH_DYNAMIC_FORM_CHANGE_AFTER_NODE_MUTATIONS =
-  "https://example.org" +
-  HTTP_TEST_PATH +
-  "dynamic_formless_fields_updated_due_to_node_mutations.html";
-const FORMLESS_FIELDS_WITH_DYNAMIC_FORM_CHANGE_AFTER_VISIBILITY_STATE_CHANGE =
-  "https://example.org" +
-  HTTP_TEST_PATH +
-  "dynamic_formless_fields_updated_due_to_visiblity_state_change.html";
 const CREDITCARD_FORM_URL =
   "https://example.org" +
   HTTP_TEST_PATH +
@@ -272,7 +256,7 @@ const TEST_ADDRESS_IE_1 = {
   "street-address": "123 Kilkenny St.",
   "address-level3": "Some Townland",
   "address-level2": "Dublin",
-  "address-level1": "D",
+  "address-level1": "Co. Dublin",
   "postal-code": "A65 F4E2",
   country: "IE",
   tel: "+13534564947391",
@@ -394,28 +378,6 @@ async function waitForStorageChangedEvents(...eventTypes) {
 }
 
 /**
- * Sets up a promise that resolves when the FormAutofillParent sends out a notification
- * that the field detection processes have completed in all FormAutofill children.
- *
- * @returns {Promise}
- */
-async function getFieldDetectionCompletedPromiseResolver() {
-  let fieldDetectionCompletedPromiseResolver;
-  const fieldDetectionCompletedObserver = {
-    fieldDetectionCompleted() {
-      info(`All fields detected.`);
-      fieldDetectionCompletedPromiseResolver();
-      FormAutofillParent.removeMessageObserver(fieldDetectionCompletedObserver);
-    },
-  };
-
-  return new Promise(resolve => {
-    fieldDetectionCompletedPromiseResolver = resolve;
-    FormAutofillParent.addMessageObserver(fieldDetectionCompletedObserver);
-  });
-}
-
-/**
  * Wait until the element found matches the expected autofill value
  *
  * @param {object} target
@@ -526,10 +488,7 @@ async function focusUpdateSubmitForm(target, args, submit = true) {
 
     for (const [selector, value] of Object.entries(obj.newValues)) {
       element = form.querySelector(selector);
-      if (
-        content.HTMLInputElement.isInstance(element) ||
-        content.HTMLTextAreaElement.isInstance(element)
-      ) {
+      if (content.HTMLInputElement.isInstance(element)) {
         element.setUserInput(value);
       } else if (
         content.HTMLSelectElement.isInstance(element) &&
@@ -1016,7 +975,7 @@ function verifySectionAutofillResult(section, result, expectedSection) {
 function getSelectorFromFieldDetail(fieldDetail) {
   // identifier is set with `${element.id}/${element.name}`;
   const id = fieldDetail.identifier.split("/")[0];
-  return `input#${id}, select#${id}, textarea#${id}`;
+  return `input#${id}, select#${id}`;
 }
 
 /**
@@ -1133,11 +1092,7 @@ async function findContext(browser, selector) {
         // TODO: replace the following with an approach that can precisely find the
         // element we want without basing on visibility.
         const e = content.document.querySelector(selector);
-        if (
-          e &&
-          (content.HTMLInputElement.isInstance(e) ||
-            content.HTMLTextAreaElement.isInstance(e))
-        ) {
+        if (e && content.HTMLInputElement.isInstance(e)) {
           return !!(
             e.checkVisibility({
               checkOpacity: true,
@@ -1451,12 +1406,9 @@ async function triggerCapture(browser, submitButtonSelector, fillSelectors) {
  *        Region to assign before running the test
  * @param {Array} patterns.expectedResult
  *        The expected result of this heuristic test. See below for detailed explanation
- * @param {Function} patterns.onTestStart
- *        Function that is executed before the test starts. This runs after the form
- *        field has been focused.
  * @param {Function} patterns.onTestComplete
- *        Function that is executed when the test is complete, but before the tab is closed.
- *        This can be used by the test to verify the status after running the test.
+ *        Function that is executed when the test is complete. This can be used by the test
+ *        to verify the status after running the test.
  *
  * @param {string} patterns.autofillTrigger
  *        The selector to find the element to trigger the autocomplete popup.
@@ -1590,14 +1542,8 @@ async function add_heuristic_tests(
       info(`Focus on each field in the test document`);
       const contexts =
         browser.browsingContext.getAllBrowsingContextsInSubtree();
-
-      // This is a workaround for when we set focus on elements across iframes (in the previous step).
-      // The popup is not refreshed, and consequently, it does not receive key events needed to trigger
-      // the autocomplete popup.
-      const sleepAfterFocus = contexts.length > 1;
-
       for (const context of contexts) {
-        await SpecialPowers.spawn(context, [], async () => {
+        await SpecialPowers.spawn(context, [], async function () {
           const elements = Array.from(
             content.document.querySelectorAll("input, select")
           );
@@ -1610,16 +1556,16 @@ async function add_heuristic_tests(
 
         try {
           await BrowserTestUtils.synthesizeKey("VK_ESCAPE", {}, context);
-          if (sleepAfterFocus) {
-            await sleep();
-          }
         } catch (e) {
           // Error occurs when sending a key event to an invisible iframe, ignore the error.
         }
       }
 
-      if (testPattern.onTestStart) {
-        await testPattern.onTestStart();
+      // This is a workaround for when we set focus on elements across iframes (in the previous step).
+      // The popup is not refreshed, and consequently, it does not receive key events needed to trigger
+      // the autocomplete popup.
+      if (contexts.length > 1) {
+        await sleep();
       }
 
       info(`Waiting for expected section count`);
@@ -1672,11 +1618,11 @@ async function add_heuristic_tests(
         verifyCaptureRecord(guid, testPattern.captureExpectedRecord);
         await removeAllRecords();
       }
-
-      if (testPattern.onTestComplete) {
-        await testPattern.onTestComplete();
-      }
     });
+
+    if (testPattern.onTestComplete) {
+      await testPattern.onTestComplete();
+    }
 
     if (testPattern.profile) {
       await removeAllRecords();

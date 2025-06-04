@@ -3,90 +3,39 @@ https://creativecommons.org/publicdomain/zero/1.0/ */
 
 "use strict";
 
-const { sinon } = ChromeUtils.importESModule(
-  "resource://testing-common/Sinon.sys.mjs"
+add_task(
+  {
+    skip_if: () => !AppConstants.MOZ_SELECTABLE_PROFILES,
+  },
+  async function test_launcher() {
+    const { SelectableProfileService } = ChromeUtils.importESModule(
+      "resource:///modules/profiles/SelectableProfileService.sys.mjs"
+    );
+
+    let profile = do_get_profile();
+    await SelectableProfileService.init();
+
+    // mock() returns an object with a fake `runw` method that, when
+    // called, records its arguments.
+    let input = [];
+    let mock = () => {
+      return {
+        runw: (...args) => {
+          input = args;
+        },
+      };
+    };
+
+    SelectableProfileService.getExecutableProcess = mock;
+    SelectableProfileService.launchInstance(profile);
+
+    let expected;
+    if (Services.appinfo.OS == "Darwin") {
+      expected = ["-foreground", "--profile", profile.path];
+    } else {
+      expected = ["--profile", profile.path];
+    }
+
+    Assert.deepEqual(expected, input[1], "Expected runw arguments");
+  }
 );
-
-const execProcess = sinon.fake();
-const sendCommandLine = sinon.fake.throws(Cr.NS_ERROR_NOT_AVAILABLE);
-
-add_setup(async () => {
-  await initSelectableProfileService();
-
-  sinon.replace(
-    getSelectableProfileService(),
-    "sendCommandLine",
-    (path, args, raise) => sendCommandLine(path, [...args], raise)
-  );
-  sinon.replace(getSelectableProfileService(), "execProcess", execProcess);
-});
-
-add_task(async function test_launcher() {
-  let profile = await createTestProfile();
-
-  const SelectableProfileService = getSelectableProfileService();
-  SelectableProfileService.launchInstance(profile);
-
-  let expected = ["--profiles-activate"];
-
-  Assert.equal(
-    sendCommandLine.callCount,
-    1,
-    "Should have attempted to remote to one instance"
-  );
-  Assert.deepEqual(
-    sendCommandLine.firstCall.args,
-    [profile.path, expected, true],
-    "Expected sendCommandLine arguments"
-  );
-
-  expected.unshift("--profile", profile.path);
-
-  if (Services.appinfo.OS === "Darwin") {
-    expected.unshift("-foreground");
-  }
-
-  // Our mock remote service claims the instance is not running so we will fall back to launching
-  // a new process.
-
-  Assert.equal(execProcess.callCount, 1, "Should have called execProcess once");
-  Assert.deepEqual(
-    execProcess.firstCall.args,
-    [expected],
-    "Expected execProcess arguments"
-  );
-
-  sendCommandLine.resetHistory();
-  execProcess.resetHistory();
-
-  SelectableProfileService.launchInstance(profile, "about:profilemanager");
-
-  expected = ["-url", "about:profilemanager"];
-
-  Assert.equal(
-    sendCommandLine.callCount,
-    1,
-    "Should have attempted to remote to one instance"
-  );
-  Assert.deepEqual(
-    sendCommandLine.firstCall.args,
-    [profile.path, expected, true],
-    "Expected sendCommandLine arguments"
-  );
-
-  expected.unshift("--profile", profile.path);
-
-  if (Services.appinfo.OS === "Darwin") {
-    expected.unshift("-foreground");
-  }
-
-  // Our mock remote service claims the instance is not running so we will fall back to launching
-  // a new process.
-
-  Assert.equal(execProcess.callCount, 1, "Should have called execProcess once");
-  Assert.deepEqual(
-    execProcess.firstCall.args,
-    [expected],
-    "Expected execProcess arguments"
-  );
-});

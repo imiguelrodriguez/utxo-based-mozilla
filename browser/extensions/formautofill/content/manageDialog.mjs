@@ -378,37 +378,22 @@ export class ManageCreditCards extends ManageRecords {
         "autofill-edit-payment-method-os-prompt-windows",
         "autofill-edit-payment-method-os-prompt-other"
       );
-      let verified;
-      let result;
-      try {
-        verified = await lazy.FormAutofillUtils.verifyUserOSAuth(
-          FormAutofill.AUTOFILL_CREDITCARDS_REAUTH_PREF,
-          promptMessage
-        );
-        result = verified ? "success" : "fail_user_canceled";
-      } catch (ex) {
-        result = "fail_error";
-        throw ex;
-      } finally {
-        Glean.formautofill.promptShownOsReauth.record({
-          trigger: "edit",
-          result,
-        });
-      }
+
+      const verified = await lazy.FormAutofillUtils.verifyUserOSAuth(
+        FormAutofill.AUTOFILL_CREDITCARDS_REAUTH_PREF,
+        promptMessage
+      );
       if (!verified) {
         return;
       }
     }
-
     let decryptedCCNumObj = {};
-    let errorResult = 0;
     if (creditCard && creditCard["cc-number-encrypted"]) {
       try {
         decryptedCCNumObj["cc-number"] = await lazy.OSKeyStore.decrypt(
           creditCard["cc-number-encrypted"]
         );
       } catch (ex) {
-        errorResult = ex.result;
         if (ex.result == Cr.NS_ERROR_ABORT) {
           // User shouldn't be ask to reauth here, but it could happen.
           // Return here and skip opening the dialog.
@@ -419,12 +404,6 @@ export class ManageCreditCards extends ManageRecords {
         // unencrypted credit card number.
         decryptedCCNumObj["cc-number"] = "";
         console.error(ex);
-      } finally {
-        Glean.creditcard.osKeystoreDecrypt.record({
-          isDecryptSuccess: errorResult === 0,
-          errorResult,
-          trigger: "edit",
-        });
       }
     }
     let decryptedCreditCard = Object.assign({}, creditCard, decryptedCCNumObj);
@@ -454,7 +433,7 @@ export class ManageCreditCards extends ManageRecords {
     const typeL10nId = lazy.CreditCard.getNetworkL10nId(type);
     const typeName = typeL10nId
       ? await document.l10n.formatValue(typeL10nId)
-      : (type ?? ""); // Unknown card type
+      : type ?? ""; // Unknown card type
     return lazy.CreditCard.getLabelInfo({
       name: creditCard["cc-name"],
       number: creditCard["cc-number"],

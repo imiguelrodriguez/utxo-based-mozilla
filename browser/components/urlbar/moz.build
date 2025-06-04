@@ -5,6 +5,8 @@
 with Files("**"):
     BUG_COMPONENT = ("Firefox", "Address Bar")
 
+JAR_MANIFESTS += ["jar.mn"]
+
 DIRS += [
     "unitconverters",
 ]
@@ -13,7 +15,6 @@ EXTRA_JS_MODULES += [
     "ActionsProvider.sys.mjs",
     "ActionsProviderContextualSearch.sys.mjs",
     "ActionsProviderQuickActions.sys.mjs",
-    "ActionsProviderTabGroups.sys.mjs",
     "MerinoClient.sys.mjs",
     "QuickActionsLoaderDefault.sys.mjs",
     "QuickSuggest.sys.mjs",
@@ -30,7 +31,6 @@ EXTRA_JS_MODULES += [
     "UrlbarProviderBookmarkKeywords.sys.mjs",
     "UrlbarProviderCalculator.sys.mjs",
     "UrlbarProviderClipboard.sys.mjs",
-    "UrlbarProviderGlobalActions.sys.mjs",
     "UrlbarProviderHeuristicFallback.sys.mjs",
     "UrlbarProviderHistoryUrlHeuristic.sys.mjs",
     "UrlbarProviderInputHistory.sys.mjs",
@@ -47,12 +47,12 @@ EXTRA_JS_MODULES += [
     "UrlbarProviderRestrictKeywordsAutofill.sys.mjs",
     "UrlbarProviderSearchSuggestions.sys.mjs",
     "UrlbarProviderSearchTips.sys.mjs",
-    "UrlbarProviderSemanticHistorySearch.sys.mjs",
     "UrlbarProvidersManager.sys.mjs",
     "UrlbarProviderTabToSearch.sys.mjs",
     "UrlbarProviderTokenAliasEngines.sys.mjs",
     "UrlbarProviderTopSites.sys.mjs",
     "UrlbarProviderUnitConversion.sys.mjs",
+    "UrlbarProviderWeather.sys.mjs",
     "UrlbarResult.sys.mjs",
     "UrlbarSearchOneOffs.sys.mjs",
     "UrlbarSearchTermsPersistence.sys.mjs",
@@ -65,19 +65,17 @@ EXTRA_JS_MODULES += [
 
 EXTRA_JS_MODULES["urlbar/private"] += [
     "private/AddonSuggestions.sys.mjs",
-    "private/AmpSuggestions.sys.mjs",
-    "private/DynamicSuggestions.sys.mjs",
+    "private/AdmWikipedia.sys.mjs",
+    "private/BaseFeature.sys.mjs",
+    "private/BlockedSuggestions.sys.mjs",
+    "private/ExposureSuggestions.sys.mjs",
     "private/FakespotSuggestions.sys.mjs",
-    "private/GeolocationUtils.sys.mjs",
     "private/ImpressionCaps.sys.mjs",
     "private/MDNSuggestions.sys.mjs",
-    "private/MLSuggest.sys.mjs",
-    "private/OfflineWikipediaSuggestions.sys.mjs",
-    "private/SuggestBackendMerino.sys.mjs",
-    "private/SuggestBackendMl.sys.mjs",
+    "private/PocketSuggestions.sys.mjs",
+    "private/SuggestBackendJs.sys.mjs",
     "private/SuggestBackendRust.sys.mjs",
-    "private/SuggestFeature.sys.mjs",
-    "private/WeatherSuggestions.sys.mjs",
+    "private/Weather.sys.mjs",
     "private/YelpSuggestions.sys.mjs",
 ]
 

@@ -25,8 +25,7 @@ class AltServiceParent final : public PAltServiceParent {
       const nsCString& aOriginHost, const int32_t& aOriginPort,
       const nsACString& aUsername, const bool& aPrivateBrowsing,
       nsTArray<ProxyInfoCloneArgs>&& aProxyInfo, const uint32_t& aCaps,
-      const OriginAttributes& aOriginAttributes,
-      const HttpConnectionInfoCloneArgs& aArgs);
+      const OriginAttributes& aOriginAttributes);
 
   void ActorDestroy(ActorDestroyReason aWhy) override;
 

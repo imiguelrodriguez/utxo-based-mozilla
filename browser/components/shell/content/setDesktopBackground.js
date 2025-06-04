@@ -34,18 +34,6 @@ var gSetBackground = {
       document
         .getElementById("SetDesktopBackgroundDialog")
         .getButton("accept").hidden = true;
-
-      document
-        .getElementById("setDesktopBackground")
-        .addEventListener("command", () => this.setDesktopBackground());
-
-      document
-        .getElementById("showDesktopPreferences")
-        .addEventListener("command", () => {
-          this._shell
-            .QueryInterface(Ci.nsIMacShellService)
-            .showDesktopPreferences();
-        });
     } else {
       let multiMonitors = false;
       if (AppConstants.platform == "linux") {
@@ -62,15 +50,6 @@ var gSetBackground = {
         // Hide span option on single monitor systems.
         document.getElementById("spanPosition").hidden = true;
       }
-
-      document
-        .getElementById("menuPosition")
-        .addEventListener("command", () => this.updatePosition());
-      document
-        .getElementById("desktopColor")
-        .addEventListener("change", event =>
-          this.updateColor(event.currentTarget.value)
-        );
     }
 
     document.addEventListener("dialogaccept", function () {
@@ -109,10 +88,8 @@ var gSetBackground = {
         "setDesktopBackground"
       );
       setDesktopBackground.hidden = false;
-      document.l10n.setAttributes(
-        setDesktopBackground,
-        "set-desktop-background-accept"
-      );
+      var bundle = document.getElementById("backgroundBundle");
+      setDesktopBackground.label = bundle.getString("DesktopBackgroundSet");
       setDesktopBackground.disabled = false;
 
       document.getElementById("showDesktopPreferences").hidden = true;
@@ -132,13 +109,13 @@ var gSetBackground = {
     } else {
       Services.obs.addObserver(this, "shell:desktop-background-changed");
 
+      var bundle = document.getElementById("backgroundBundle");
       var setDesktopBackground = document.getElementById(
         "setDesktopBackground"
       );
       setDesktopBackground.disabled = true;
-      document.l10n.setAttributes(
-        setDesktopBackground,
-        "set-desktop-background-downloading"
+      setDesktopBackground.label = bundle.getString(
+        "DesktopBackgroundDownloading"
       );
     }
     this._shell.setDesktopBackground(
@@ -265,6 +242,8 @@ if (AppConstants.platform != "macosx") {
       Services.obs.removeObserver(this, "shell:desktop-background-changed");
     }
   };
-}
 
-window.addEventListener("load", () => gSetBackground.load());
+  gSetBackground.showDesktopPrefs = function () {
+    this._shell.QueryInterface(Ci.nsIMacShellService).showDesktopPreferences();
+  };
+}

@@ -23,7 +23,7 @@ const PERSISTED_REVERTED = "urlbar.persistedsearchterms.revert_by_popup_count";
 
 add_setup(async function () {
   await SpecialPowers.pushPrefEnv({
-    set: [["browser.urlbar.scotchBonnet.enableOverride", true]],
+    set: [["browser.urlbar.showSearchTerms.featureGate", true]],
   });
   let cleanup = await installPersistTestEngines();
   Services.telemetry.clearScalars();
@@ -46,7 +46,7 @@ add_task(async function load_page_with_persisted_search() {
 
 add_task(async function load_page_without_persisted_search() {
   await SpecialPowers.pushPrefEnv({
-    set: [["browser.urlbar.scotchBonnet.enableOverride", false]],
+    set: [["browser.urlbar.showSearchTerms.featureGate", false]],
   });
 
   let { tab } = await searchWithTab(
@@ -168,7 +168,7 @@ add_task(async function tabhistory() {
     tab.linkedBrowser,
     "pageshow"
   );
-  tab.linkedBrowser.goBack(false);
+  tab.linkedBrowser.goBack();
   await pageShowPromise;
 
   scalars = TelemetryTestUtils.getProcessScalars("parent", false, true);
@@ -279,7 +279,7 @@ add_task(async function persistent_popup_in_urlbar_switch_tab() {
 // if a PopupNotification uses an anchor in the Urlbar.
 add_task(async function popup_in_urlbar_without_feature() {
   await SpecialPowers.pushPrefEnv({
-    set: [["browser.urlbar.scotchBonnet.enableOverride", false]],
+    set: [["browser.urlbar.showSearchTerms.featureGate", false]],
   });
 
   let { tab } = await searchWithTab(

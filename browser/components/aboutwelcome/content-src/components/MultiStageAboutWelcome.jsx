@@ -59,23 +59,6 @@ export const MultiStageAboutWelcome = props => {
 
       didFilter.current = true;
 
-      // After completing screen filtering, trigger any unhandled campaign
-      // action present in the attribution campaign data. This updates the
-      // "trailhead.firstrun.didHandleCampaignAction" preference, marking the
-      // actions as complete to prevent them from being handled on subsequent
-      // visits to about:welcome. Do not await getting the action to avoid
-      // blocking the thread.
-      window
-        .AWGetUnhandledCampaignAction?.()
-        .then(action => {
-          if (typeof action === "string") {
-            AboutWelcomeUtils.handleCampaignAction(action, props.message_id);
-          }
-        })
-        .catch(error => {
-          console.error("Failed to get unhandled campaign action:", error);
-        });
-
       const screenInitials = filteredScreens
         .map(({ id }) => id?.split("_")[1]?.[0])
         .join("");
@@ -199,12 +182,11 @@ export const MultiStageAboutWelcome = props => {
   // multi select screen.
   const [activeMultiSelects, setActiveMultiSelects] = useState({});
 
-  // Save the active single select state for each screen as an object keyed
+  // Save the active single select state for each screen as string value keyed
   // by screen id. Similar to above, this allows us to remember the state of
   // each screen's single select picker when navigating back and forth between
-  // screens, and allows us to have multiple single selects on a screen.
-  const [activeSingleSelectSelections, setActiveSingleSelectSelections] =
-    useState({});
+  // screens.
+  const [activeSingleSelects, setActiveSingleSelects] = useState({});
 
   // Get the active theme so the rendering code can make it selected
   // by default.
@@ -250,59 +232,31 @@ export const MultiStageAboutWelcome = props => {
           const totalNumberOfScreens = screens.length;
           const isSingleScreen = totalNumberOfScreens === 1;
 
-          const setActiveMultiSelect = (valueOrFn, multiSelectId) => {
-            setActiveMultiSelects(prevState => {
-              const currentScreenSelections = prevState[currentScreen.id] || {};
+          const setActiveMultiSelect = valueOrFn =>
+            setActiveMultiSelects(prevState => ({
+              ...prevState,
+              [currentScreen.id]:
+                typeof valueOrFn === "function"
+                  ? valueOrFn(prevState[currentScreen.id])
+                  : valueOrFn,
+            }));
+          const setScreenMultiSelects = valueOrFn =>
+            setMultiSelects(prevState => ({
+              ...prevState,
+              [currentScreen.id]:
+                typeof valueOrFn === "function"
+                  ? valueOrFn(prevState[currentScreen.id])
+                  : valueOrFn,
+            }));
 
-              return {
-                ...prevState,
-                [currentScreen.id]: {
-                  ...currentScreenSelections,
-                  [multiSelectId]:
-                    typeof valueOrFn === "function"
-                      ? valueOrFn(currentScreenSelections[multiSelectId])
-                      : valueOrFn,
-                },
-              };
-            });
-          };
-
-          const setScreenMultiSelects = (valueOrFn, multiSelectId) => {
-            setMultiSelects(prevState => {
-              const currentMultiSelects = prevState[currentScreen.id] || {};
-
-              return {
-                ...prevState,
-                [currentScreen.id]: {
-                  ...currentMultiSelects,
-                  [multiSelectId]:
-                    typeof valueOrFn === "function"
-                      ? valueOrFn(currentMultiSelects[multiSelectId])
-                      : valueOrFn,
-                },
-              };
-            });
-          };
-
-          const setActiveSingleSelectSelection = (
-            valueOrFn,
-            singleSelectId
-          ) => {
-            setActiveSingleSelectSelections(prevState => {
-              const currentScreenSelections = prevState[currentScreen.id] || {};
-
-              return {
-                ...prevState,
-                [currentScreen.id]: {
-                  ...currentScreenSelections,
-                  [singleSelectId]:
-                    typeof valueOrFn === "function"
-                      ? valueOrFn(prevState[currentScreen.id])
-                      : valueOrFn,
-                },
-              };
-            });
-          };
+          const setActiveSingleSelect = valueOrFn =>
+            setActiveSingleSelects(prevState => ({
+              ...prevState,
+              [currentScreen.id]:
+                typeof valueOrFn === "function"
+                  ? valueOrFn(prevState[currentScreen.id])
+                  : valueOrFn,
+            }));
 
           return index === order ? (
             <WelcomeScreen
@@ -328,10 +282,8 @@ export const MultiStageAboutWelcome = props => {
               activeMultiSelect={activeMultiSelects[currentScreen.id]}
               setActiveMultiSelect={setActiveMultiSelect}
               autoAdvance={currentScreen.auto_advance}
-              activeSingleSelectSelections={
-                activeSingleSelectSelections[currentScreen.id]
-              }
-              setActiveSingleSelectSelection={setActiveSingleSelectSelection}
+              activeSingleSelect={activeSingleSelects[currentScreen.id]}
+              setActiveSingleSelect={setActiveSingleSelect}
               negotiatedLanguage={negotiatedLanguage}
               langPackInstallPhase={langPackInstallPhase}
               forceHideStepsIndicator={currentScreen.force_hide_steps_indicator}
@@ -341,13 +293,6 @@ export const MultiStageAboutWelcome = props => {
               }
               installedAddons={installedAddons}
               setInstalledAddons={setInstalledAddons}
-              addonId={props.addonId}
-              addonType={props.addonType}
-              addonName={props.addonName}
-              addonURL={props.addonURL}
-              addonIconURL={props.addonIconURL}
-              themeScreenshots={props.themeScreenshots}
-              isRtamo={currentScreen.content.isRtamo}
             />
           ) : null;
         })}
@@ -378,24 +323,11 @@ export const SecondaryCTA = props => {
     className += " split-button-container";
   }
   const isDisabled = React.useCallback(
-    disabledValue => {
-      if (disabledValue === "hasActiveMultiSelect") {
-        if (!props.activeMultiSelect) {
-          return true;
-        }
-
-        for (const key in props.activeMultiSelect) {
-          if (props.activeMultiSelect[key]?.length > 0) {
-            return false;
-          }
-        }
-
-        return true;
-      }
-
-      return disabledValue;
-    },
-    [props.activeMultiSelect]
+    disabledValue =>
+      disabledValue === "hasActiveMultiSelect"
+        ? !(props.activeMultiSelect?.length > 0)
+        : disabledValue,
+    [props.activeMultiSelect?.length]
   );
 
   if (isTextLink) {
@@ -415,7 +347,6 @@ export const SecondaryCTA = props => {
       </Localized>
       <Localized text={props.content[targetElement].label}>
         <button
-          id="secondary_button"
           className={buttonStyling}
           value={targetElement}
           disabled={isDisabled(props.content.secondary_button?.disabled)}
@@ -496,63 +427,8 @@ export class WelcomeScreen extends React.PureComponent {
     return AboutWelcomeUtils.handleUserAction({ type, data });
   }
 
-  logTelemetry({ value, event, source, props }) {
-    AboutWelcomeUtils.sendActionTelemetry(props.messageId, source, event.name);
-
-    // Send additional telemetry if a messaging surface like feature callout is
-    // dismissed via the dismiss button. Other causes of dismissal will be
-    // handled separately by the messaging surface's own code.
-    if (value === "dismiss_button" && !event.name) {
-      AboutWelcomeUtils.sendDismissTelemetry(props.messageId, source);
-    }
-  }
-
-  async handleMigrationIfNeeded(action, props) {
-    const hasMigrate = a =>
-      a.type === "SHOW_MIGRATION_WIZARD" ||
-      (a.type === "MULTI_ACTION" && a.data?.actions?.some(hasMigrate));
-
-    if (hasMigrate(action)) {
-      await window.AWWaitForMigrationClose();
-      AboutWelcomeUtils.sendActionTelemetry(props.messageId, "migrate_close");
-    }
-  }
-
-  applyThemeIfNeeded(action, event) {
-    if (!action.theme) {
-      return;
-    }
-
-    const themeToUse =
-      action.theme === "<event>"
-        ? event.currentTarget.value
-        : this.props.initialTheme || action.theme;
-
-    this.props.setActiveTheme(themeToUse);
-    window.AWSelectTheme(themeToUse);
-  }
-
-  handlePickerAction(value) {
-    const tileGroups = Array.isArray(this.props.content.tiles)
-      ? this.props.content.tiles
-      : [this.props.content.tiles];
-
-    for (const tile of tileGroups) {
-      if (!tile?.data) {
-        continue;
-      }
-
-      for (const opt of tile.data) {
-        if (opt.id === value) {
-          AboutWelcomeUtils.handleUserAction(opt.action);
-          return;
-        }
-      }
-    }
-  }
-
   async handleAction(event) {
-    const { props } = this;
+    let { props } = this;
     const value =
       event.currentTarget.value ?? event.currentTarget.getAttribute("value");
     const source = event.source || value;
@@ -565,27 +441,20 @@ export class WelcomeScreen extends React.PureComponent {
       targetContent = { action: event.action };
     }
 
-    if (!targetContent) {
+    if (!(targetContent && targetContent.action)) {
       return;
-    }
-
-    let action;
-    if (Array.isArray(targetContent)) {
-      for (const tile of targetContent) {
-        const matchedTile = tile.data.find(t => t.id === value);
-        if (matchedTile?.action) {
-          action = matchedTile.action;
-          break;
-        }
-      }
-    } else if (!targetContent.action) {
-      return;
-    } else {
-      action = targetContent.action;
     }
     // Send telemetry before waiting on actions
-    this.logTelemetry({ value, event, source, props });
+    AboutWelcomeUtils.sendActionTelemetry(props.messageId, source, event.name);
 
+    // Send additional telemetry if a messaging surface like feature callout is
+    // dismissed via the dismiss button. Other causes of dismissal will be
+    // handled separately by the messaging surface's own code.
+    if (value === "dismiss_button" && !event.name) {
+      AboutWelcomeUtils.sendDismissTelemetry(props.messageId, source);
+    }
+
+    let { action } = targetContent;
     action = JSON.parse(JSON.stringify(action));
 
     if (action.collectSelect) {
@@ -594,12 +463,13 @@ export class WelcomeScreen extends React.PureComponent {
 
     let actionResult;
     if (["OPEN_URL", "SHOW_FIREFOX_ACCOUNTS"].includes(action.type)) {
-      this.handleOpenURL(action, props.flowParams, props.UTMTerm);
+      actionResult = await this.handleOpenURL(
+        action,
+        props.flowParams,
+        props.UTMTerm
+      );
     } else if (action.type) {
-      let actionPromise = AboutWelcomeUtils.handleUserAction(action);
-      if (action.needsAwait) {
-        actionResult = await actionPromise;
-      }
+      actionResult = await AboutWelcomeUtils.handleUserAction(action);
       if (action.type === "FXA_SIGNIN_FLOW") {
         AboutWelcomeUtils.sendActionTelemetry(
           props.messageId,
@@ -607,26 +477,46 @@ export class WelcomeScreen extends React.PureComponent {
           "FXA_SIGNIN_FLOW"
         );
       }
-
-      if (action.type === "INSTALL_ADDON_FROM_URL") {
-        const url = props.addonURL;
-        if (!action.data) {
-          return;
-        }
-        // Set add-on url in action.data.url property from JSON
-        action.data = { ...action.data, url };
-
-        AboutWelcomeUtils.handleUserAction(action);
-      }
       // Wait until migration closes to complete the action
-      await this.handleMigrationIfNeeded(action, props);
+      const hasMigrate = a =>
+        a.type === "SHOW_MIGRATION_WIZARD" ||
+        (a.type === "MULTI_ACTION" && a.data?.actions?.some(hasMigrate));
+      if (hasMigrate(action)) {
+        await window.AWWaitForMigrationClose();
+        AboutWelcomeUtils.sendActionTelemetry(props.messageId, "migrate_close");
+      }
     }
 
     // A special tiles.action.theme value indicates we should use the event's value vs provided value.
-    this.applyThemeIfNeeded(action, event);
+    if (action.theme) {
+      let themeToUse =
+        action.theme === "<event>"
+          ? event.currentTarget.value
+          : this.props.initialTheme || action.theme;
+      this.props.setActiveTheme(themeToUse);
+      if (props.content.tiles?.category?.type === "wallpaper") {
+        const theme = themeToUse.split("-")?.[1];
+        let actionWallpaper = { ...props.content.tiles.category.action };
+        actionWallpaper.data.actions.forEach(async wpAction => {
+          if (wpAction.data.pref.name?.includes("dark")) {
+            wpAction.data.pref.value = `dark-${theme}`;
+          } else {
+            wpAction.data.pref.value = `light-${theme}`;
+          }
+          await AboutWelcomeUtils.handleUserAction(actionWallpaper);
+        });
+      } else {
+        window.AWSelectTheme(themeToUse);
+      }
+    }
 
     if (action.picker) {
-      this.handlePickerAction(value);
+      let options = props.content.tiles.data;
+      options.forEach(opt => {
+        if (opt.id === value) {
+          AboutWelcomeUtils.handleUserAction(opt.action);
+        }
+      });
     }
 
     // If the action has persistActiveTheme: true, we set the initial theme to the currently active theme
@@ -638,32 +528,11 @@ export class WelcomeScreen extends React.PureComponent {
     // `navigate` and `dismiss` can be true/false/undefined, or they can be a
     // string "actionResult" in which case we should use the actionResult
     // (boolean resolved by handleUserAction)
-    const shouldDoBehavior = behavior => {
-      if (behavior !== "actionResult") {
-        return behavior;
-      }
-
-      if (action.needsAwait) {
-        return actionResult;
-      }
-
-      console.error(
-        "actionResult is only supported for actions with needsAwait"
-      );
-      return false;
-    };
+    const shouldDoBehavior = behavior =>
+      behavior === "actionResult" ? actionResult : behavior;
 
     if (shouldDoBehavior(action.navigate)) {
       props.navigate();
-    }
-
-    // Used by FeatureCallout to advance screens by re-rendering the whole
-    // wrapper, updating anchor, page_event_listeners, etc. `navigate` only
-    // updates the inner content. Only implemented by FeatureCallout.
-    if (action.advance_screens) {
-      if (shouldDoBehavior(action.advance_screens.behavior ?? true)) {
-        window.AWAdvanceScreens?.(action.advance_screens);
-      }
     }
 
     if (shouldDoBehavior(action.dismiss)) {
@@ -695,55 +564,27 @@ export class WelcomeScreen extends React.PureComponent {
     // 2. checkbox action 2
     // 3. radio action
     // 4. CTA action (which perhaps depends on the radio action)
-    // Note, this order is only guaranteed if action.data has the
-    // `orderedExecution` flag set to true.
     let multiSelectActions = [];
-
-    const processTile = (tile, tileIndex) => {
-      if (tile?.type !== "multiselect" || !Array.isArray(tile.data)) {
-        return;
-      }
-
-      const multiSelectId = `tile-${tileIndex}`;
-
-      const activeSelections = props.activeMultiSelect[multiSelectId] || [];
-
-      for (const checkbox of tile.data) {
-        let checkboxAction;
-        if (activeSelections.includes(checkbox.id)) {
-          checkboxAction = checkbox.checkedAction ?? checkbox.action;
-        } else {
-          checkboxAction = checkbox.uncheckedAction;
-        }
-
-        if (checkboxAction) {
-          multiSelectActions.push(checkboxAction);
-        }
-      }
-    };
-
-    // Process tiles (this may be a single tile object or an array consisting of
-    // tile objects)
-    if (props.content?.tiles) {
-      if (Array.isArray(props.content.tiles)) {
-        props.content.tiles.forEach(processTile);
+    for (const checkbox of props.content?.tiles?.data ?? []) {
+      let checkboxAction;
+      if (props.activeMultiSelect?.includes(checkbox.id)) {
+        checkboxAction = checkbox.checkedAction ?? checkbox.action;
       } else {
-        // Handle case where tiles is a single tile object
-        processTile(props.content.tiles, 0);
+        checkboxAction = checkbox.uncheckedAction;
+      }
+
+      if (checkboxAction) {
+        multiSelectActions.push(checkboxAction);
       }
     }
-
-    // Prepend the collected multi-select actions to the CTA's actions array
     action.data.actions.unshift(...multiSelectActions);
 
-    for (const value of Object.values(props.activeMultiSelect)) {
-      // Send telemetry with selected checkbox ids
-      AboutWelcomeUtils.sendActionTelemetry(
-        props.messageId,
-        value.flat(),
-        "SELECT_CHECKBOX"
-      );
-    }
+    // Send telemetry with selected checkbox ids
+    AboutWelcomeUtils.sendActionTelemetry(
+      props.messageId,
+      props.activeMultiSelect,
+      "SELECT_CHECKBOX"
+    );
   }
 
   render() {
@@ -759,10 +600,8 @@ export class WelcomeScreen extends React.PureComponent {
         setScreenMultiSelects={this.props.setScreenMultiSelects}
         activeMultiSelect={this.props.activeMultiSelect}
         setActiveMultiSelect={this.props.setActiveMultiSelect}
-        activeSingleSelectSelections={this.props.activeSingleSelectSelections}
-        setActiveSingleSelectSelection={
-          this.props.setActiveSingleSelectSelection
-        }
+        activeSingleSelect={this.props.activeSingleSelect}
+        setActiveSingleSelect={this.props.setActiveSingleSelect}
         totalNumberOfScreens={this.props.totalNumberOfScreens}
         appAndSystemLocaleInfo={this.props.appAndSystemLocaleInfo}
         negotiatedLanguage={this.props.negotiatedLanguage}
@@ -777,13 +616,6 @@ export class WelcomeScreen extends React.PureComponent {
         forceHideStepsIndicator={this.props.forceHideStepsIndicator}
         ariaRole={this.props.ariaRole}
         aboveButtonStepsIndicator={this.props.aboveButtonStepsIndicator}
-        addonId={this.props.addonId}
-        addonType={this.props.addonType}
-        addonName={this.props.addonName}
-        addonURL={this.props.addonURL}
-        addonIconURL={this.props.addonIconURL}
-        themeScreenshots={this.props.themeScreenshots}
-        isRtamo={this.props.content.isRtamo}
       />
     );
   }

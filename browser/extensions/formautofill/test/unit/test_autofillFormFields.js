@@ -853,7 +853,7 @@ function do_test(testcases, testFn) {
         const handler = new FormAutofillHandler(formLike);
         const promises = [];
 
-        const fieldDetails = FormAutofillHandler.collectFormFieldDetails(
+        const fieldDetails = FormAutofillHandler.collectFormFields(
           handler.form
         );
         // TODO: This test should be a browser test instead

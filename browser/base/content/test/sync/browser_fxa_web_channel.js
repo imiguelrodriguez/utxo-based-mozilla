@@ -60,6 +60,9 @@ var gTests = [
           Assert.equal(accountData.uid, "uid");
           Assert.equal(accountData.unwrapBKey, "unwrap_b_key");
           Assert.equal(accountData.verified, true);
+
+          client.tearDown();
+          resolve();
         };
 
         let client = new FxAccountsWebChannel({
@@ -69,12 +72,6 @@ var gTests = [
             login,
           },
         });
-
-        client._channel.send = (message, _context) => {
-          Assert.equal(message.data.ok, true);
-          client.tearDown();
-          resolve();
-        };
       });
 
       await BrowserTestUtils.withNewTab(
@@ -120,12 +117,6 @@ var gTests = [
             shouldAllowRelink(acctName) {
               return acctName === "testuser@testuser.com";
             },
-            promptProfileSyncWarningIfNeeded(acctName) {
-              if (acctName === "testuser@testuser.com") {
-                return { action: "continue" };
-              }
-              return { action: "cancel" };
-            },
           },
         });
       });
@@ -147,6 +138,9 @@ var gTests = [
       let promiseLogout = new Promise(resolve => {
         let logout = uid => {
           Assert.equal(uid, "uid");
+
+          client.tearDown();
+          resolve();
         };
 
         let client = new FxAccountsWebChannel({
@@ -156,12 +150,6 @@ var gTests = [
             logout,
           },
         });
-
-        client._channel.send = (message, _context) => {
-          Assert.equal(message.data.ok, true);
-          client.tearDown();
-          resolve();
-        };
       });
 
       await BrowserTestUtils.withNewTab(
@@ -181,6 +169,9 @@ var gTests = [
       let promiseDelete = new Promise(resolve => {
         let logout = uid => {
           Assert.equal(uid, "uid");
+
+          client.tearDown();
+          resolve();
         };
 
         let client = new FxAccountsWebChannel({
@@ -190,12 +181,6 @@ var gTests = [
             logout,
           },
         });
-
-        client._channel.send = (message, _context) => {
-          Assert.equal(message.data.ok, true);
-          client.tearDown();
-          resolve();
-        };
       });
 
       await BrowserTestUtils.withNewTab(
@@ -225,6 +210,9 @@ var gTests = [
             "function",
             "We can reach the openTab method"
           );
+
+          client.tearDown();
+          resolve();
         };
 
         let client = new FxAccountsWebChannel({
@@ -234,12 +222,6 @@ var gTests = [
             openFirefoxView,
           },
         });
-
-        client._channel.send = (message, _context) => {
-          Assert.equal(message.data.ok, true);
-          client.tearDown();
-          resolve();
-        };
       });
 
       await BrowserTestUtils.withNewTab(

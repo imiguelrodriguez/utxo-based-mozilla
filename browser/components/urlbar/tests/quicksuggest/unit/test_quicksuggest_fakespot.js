@@ -6,11 +6,6 @@
 
 "use strict";
 
-ChromeUtils.defineESModuleGetters(this, {
-  Suggestion:
-    "moz-src:///toolkit/components/uniffi-bindgen-gecko-js/components/generated/RustSuggest.sys.mjs",
-});
-
 const REMOTE_SETTINGS_RECORDS = [
   {
     collection: "fakespot-suggest-products",
@@ -307,62 +302,96 @@ add_task(async function featureGate() {
 
 // Tests the "Not relevant" command: a dismissed suggestion shouldn't be added.
 add_task(async function notRelevant() {
-  await doDismissOneTest({
-    result: makeExpectedResult(),
-    command: "not_relevant",
-    feature: QuickSuggest.getFeature("FakespotSuggestions"),
-    queriesForDismissals: [
-      {
-        query: "example",
-      },
+  let result = makeExpectedResult();
+
+  info("Triggering the 'Not relevant' command");
+  QuickSuggest.getFeature("FakespotSuggestions").handleCommand(
+    {
+      controller: { removeResult() {} },
+    },
+    result,
+    "not_relevant"
+  );
+  await QuickSuggest.blockedSuggestions._test_readyPromise;
+
+  Assert.ok(
+    await QuickSuggest.blockedSuggestions.has(result.payload.originalUrl),
+    "The result's URL should be blocked"
+  );
+
+  // Do a search that matches both suggestions. The non-blocked suggestion
+  // should be returned.
+  info("Doing search for blocked suggestion");
+  await check_results({
+    context: createContext("fakespot", {
+      providers: [UrlbarProviderQuickSuggest.name],
+      isPrivate: false,
+    }),
+    matches: [
+      makeExpectedResult({
+        url: REMOTE_SETTINGS_RECORDS[0].attachment[1].url,
+        title: REMOTE_SETTINGS_RECORDS[0].attachment[1].title,
+        rating: REMOTE_SETTINGS_RECORDS[0].attachment[1].rating,
+        totalReviews: REMOTE_SETTINGS_RECORDS[0].attachment[1].total_reviews,
+        fakespotGrade: REMOTE_SETTINGS_RECORDS[0].attachment[1].fakespot_grade,
+      }),
     ],
-    queriesForOthers: [
-      {
-        query: "another",
-        expectedResults: [
-          makeExpectedResult({
-            url: REMOTE_SETTINGS_RECORDS[0].attachment[1].url,
-            title: REMOTE_SETTINGS_RECORDS[0].attachment[1].title,
-            rating: REMOTE_SETTINGS_RECORDS[0].attachment[1].rating,
-            totalReviews:
-              REMOTE_SETTINGS_RECORDS[0].attachment[1].total_reviews,
-            fakespotGrade:
-              REMOTE_SETTINGS_RECORDS[0].attachment[1].fakespot_grade,
-          }),
-        ],
-      },
-    ],
+  });
+
+  info("Clearing blocked suggestions");
+  await QuickSuggest.blockedSuggestions.clear();
+
+  // Do another search that matches both suggestions. The now-unblocked
+  // suggestion should be returned since it has a higher score.
+  info("Doing search for unblocked suggestion");
+  await check_results({
+    context: createContext(PRIMARY_SEARCH_STRING, {
+      providers: [UrlbarProviderQuickSuggest.name],
+      isPrivate: false,
+    }),
+    matches: [result],
   });
 });
 
 // Tests the "Not interested" command: all suggestions should be disabled and
 // not added anymore.
 add_task(async function notInterested() {
-  await doDismissAllTest({
-    result: makeExpectedResult(),
-    command: "not_interested",
-    feature: QuickSuggest.getFeature("FakespotSuggestions"),
-    pref: "suggest.fakespot",
-    queries: [
-      {
-        query: "example",
-      },
-      {
-        query: "another",
-        expectedResults: [
-          makeExpectedResult({
-            url: REMOTE_SETTINGS_RECORDS[0].attachment[1].url,
-            title: REMOTE_SETTINGS_RECORDS[0].attachment[1].title,
-            rating: REMOTE_SETTINGS_RECORDS[0].attachment[1].rating,
-            totalReviews:
-              REMOTE_SETTINGS_RECORDS[0].attachment[1].total_reviews,
-            fakespotGrade:
-              REMOTE_SETTINGS_RECORDS[0].attachment[1].fakespot_grade,
-          }),
-        ],
-      },
-    ],
+  let result = makeExpectedResult();
+
+  info("Triggering the 'Not interested' command");
+  QuickSuggest.getFeature("FakespotSuggestions").handleCommand(
+    {
+      controller: { removeResult() {} },
+    },
+    result,
+    "not_interested"
+  );
+
+  Assert.ok(
+    !UrlbarPrefs.get("suggest.fakespot"),
+    "Fakespot suggestions should be disabled"
+  );
+
+  info("Doing search for the suggestion the command was used on");
+  await check_results({
+    context: createContext(PRIMARY_SEARCH_STRING, {
+      providers: [UrlbarProviderQuickSuggest.name],
+      isPrivate: false,
+    }),
+    matches: [],
   });
+
+  info("Doing search for another Fakespot suggestion");
+  await check_results({
+    context: createContext("another", {
+      providers: [UrlbarProviderQuickSuggest.name],
+      isPrivate: false,
+    }),
+    matches: [],
+  });
+
+  UrlbarPrefs.clear("suggest.fakespot");
+  await QuickSuggestTestUtils.forceSync();
 });
 
 // Tests the "show less frequently" behavior.
@@ -453,12 +482,15 @@ add_task(async function showLessFrequently() {
       before.showLessFrequentlyCount
     );
 
-    triggerCommand({
+    feature.handleCommand(
+      {
+        acknowledgeFeedback: () => {},
+        invalidateResultMenuCommands: () => {},
+      },
       result,
-      feature,
-      command: "show_less_frequently",
-      searchString: input,
-    });
+      "show_less_frequently",
+      input
+    );
 
     Assert.equal(
       UrlbarPrefs.get("fakespot.minKeywordLength"),
@@ -828,21 +860,8 @@ function makeExpectedResult({
       totalReviews,
       fakespotGrade,
       fakespotProvider,
-      isSponsored: true,
       dynamicType: "fakespot",
       icon: null,
-      suggestionObject: new Suggestion.Fakespot({
-        fakespotGrade,
-        productId: "", // productId
-        rating,
-        title,
-        totalReviews,
-        url: originalUrl, // url
-        icon: null, // icon
-        iconMimeType: null, // iconMimetype
-        score: 0.2, // score
-        matchInfo: null, // matchInfo
-      }),
     },
   };
 }

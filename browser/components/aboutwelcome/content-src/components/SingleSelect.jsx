@@ -5,16 +5,15 @@
 import React, { useEffect } from "react";
 
 import { Localized } from "./MSLocalized";
-import { AboutWelcomeUtils } from "../lib/aboutwelcome-utils.mjs";
 
-// This component was formerly "Themes" and continues to support theme
+// This component was formerly "Themes" and continues to support theme and
+// wallpaper pickers.
 export const SingleSelect = ({
-  activeSingleSelectSelections = {}, // This now holds all active selections keyed by `singleSelectId`
+  activeSingleSelect,
   activeTheme,
   content,
   handleAction,
-  setActiveSingleSelectSelection,
-  singleSelectId,
+  setActiveSingleSelect,
 }) => {
   const category = content.tiles?.category?.type || content.tiles?.type;
   const isSingleSelect = category === "single-select";
@@ -22,11 +21,7 @@ export const SingleSelect = ({
   const autoTriggerAllowed = itemAction => {
     // Currently only enabled for sidebar experiment prefs
     const allowedActions = ["SET_PREF"];
-    const allowedPrefs = [
-      "sidebar.revamp",
-      "sidebar.verticalTabs",
-      "sidebar.visibility",
-    ];
+    const allowedPrefs = ["sidebar.revamp", "sidebar.verticalTabs"];
     const checkAction = action => {
       if (!allowedActions.includes(action.type)) {
         return false;
@@ -49,12 +44,10 @@ export const SingleSelect = ({
   // When screen renders for first time or user navigates back, update state to
   // check default option.
   useEffect(() => {
-    if (isSingleSelect && !activeSingleSelectSelections[singleSelectId]) {
+    if (isSingleSelect && !activeSingleSelect) {
       let newActiveSingleSelect =
         content.tiles?.selected || content.tiles?.data[0].id;
-
-      setActiveSingleSelectSelection(newActiveSingleSelect, singleSelectId);
-
+      setActiveSingleSelect(newActiveSingleSelect);
       let selectedTile = content.tiles?.data.find(
         opt => opt.id === newActiveSingleSelect
       );
@@ -68,27 +61,30 @@ export const SingleSelect = ({
         handleAction({ currentTarget: { value: selectedTile.id } });
       }
     }
-  }, [activeSingleSelectSelections]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const CONFIGURABLE_STYLES = [
-    "background",
-    "borderRadius",
-    "height",
-    "marginBlock",
-    "marginBlockStart",
-    "marginBlockEnd",
-    "marginInline",
-    "paddingBlock",
-    "paddingBlockStart",
-    "paddingBlockEnd",
-    "paddingInline",
-    "paddingInlineStart",
-    "paddingInlineEnd",
-    "width",
-  ];
+  const getIconStyles = (icon = {}) => {
+    const CONFIGURABLE_STYLES = [
+      "background",
+      "borderRadius",
+      "height",
+      "marginBlock",
+      "marginInline",
+      "paddingBlock",
+      "paddingInline",
+      "width",
+    ];
+    let styles = {};
+    Object.keys(icon).forEach(styleProp => {
+      if (CONFIGURABLE_STYLES.includes(styleProp)) {
+        styles[styleProp] = icon[styleProp];
+      }
+    });
+    return styles;
+  };
 
   return (
-    <div className={`tiles-single-select-container`}>
+    <div className="tiles-single-select-container">
       <div>
         <fieldset className={`tiles-single-select-section ${category}`}>
           <Localized text={content.subtitle}>
@@ -104,7 +100,6 @@ export const SingleSelect = ({
               tooltip,
               type = "",
               flair,
-              style,
             }) => {
               const value = id || theme;
               let inputName = "select-item";
@@ -113,13 +108,12 @@ export const SingleSelect = ({
               }
               const selected =
                 (theme && theme === activeTheme) ||
-                (isSingleSelect &&
-                  activeSingleSelectSelections[singleSelectId] === value);
+                (isSingleSelect && activeSingleSelect === value);
               const valOrObj = val => (typeof val === "object" ? val : {});
 
               const handleClick = evt => {
                 if (isSingleSelect) {
-                  setActiveSingleSelectSelection(value, singleSelectId); // Update selection for the specific component
+                  setActiveSingleSelect(value);
                 }
                 handleAction(evt);
               };
@@ -143,13 +137,6 @@ export const SingleSelect = ({
                     className={`select-item ${type}`}
                     title={value}
                     onKeyDown={e => handleKeyDown(e)}
-                    style={{
-                      ...AboutWelcomeUtils.getValidStyle(
-                        style,
-                        CONFIGURABLE_STYLES
-                      ),
-                      ...(icon?.width ? { minWidth: icon.width } : {}),
-                    }}
                   >
                     {flair ? (
                       <Localized text={valOrObj(flair.text)}>
@@ -170,10 +157,7 @@ export const SingleSelect = ({
                     </Localized>
                     <div
                       className={`icon ${selected ? " selected" : ""} ${value}`}
-                      style={AboutWelcomeUtils.getValidStyle(
-                        icon,
-                        CONFIGURABLE_STYLES
-                      )}
+                      style={getIconStyles(icon)}
                     />
                     <Localized text={label}>
                       <div className="text" />

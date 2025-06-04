@@ -262,63 +262,14 @@
         "IsPerUser": {
           "type": "boolean"
         },
-        "MaxConnectionsCount": {
-          "type": "number"
-        },
         "ShowBlockedResult": {
           "type": "boolean"
         },
         "DefaultResult": {
           "type": "number"
         },
-        "TimeoutResult": {
-          "type": "number"
-        },
         "BypassForSameTabOperations": {
           "type": "boolean"
-        },
-        "InterceptionPoints": {
-          "type": "object",
-          "properties": {
-            "Clipboard": {
-              "type": "object",
-              "properties": {
-                "Enabled": {
-                  "type": "boolean"
-                },
-                "PlainTextOnly": {
-                  "type": "boolean"
-                }
-              }
-            },
-            "DragAndDrop": {
-              "type": "object",
-              "properties": {
-                "Enabled": {
-                  "type": "boolean"
-                },
-                "PlainTextOnly": {
-                  "type": "boolean"
-                }
-              }
-            },
-            "FileUpload": {
-              "type": "object",
-              "properties": {
-                "Enabled": {
-                  "type": "boolean"
-                }
-              }
-            },
-            "Print": {
-              "type": "object",
-              "properties": {
-                "Enabled": {
-                  "type": "boolean"
-                }
-              }
-            }
-          }
         }
       }
     },
@@ -465,15 +416,6 @@
           "type": "boolean"
         },
         "TLS_RSA_WITH_3DES_EDE_CBC_SHA": {
-          "type": "boolean"
-        },
-        "TLS_CHACHA20_POLY1305_SHA256": {
-          "type": "boolean"
-        },
-        "TLS_AES_128_GCM_SHA256": {
-          "type": "boolean"
-        },
-        "TLS_AES_256_GCM_SHA384": {
           "type": "boolean"
         }
       }
@@ -768,9 +710,6 @@
             },
             "temporarily_allow_weak_signatures": {
               "type": "boolean"
-            },
-            "private_browsing": {
-              "type": "boolean"
             }
           }
         }
@@ -993,10 +932,6 @@
     },
 
     "ManualAppUpdateOnly": {
-      "type": "boolean"
-    },
-
-    "MicrosoftEntraSSO": {
       "type": "boolean"
     },
 
@@ -1409,6 +1344,8 @@
     },
 
     "SearchEngines": {
+      "enterprise_only": true,
+
       "type": "object",
       "properties": {
         "Add": {
@@ -1493,10 +1430,6 @@
     },
 
     "ShowHomeButton": {
-      "type": "boolean"
-    },
-
-    "SkipTermsOfUse": {
       "type": "boolean"
     },
 

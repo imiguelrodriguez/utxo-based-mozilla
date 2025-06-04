@@ -68,23 +68,19 @@ let gContainersManager = {
     const colorWrapper = document.getElementById("colorWrapper");
     colorWrapper.appendChild(this.createColorSwatches());
 
-    const name = document.getElementById("name");
-    name.addEventListener("input", () => this.checkForm());
-
     if (this.identity.name) {
+      const name = document.getElementById("name");
       name.value = this.identity.name;
       this.checkForm();
     }
-
-    document
-      .getElementById("key_close")
-      .addEventListener("command", () => window.close());
 
     document.addEventListener("dialogaccept", () => this.onApplyChanges());
 
     // This is to prevent layout jank caused by the svgs and outlines rendering at different times
     document.getElementById("containers-content").removeAttribute("hidden");
   },
+
+  uninit() {},
 
   // Check if name is provided to determine if the form can be submitted
   checkForm() {
@@ -169,5 +165,3 @@ let gContainersManager = {
     window.parent.location.reload();
   },
 };
-
-window.addEventListener("load", () => gContainersManager.onLoad());

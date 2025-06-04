@@ -253,11 +253,10 @@ add_task(async function test_safari_password_do_import() {
       wizardDone
     ) => {
       let shadow = wizard.openOrClosedShadowRoot;
-      let manualPasswordImportSelect = shadow.querySelector(
-        "div[name='page-safari-password-permission'] .manual-password-import-select"
+      let safariPasswordImportSelect = shadow.querySelector(
+        "#safari-password-import-select"
       );
-
-      manualPasswordImportSelect.click();
+      safariPasswordImportSelect.click();
       await filePickerShownPromise;
       Assert.ok(true, "File picker was shown.");
 
@@ -292,10 +291,10 @@ add_task(async function test_safari_password_only_do_import() {
       wizardDone
     ) => {
       let shadow = wizard.openOrClosedShadowRoot;
-      let manualPasswordImportSelect = shadow.querySelector(
-        "div[name='page-safari-password-permission'] .manual-password-import-select"
+      let safariPasswordImportSelect = shadow.querySelector(
+        "#safari-password-import-select"
       );
-      manualPasswordImportSelect.click();
+      safariPasswordImportSelect.click();
       await filePickerShownPromise;
       Assert.ok(true, "File picker was shown.");
 
@@ -332,10 +331,10 @@ add_task(async function test_safari_password_empty_csv_file() {
       wizardDone
     ) => {
       let shadow = wizard.openOrClosedShadowRoot;
-      let manualPasswordImportSelect = shadow.querySelector(
-        "div[name='page-safari-password-permission'] .manual-password-import-select"
+      let safariPasswordImportSelect = shadow.querySelector(
+        "#safari-password-import-select"
       );
-      manualPasswordImportSelect.click();
+      safariPasswordImportSelect.click();
       await filePickerShownPromise;
       Assert.ok(true, "File picker was shown.");
 
@@ -388,10 +387,10 @@ add_task(async function test_safari_password_skip() {
       wizardDone
     ) => {
       let shadow = wizard.openOrClosedShadowRoot;
-      let manualPasswordImportSkip = shadow.querySelector(
-        "div[name='page-safari-password-permission'] .manual-password-import-skip"
+      let safariPasswordImportSkip = shadow.querySelector(
+        "#safari-password-import-skip"
       );
-      manualPasswordImportSkip.click();
+      safariPasswordImportSkip.click();
 
       await didMigration;
       Assert.ok(!MockFilePicker.shown, "Never showed the file picker.");

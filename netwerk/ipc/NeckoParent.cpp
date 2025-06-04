@@ -316,17 +316,13 @@ bool NeckoParent::DeallocPWebSocketEventListenerParent(
   return true;
 }
 
-already_AddRefed<PDataChannelParent> NeckoParent::AllocPDataChannelParent(
-    const uint32_t& channelId) {
+already_AddRefed<PDataChannelParent> NeckoParent::AllocPDataChannelParent() {
   RefPtr<DataChannelParent> p = new DataChannelParent();
   return p.forget();
 }
 
 mozilla::ipc::IPCResult NeckoParent::RecvPDataChannelConstructor(
-    PDataChannelParent* actor, const uint32_t& channelId) {
-  DataChannelParent* p = static_cast<DataChannelParent*>(actor);
-  DebugOnly<bool> rv = p->Init(channelId);
-  MOZ_ASSERT(rv);
+    PDataChannelParent* actor) {
   return IPC_OK();
 }
 
@@ -394,13 +390,17 @@ mozilla::ipc::IPCResult NeckoParent::RecvPSimpleChannelConstructor(
   return IPC_OK();
 }
 
-already_AddRefed<PFileChannelParent> NeckoParent::AllocPFileChannelParent() {
+already_AddRefed<PFileChannelParent> NeckoParent::AllocPFileChannelParent(
+    const uint32_t& channelId) {
   RefPtr<FileChannelParent> p = new FileChannelParent();
   return p.forget();
 }
 
 mozilla::ipc::IPCResult NeckoParent::RecvPFileChannelConstructor(
-    PFileChannelParent* actor) {
+    PFileChannelParent* actor, const uint32_t& channelId) {
+  FileChannelParent* p = static_cast<FileChannelParent*>(actor);
+  DebugOnly<bool> rv = p->Init(channelId);
+  MOZ_ASSERT(rv);
   return IPC_OK();
 }
 

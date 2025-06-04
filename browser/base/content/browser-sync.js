@@ -668,12 +668,6 @@ var gSync = {
       this.updateCTAPanel();
     }
 
-    const avatarIconVariant =
-      NimbusFeatures.fxaButtonVisibility.getVariable("avatarIconVariant");
-    if (avatarIconVariant) {
-      this.applyAvatarIconVariant(avatarIconVariant);
-    }
-
     this._initialized = true;
   },
 
@@ -759,11 +753,7 @@ var gSync = {
       document,
       "PanelUI-fxa-menu-sync-prefs-button"
     );
-    const syncEnabled = UIState.get().syncEnabled;
-    syncPrefsButtonEl.hidden = !syncEnabled;
-    if (!syncEnabled) {
-      this._disableSyncOffIndicator();
-    }
+    syncPrefsButtonEl.hidden = !UIState.get().syncEnabled;
 
     // We should ensure that we do not show the sign out button
     // if the user is not signed in
@@ -798,10 +788,9 @@ var gSync = {
   onCommand(button) {
     switch (button.id) {
       case "PanelUI-fxa-menu-sync-prefs-button":
-        this.openPrefsFromFxaMenu("sync_settings", button);
-        break;
+      // fall through
       case "PanelUI-fxa-menu-setup-sync-button":
-        this.openChooseWhatToSync("sync_settings", button);
+        this.openPrefsFromFxaMenu("sync_settings", button);
         break;
 
       case "PanelUI-fxa-menu-sendtab-connect-device-button":
@@ -825,7 +814,6 @@ var gSync = {
       case "PanelUI-fxa-menu-monitor-button":
         this.openMonitorLink(button);
         break;
-      case "PanelUI-services-menu-relay-button":
       case "PanelUI-fxa-menu-relay-button":
         this.openRelayLink(button);
         break;
@@ -871,7 +859,6 @@ var gSync = {
     this.updateSyncStatus(state);
     this.updateFxAPanel(state);
     this.ensureFxaDevices();
-    this.fetchListOfOAuthClients();
   },
 
   // Ensure we have *something* in `fxAccounts.device.recentDeviceList` as some
@@ -913,24 +900,6 @@ var gSync = {
       return true;
     } catch (e) {
       this.log.error("Refreshing device list failed.", e);
-      return false;
-    }
-  },
-
-  /**
-   * Potential network call. Fetch the list of OAuth clients attached to the current Mozilla account.
-   * @returns {Promise<boolean>} - Resolves to true if successful, false otherwise.
-   */
-  async fetchListOfOAuthClients() {
-    if (!this.isSignedIn) {
-      console.info("Skipping fetching other attached clients");
-      return false;
-    }
-    try {
-      this._attachedClients = await fxAccounts.listAttachedOAuthClients();
-      return true;
-    } catch (e) {
-      this.log.error("Could not fetch attached OAuth clients", e);
       return false;
     }
   },
@@ -1036,7 +1005,10 @@ var gSync = {
     }
   },
 
-  async toggleAccountPanel(anchor = null, aEvent) {
+  async toggleAccountPanel(
+    anchor = document.getElementById("fxa-toolbar-menu-button"),
+    aEvent
+  ) {
     // Don't show the panel if the window is in customization mode.
     if (document.documentElement.hasAttribute("customizing")) {
       return;
@@ -1051,15 +1023,10 @@ var gSync = {
       return;
     }
 
-    const fxaToolbarMenuBtn = document.getElementById(
-      "fxa-toolbar-menu-button"
-    );
-
-    if (anchor === null) {
-      anchor = fxaToolbarMenuBtn;
-    }
-
-    if (anchor == fxaToolbarMenuBtn && anchor.getAttribute("open") != "true") {
+    if (
+      anchor == document.getElementById("fxa-toolbar-menu-button") &&
+      anchor.getAttribute("open") != "true"
+    ) {
       if (ASRouter.initialized) {
         await ASRouter.sendTriggerMessage({
           browser: gBrowser.selectedBrowser,
@@ -1090,7 +1057,7 @@ var gSync = {
         this.updateFxAPanel(UIState.get());
         this.updateCTAPanel(anchor);
         PanelUI.showSubView("PanelUI-fxa", anchor, aEvent);
-      } else if (anchor == fxaToolbarMenuBtn) {
+      } else if (anchor == document.getElementById("fxa-toolbar-menu-button")) {
         // The fxa toolbar button doesn't have much context before the user
         // clicks it so instead of going straight to the login page,
         // we take them to a page that has more information
@@ -1127,28 +1094,15 @@ var gSync = {
     }
   },
 
-  _disableSyncOffIndicator() {
-    const SYNC_PANEL_ACCESSED_PREF =
-      "identity.fxaccounts.toolbar.syncSetup.panelAccessed";
-    if (!Services.prefs.getBoolPref(SYNC_PANEL_ACCESSED_PREF, false)) {
-      // Turn off the indicator so the user doesn't see it in subsequent openings
-      Services.prefs.setBoolPref(SYNC_PANEL_ACCESSED_PREF, true);
-    }
-  },
-
-  _shouldShowSyncOffIndicator() {
-    // We only ever want to show the user the dot once, once they've clicked into the panel
-    // we do not show them the dot anymore
-    return !Services.prefs.getBoolPref(
-      "identity.fxaccounts.toolbar.syncSetup.panelAccessed",
-      false
-    );
-  },
-
   updateFxAPanel(state = {}) {
-    const expandedSignInCopy =
-      NimbusFeatures.expandSignInButton.getVariable("ctaCopyVariant");
     const mainWindowEl = document.documentElement;
+
+    // The Firefox Account toolbar currently handles 3 different states for
+    // users. The default `not_configured` state shows an empty avatar, `unverified`
+    // state shows an avatar with an email icon, `login-failed` state shows an avatar
+    // with a danger icon and the `verified` state will show the users
+    // custom profile image or a filled avatar.
+    let stateValue = "not_configured";
 
     const menuHeaderTitleEl = PanelMultiView.getViewNode(
       document,
@@ -1158,183 +1112,105 @@ var gSync = {
       document,
       "fxa-menu-header-description"
     );
+
     const cadButtonEl = PanelMultiView.getViewNode(
       document,
       "PanelUI-fxa-menu-connect-device-button"
     );
+
+    const syncSetupButtonEl = PanelMultiView.getViewNode(
+      document,
+      "PanelUI-fxa-menu-setup-sync-button"
+    );
+
     const syncNowButtonEl = PanelMultiView.getViewNode(
       document,
       "PanelUI-fxa-menu-syncnow-button"
     );
+
     const fxaMenuAccountButtonEl = PanelMultiView.getViewNode(
       document,
       "fxa-manage-account-button"
     );
+
     const signedInContainer = PanelMultiView.getViewNode(
       document,
       "PanelUI-signedin-panel"
     );
-    const emptyProfilesButton = PanelMultiView.getViewNode(
-      document,
-      "PanelUI-fxa-menu-empty-profiles-button"
-    );
-    const profilesButton = PanelMultiView.getViewNode(
-      document,
-      "PanelUI-fxa-menu-profiles-button"
-    );
-    const profilesSeparator = PanelMultiView.getViewNode(
-      document,
-      "PanelUI-fxa-menu-profiles-separator"
-    );
-    const syncSetupEl = PanelMultiView.getViewNode(
-      document,
-      "PanelUI-fxa-menu-setup-sync-container"
-    );
 
-    const fxaToolbarMenuButton = document.getElementById(
-      "fxa-toolbar-menu-button"
-    );
-    let fxaAvatarLabelEl = document.getElementById("fxa-avatar-label");
-
-    // Reset FxA/Sync UI elements to default, which is signed out
     cadButtonEl.setAttribute("disabled", true);
     syncNowButtonEl.hidden = true;
     signedInContainer.hidden = true;
     fxaMenuAccountButtonEl.classList.remove("subviewbutton-nav");
     fxaMenuAccountButtonEl.removeAttribute("closemenu");
-    menuHeaderDescriptionEl.hidden = false;
+    syncSetupButtonEl.removeAttribute("hidden");
 
-    // Expanded sign in copy experiment is only for signed out users
-    // so if a text variant has been provided then we show the expanded label
-    // otherwise it'll be the default avatar icon
-    // fxaToolbarMenuButton can be null in certain testing scenarios
-    if (fxaToolbarMenuButton) {
-      if (
-        state.status === UIState.STATUS_NOT_CONFIGURED &&
-        expandedSignInCopy
-      ) {
-        fxaAvatarLabelEl.setAttribute(
-          "value",
-          this.fluentStrings.formatValueSync(expandedSignInCopy)
-        );
-        fxaAvatarLabelEl.removeAttribute("hidden");
-        fxaToolbarMenuButton.setAttribute("data-l10n-id", "fxa-avatar-tooltip");
-        fxaToolbarMenuButton.classList.add("avatar-button-background");
-      } else {
-        // Either signed in, or experiment not enabled
-        fxaToolbarMenuButton.setAttribute(
-          "data-l10n-id",
-          "toolbar-button-account"
-        );
-        fxaToolbarMenuButton.classList.remove("avatar-button-background");
-        fxaAvatarLabelEl.hidden = true;
-      }
-    }
-
-    // The Firefox Account toolbar currently handles 3 different states for
-    // users. The default `not_configured` state shows an empty avatar, `unverified`
-    // state shows an avatar with an email icon, `login-failed` state shows an avatar
-    // with a danger icon and the `verified` state will show the users
-    // custom profile image or a filled avatar.
-    let stateValue = "not_configured";
-    let headerTitleL10nId;
+    let headerTitleL10nId = this.FXA_CTA_MENU_ENABLED
+      ? "synced-tabs-fxa-sign-in"
+      : "appmenuitem-sign-in-account";
     let headerDescription;
+    if (state.status === UIState.STATUS_NOT_CONFIGURED) {
+      mainWindowEl.style.removeProperty("--avatar-image-url");
+      const headerDescString = this.FXA_CTA_MENU_ENABLED
+        ? "fxa-menu-sync-description"
+        : "appmenu-fxa-signed-in-label";
+      headerDescription = this.fluentStrings.formatValueSync(headerDescString);
 
-    switch (state.status) {
-      case UIState.STATUS_NOT_CONFIGURED:
-        mainWindowEl.style.removeProperty("--avatar-image-url");
-        headerTitleL10nId = this.FXA_CTA_MENU_ENABLED
-          ? "synced-tabs-fxa-sign-in"
-          : "appmenuitem-sign-in-account";
-        headerDescription = this.fluentStrings.formatValueSync(
-          this.FXA_CTA_MENU_ENABLED
-            ? "fxa-menu-sync-description"
-            : "appmenu-fxa-signed-in-label"
-        );
-        if (this.FXA_CTA_MENU_ENABLED) {
-          const ctaCopy = this.getMenuCtaCopy(NimbusFeatures.fxaAvatarMenuItem);
-          if (ctaCopy) {
-            headerTitleL10nId = ctaCopy.headerTitleL10nId;
-            headerDescription = ctaCopy.headerDescription;
-          }
+      if (this.FXA_CTA_MENU_ENABLED) {
+        const ctaCopy = this.getMenuCtaCopy(NimbusFeatures.fxaAvatarMenuItem);
+        if (ctaCopy) {
+          headerTitleL10nId = ctaCopy.headerTitleL10nId;
+          headerDescription = ctaCopy.headerDescription;
         }
-
-        // Reposition profiles elements
-        emptyProfilesButton.remove();
-        profilesButton.remove();
-        profilesSeparator.remove();
-
-        profilesSeparator.hidden = true;
-
-        signedInContainer.after(profilesSeparator);
-        signedInContainer.after(profilesButton);
-        signedInContainer.after(emptyProfilesButton);
-
-        break;
-
-      case UIState.STATUS_LOGIN_FAILED:
-        stateValue = "login-failed";
-        headerTitleL10nId = "account-disconnected2";
-        headerDescription = state.displayName || state.email;
-        mainWindowEl.style.removeProperty("--avatar-image-url");
-        break;
-
-      case UIState.STATUS_NOT_VERIFIED:
-        stateValue = "unverified";
-        headerTitleL10nId = "account-finish-account-setup";
-        headerDescription = state.displayName || state.email;
-        break;
-
-      case UIState.STATUS_SIGNED_IN:
-        stateValue = "signedin";
-        headerTitleL10nId = "appmenuitem-fxa-manage-account";
-        headerDescription = state.displayName || state.email;
-        this.updateAvatarURL(
-          mainWindowEl,
-          state.avatarURL,
-          state.avatarIsDefault
-        );
+      }
+    } else if (state.status === UIState.STATUS_LOGIN_FAILED) {
+      stateValue = "login-failed";
+      headerTitleL10nId = "account-disconnected2";
+      headerDescription = state.displayName || state.email;
+      mainWindowEl.style.removeProperty("--avatar-image-url");
+    } else if (state.status === UIState.STATUS_NOT_VERIFIED) {
+      stateValue = "unverified";
+      headerTitleL10nId = "account-finish-account-setup";
+      headerDescription = state.displayName || state.email;
+    } else if (state.status === UIState.STATUS_SIGNED_IN) {
+      stateValue = "signedin";
+      if (state.avatarURL && !state.avatarIsDefault) {
+        // The user has specified a custom avatar, attempt to load the image on all the menu buttons.
+        const bgImage = `url("${state.avatarURL}")`;
+        let img = new Image();
+        img.onload = () => {
+          // If the image has successfully loaded, update the menu buttons else
+          // we will use the default avatar image.
+          mainWindowEl.style.setProperty("--avatar-image-url", bgImage);
+        };
+        img.onerror = () => {
+          // If the image failed to load, remove the property and default
+          // to standard avatar.
+          mainWindowEl.style.removeProperty("--avatar-image-url");
+        };
+        img.src = state.avatarURL;
         signedInContainer.hidden = false;
-        cadButtonEl.removeAttribute("disabled");
+        menuHeaderDescriptionEl.hidden = false;
+      } else {
+        mainWindowEl.style.removeProperty("--avatar-image-url");
+      }
 
-        if (state.syncEnabled) {
-          // Always show sync now and connect another device button when sync is enabled
-          syncNowButtonEl.removeAttribute("hidden");
-          cadButtonEl.removeAttribute("hidden");
-          syncSetupEl.setAttribute("hidden", "true");
-        } else {
-          if (this._shouldShowSyncOffIndicator()) {
-            fxaToolbarMenuButton?.setAttribute("badge-status", "sync-disabled");
-          }
-          // Show the sync element depending on if the user is enrolled or not
-          syncSetupEl.removeAttribute("hidden");
-        }
+      cadButtonEl.removeAttribute("disabled");
 
-        // Reposition profiles elements
-        emptyProfilesButton.remove();
-        profilesButton.remove();
-        profilesSeparator.remove();
+      if (state.syncEnabled) {
+        syncNowButtonEl.removeAttribute("hidden");
+        syncSetupButtonEl.hidden = true;
+      }
 
-        profilesSeparator.hidden = false;
-
-        fxaMenuAccountButtonEl.after(profilesSeparator);
-        fxaMenuAccountButtonEl.after(profilesButton);
-        fxaMenuAccountButtonEl.after(emptyProfilesButton);
-
-        break;
-
-      default:
-        headerTitleL10nId = this.FXA_CTA_MENU_ENABLED
-          ? "synced-tabs-fxa-sign-in"
-          : "appmenuitem-sign-in-account";
-        headerDescription = this.fluentStrings.formatValueSync(
-          "fxa-menu-turn-on-sync-default"
-        );
-        break;
+      headerTitleL10nId = "appmenuitem-fxa-manage-account";
+      headerDescription = state.displayName || state.email;
+    } else {
+      headerDescription = this.fluentStrings.formatValueSync(
+        "fxa-menu-turn-on-sync-default"
+      );
     }
-
-    // Update UI elements with determined values
     mainWindowEl.setAttribute("fxastatus", stateValue);
+
     menuHeaderTitleEl.value =
       this.fluentStrings.formatValueSync(headerTitleL10nId);
     // If we description is empty, we hide it
@@ -1345,22 +1221,6 @@ var gSync = {
     // around in the DOM.
     menuHeaderTitleEl.removeAttribute("data-l10n-id");
     menuHeaderDescriptionEl.removeAttribute("data-l10n-id");
-  },
-
-  updateAvatarURL(mainWindowEl, avatarURL, avatarIsDefault) {
-    if (avatarURL && !avatarIsDefault) {
-      const bgImage = `url("${avatarURL}")`;
-      const img = new Image();
-      img.onload = () => {
-        mainWindowEl.style.setProperty("--avatar-image-url", bgImage);
-      };
-      img.onerror = () => {
-        mainWindowEl.style.removeProperty("--avatar-image-url");
-      };
-      img.src = avatarURL;
-    } else {
-      mainWindowEl.style.removeProperty("--avatar-image-url");
-    }
   },
 
   enableSendTabIfValidTab() {
@@ -1386,7 +1246,6 @@ var gSync = {
       let extraOptions = {
         fxa_status: state.status,
         fxa_avatar: hasAvatar ? "true" : "false",
-        fxa_sync_on: state.syncEnabled,
       };
 
       let eventName = this._getEntryPointForElement(sourceElement);
@@ -2204,9 +2063,6 @@ var gSync = {
       console.error("Failed to disconnect.", e);
     });
 
-    // Clear the attached clients list upon successfully disconnecting
-    this._attachedClients = null;
-
     return true;
   },
 
@@ -2275,10 +2131,10 @@ var gSync = {
     this.emitFxaToolbarTelemetry("sync_now", sourceElement);
   },
 
-  openPrefs(entryPoint = "syncbutton", origin = undefined, urlParams = {}) {
+  openPrefs(entryPoint = "syncbutton", origin = undefined) {
     window.openPreferences("paneSync", {
       origin,
-      urlParams: { ...urlParams, entrypoint: entryPoint },
+      urlParams: { entrypoint: entryPoint },
     });
   },
 
@@ -2286,12 +2142,6 @@ var gSync = {
     this.emitFxaToolbarTelemetry(type, sourceElement);
     let entryPoint = this._getEntryPointForElement(sourceElement);
     this.openPrefs(entryPoint);
-  },
-
-  openChooseWhatToSync(type, sourceElement) {
-    this.emitFxaToolbarTelemetry(type, sourceElement);
-    let entryPoint = this._getEntryPointForElement(sourceElement);
-    this.openPrefs(entryPoint, null, { action: "choose-what-to-sync" });
   },
 
   openSyncedTabsPanel() {
@@ -2421,17 +2271,8 @@ var gSync = {
     }
   },
 
-  /** Checks if the current list of attached clients to the Mozilla account
-   * has a service associated with the passed in Id
-   *  @param {string} clientId
-   *   A known static Id from FxA that identifies the service it's associated with
-   *  @returns {boolean}
-   *   Returns true/false whether the current account has the associated client
-   */
-  hasClientForId(clientId) {
-    return this._attachedClients?.some(c => !!c.id && c.id === clientId);
-  },
-
+  // This should only be shown if we have enabled the pxiPanel via
+  // an experiment or explicitly through prefs
   updateCTAPanel(anchor) {
     const mainPanelEl = PanelMultiView.getViewNode(
       document,
@@ -2472,26 +2313,7 @@ var gSync = {
         "identity.fxaccounts.toolbar.pxiToolbarEnabled.relayEnabled",
         false
       );
-    let myServicesRelayPanelEl = PanelMultiView.getViewNode(
-      document,
-      "PanelUI-services-menu-relay-button"
-    );
-    let servicesContainerEl = PanelMultiView.getViewNode(
-      document,
-      "PanelUI-fxa-menu-services"
-    );
-    if (this.isSignedIn) {
-      const hasRelayClient = this.hasClientForId(FX_RELAY_OAUTH_CLIENT_ID);
-      relayPanelEl.hidden = hasRelayClient;
-      // Right now only relay is under "my services" so if we don't have, we turn it off
-      myServicesRelayPanelEl.hidden = !hasRelayClient;
-      servicesContainerEl.hidden = !hasRelayClient;
-    } else {
-      relayPanelEl.hidden = !relayEnabled;
-      // We'll never show my services when signed out
-      myServicesRelayPanelEl.hidden = true;
-      servicesContainerEl.hidden = true;
-    }
+    relayPanelEl.hidden = !relayEnabled;
 
     // VPN checks
     let VpnPanelEl = PanelMultiView.getViewNode(
@@ -2557,7 +2379,12 @@ var gSync = {
       return;
     }
 
-    const url = this.hasClientForId(clientId) ? signedInUrl : defaultUrl;
+    // Note: This is a network call
+    let attachedClients = await fxAccounts.listAttachedOAuthClients();
+    // If we have at least one client based on clientId passed in
+    let hasPXIClient = attachedClients.some(c => !!c.id && c.id === clientId);
+
+    const url = hasPXIClient ? signedInUrl : defaultUrl;
     // Add base params + signed in
     url.search = searchParams.toString();
     url.searchParams.append("utm_content", "signedIn");
@@ -2649,24 +2476,6 @@ var gSync = {
     }
 
     return { headerTitleL10nId, headerDescription };
-  },
-
-  /**
-   * Updates the FxA button to show the right avatar variant in the event that
-   * this client is not currently signed into an account.
-   *
-   * @param {string} variant
-   *   One of the string constants for the avatarIconVariant variable on the
-   *   fxaButtonVisibility feature.
-   */
-  applyAvatarIconVariant(variant) {
-    const ICON_VARIANTS = ["control", "human-circle", "fox-circle"];
-
-    if (!ICON_VARIANTS.includes(variant)) {
-      return;
-    }
-
-    document.documentElement.setAttribute("fxa-avatar-icon-variant", variant);
   },
 
   openLink(url) {

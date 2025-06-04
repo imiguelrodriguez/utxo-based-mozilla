@@ -15,17 +15,19 @@ namespace net {
 
 NS_IMPL_ISUPPORTS_INHERITED(FileChannelChild, nsFileChannel, nsIChildChannel)
 
-FileChannelChild::FileChannelChild(nsIURI* uri) : nsFileChannel(uri) {
-  mozilla::dom::ContentChild* cc =
-      static_cast<mozilla::dom::ContentChild*>(gNeckoChild->Manager());
-  if (!cc->IsShuttingDown()) {
-    gNeckoChild->SendPFileChannelConstructor(this);
-  }
-}
+FileChannelChild::FileChannelChild(nsIURI* uri) : nsFileChannel(uri) {}
 
 NS_IMETHODIMP
 FileChannelChild::ConnectParent(uint32_t id) {
-  SendSetChannelIdForRedirect(id);
+  mozilla::dom::ContentChild* cc =
+      static_cast<mozilla::dom::ContentChild*>(gNeckoChild->Manager());
+  if (cc->IsShuttingDown()) {
+    return NS_ERROR_FAILURE;
+  }
+
+  if (!gNeckoChild->SendPFileChannelConstructor(this, id)) {
+    return NS_ERROR_FAILURE;
+  }
   return NS_OK;
 }
 
@@ -43,23 +45,6 @@ FileChannelChild::CompleteRedirectSetup(nsIStreamListener* listener) {
     Unused << Send__delete__(this);
   }
 
-  return NS_OK;
-}
-
-nsresult FileChannelChild::NotifyListeners() {
-  uint32_t loadFlags = 0;
-  GetLoadFlags(&loadFlags);
-
-  LoadInfoArgs loadInfoArgs;
-  MOZ_ALWAYS_SUCCEEDS(
-      mozilla::ipc::LoadInfoToLoadInfoArgs(mLoadInfo, &loadInfoArgs));
-
-  nsCOMPtr<nsIURI> originalURI;
-  nsresult rv = GetOriginalURI(getter_AddRefs(originalURI));
-  NS_ENSURE_SUCCESS(rv, rv);
-  FileChannelInfo fileChannelInfo(mURI, originalURI, loadFlags, loadInfoArgs,
-                                  mContentType, mChannelId);
-  SendNotifyListeners(fileChannelInfo);
   return NS_OK;
 }
 

@@ -31,10 +31,8 @@ appmenuitem-downloads =
   .label = Downloads
 appmenuitem-passwords =
     .label = Passwords
-appmenuitem-extensions-and-themes =
-    .label = Extensions and themes
-appmenuitem-extensions =
-    .label = Extensions
+appmenuitem-addons-and-themes =
+    .label = Add-ons and themes
 appmenuitem-print =
   .label = Print…
 appmenuitem-find-in-page =
@@ -122,12 +120,19 @@ appmenu-fxa-sync-and-save-data2 = Sync and save data
 appmenu-fxa-signed-in-label = Sign In
 appmenu-fxa-setup-sync =
     .label = Turn On Syncing…
-appmenu-fxa-setup-sync-new = Turn On
+
 appmenuitem-save-page =
     .label = Save page as…
 
-appmenuitem-fxa-sync-off-title = Sync is off
-appmenuitem-fxa-sync-off-description = Protect and access your bookmarks, passwords, and more anywhere.
+## What's New panel in App menu.
+
+whatsnew-panel-header = What’s New
+
+# Checkbox displayed at the bottom of the What's New panel, allowing users to
+# enable/disable What's New notifications.
+whatsnew-panel-footer-checkbox =
+  .label = Notify about new features
+  .accesskey = f
 
 ## The Firefox Profiler – The popup is the UI to turn on the profiler, and record
 ## performance profiles. To enable it go to profiler.firefox.com and click
@@ -258,6 +263,8 @@ appmenu-get-help =
 appmenu-help-more-troubleshooting-info =
     .label = More troubleshooting information
     .accesskey = t
+appmenu-help-report-site-issue =
+    .label = Report site issue…
 appmenu-help-share-ideas =
     .label = Share ideas and feedback…
     .accesskey = S
@@ -303,21 +310,5 @@ appmenuitem-monitor-title = { -monitor-brand-short-name }
 appmenuitem-monitor-description = Get data breach alerts
 appmenuitem-relay-title = { -relay-brand-short-name }
 appmenuitem-relay-description = Mask your real email and phone
-appmenuitem-services-relay-description = Launch email masks dashboard
 appmenuitem-vpn-title = { -mozilla-vpn-brand-name }
 appmenuitem-vpn-description = Protect your online activity
-
-appmenu-services-header = My services
-appmenu-other-protection-header = Try other protection tools from { -vendor-short-name }:
-
-## Profiles panel
-
-appmenu-profiles-2 =
-    .label = Profiles
-appmenu-other-profiles = Other profiles
-appmenu-manage-profiles =
-    .label = Manage profiles
-appmenu-create-profile =
-    .label = New profile
-appmenu-edit-profile =
-    .aria-label = Edit profile

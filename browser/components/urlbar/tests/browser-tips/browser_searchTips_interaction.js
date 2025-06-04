@@ -85,7 +85,7 @@ add_setup(async function () {
 });
 
 // Picking the tip's button should cause the Urlbar to blank out and the tip to
-// be not to be shown again in any session.
+// be not to be shown again in any session. Telemetry should be updated.
 add_task(async function pickButton_onboard() {
   UrlbarProviderSearchTips.disableTipsForCurrentSession = false;
   let tab = await BrowserTestUtils.openNewForegroundTab({
@@ -103,6 +103,15 @@ add_task(async function pickButton_onboard() {
   });
   gURLBar.blur();
 
+  // Check telemetry.
+  const scalars = TelemetryTestUtils.getProcessScalars("parent", true, true);
+  TelemetryTestUtils.assertKeyedScalar(
+    scalars,
+    "urlbar.tips",
+    `${UrlbarProviderSearchTips.TIP_TYPE.ONBOARD}-picked`,
+    1
+  );
+
   Assert.equal(
     UrlbarPrefs.get(
       `tipShownCount.${UrlbarProviderSearchTips.TIP_TYPE.ONBOARD}`
@@ -117,7 +126,7 @@ add_task(async function pickButton_onboard() {
 });
 
 // Picking the tip's button should cause the Urlbar to blank out and the tip to
-// be not to be shown again in any session.
+// be not to be shown again in any session. Telemetry should be updated.
 add_task(async function pickButton_redirect() {
   UrlbarProviderSearchTips.disableTipsForCurrentSession = false;
   await setDefaultEngine("Google");
@@ -136,6 +145,15 @@ add_task(async function pickButton_redirect() {
       gURLBar.blur();
     });
   });
+
+  // Check telemetry.
+  const scalars = TelemetryTestUtils.getProcessScalars("parent", true, true);
+  TelemetryTestUtils.assertKeyedScalar(
+    scalars,
+    "urlbar.tips",
+    `${UrlbarProviderSearchTips.TIP_TYPE.REDIRECT}-picked`,
+    1
+  );
 
   Assert.equal(
     UrlbarPrefs.get(
@@ -166,6 +184,15 @@ add_task(async function clickInInput_onboard() {
   });
   gURLBar.blur();
 
+  // Check telemetry.
+  const scalars = TelemetryTestUtils.getProcessScalars("parent", true, true);
+  TelemetryTestUtils.assertKeyedScalar(
+    scalars,
+    "urlbar.tips",
+    `${UrlbarProviderSearchTips.TIP_TYPE.ONBOARD}-picked`,
+    1
+  );
+
   Assert.equal(
     UrlbarPrefs.get(
       `tipShownCount.${UrlbarProviderSearchTips.TIP_TYPE.ONBOARD}`
@@ -195,6 +222,15 @@ add_task(async function openLocation_onboard() {
     document.getElementById("Browser:OpenLocation").doCommand();
   });
   gURLBar.blur();
+
+  // Check telemetry.
+  const scalars = TelemetryTestUtils.getProcessScalars("parent", true, true);
+  TelemetryTestUtils.assertKeyedScalar(
+    scalars,
+    "urlbar.tips",
+    `${UrlbarProviderSearchTips.TIP_TYPE.ONBOARD}-picked`,
+    1
+  );
 
   Assert.equal(
     UrlbarPrefs.get(
@@ -227,6 +263,15 @@ add_task(async function clickInInput_redirect() {
     });
   });
 
+  // Check telemetry.
+  const scalars = TelemetryTestUtils.getProcessScalars("parent", true, true);
+  TelemetryTestUtils.assertKeyedScalar(
+    scalars,
+    "urlbar.tips",
+    `${UrlbarProviderSearchTips.TIP_TYPE.REDIRECT}-picked`,
+    1
+  );
+
   Assert.equal(
     UrlbarPrefs.get(
       `tipShownCount.${UrlbarProviderSearchTips.TIP_TYPE.REDIRECT}`
@@ -256,6 +301,15 @@ add_task(async function openLocation_redirect() {
       gURLBar.blur();
     });
   });
+
+  // Check telemetry.
+  const scalars = TelemetryTestUtils.getProcessScalars("parent", true, true);
+  TelemetryTestUtils.assertKeyedScalar(
+    scalars,
+    "urlbar.tips",
+    `${UrlbarProviderSearchTips.TIP_TYPE.REDIRECT}-picked`,
+    1
+  );
 
   Assert.equal(
     UrlbarPrefs.get(
@@ -340,6 +394,7 @@ add_task(async function notification() {
 add_task(async function tabSwitch() {
   let tab = BrowserTestUtils.addTab(gBrowser, "about:newtab");
   UrlbarProviderSearchTips.disableTipsForCurrentSession = false;
+  Services.telemetry.clearScalars();
   await BrowserTestUtils.switchTab(gBrowser, tab);
   await checkTip(window, UrlbarProviderSearchTips.TIP_TYPE.ONBOARD);
   BrowserTestUtils.removeTab(tab);

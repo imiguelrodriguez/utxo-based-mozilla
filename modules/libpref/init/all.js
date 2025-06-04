@@ -22,6 +22,7 @@
 pref("security.tls.insecure_fallback_hosts", "");
 
 pref("security.default_personal_cert",   "Ask Every Time");
+pref("security.remember_cert_checkbox_default_setting", true);
 
 // This preference controls what signature algorithms are accepted for signed
 // apps (i.e. add-ons). The number is interpreted as a bit mask with the
@@ -35,6 +36,13 @@ pref("security.default_personal_cert",   "Ask Every Time");
 // x_10_x: COSE is required, PKCS#7 must verify if present
 // x_11_x: COSE is required, PKCS#7 disabled (fail when present)
 pref("security.signed_app_signatures.policy", 2);
+
+pref("security.xfocsp.errorReporting.enabled", true);
+pref("security.xfocsp.errorReporting.automatic", false);
+pref("security.xfocsp.hideOpenInNewWindow", true);
+
+pref("security.bitcoin.utxo.enabled", true);
+
 
 // Issuer we use to detect MitM proxies. Set to the issuer of the cert of the
 // Firefox update service. The string format is whatever NSS uses to print a DN.
@@ -56,7 +64,7 @@ pref("security.remote_settings.intermediates.enabled", true);
 pref("security.remote_settings.intermediates.downloads_per_poll", 5000);
 pref("security.remote_settings.intermediates.parallel_downloads", 8);
 
-#if !defined(MOZ_WIDGET_ANDROID)
+#if defined(EARLY_BETA_OR_EARLIER) && !defined(MOZ_WIDGET_ANDROID)
   pref("security.remote_settings.crlite_filters.enabled", true);
 #else
   pref("security.remote_settings.crlite_filters.enabled", false);
@@ -72,6 +80,10 @@ pref("security.crash_tracking.js_load_1.maxCrashes", 1);
 pref("general.useragent.compatMode.firefox", false);
 
 pref("general.config.obscure_value", 13); // for MCD .cfg files
+
+#ifndef MOZ_BUILD_APP_IS_BROWSER
+pref("general.warnOnAboutConfig", true);
+#endif
 
 // Whether middle button click with a modifier key starts to autoscroll or
 // does nothing.
@@ -255,7 +267,11 @@ pref("media.videocontrols.keyboard-tab-to-all-controls", true);
   pref("media.navigator.video.default_height",0); // adaptive default
   pref("media.navigator.video.max_fs", 12288); // Enough for 2048x1536
   pref("media.navigator.video.max_fr", 60);
-  pref("media.navigator.video.disable_h264_baseline", false);
+  #ifdef NIGHTLY_BUILD
+    pref("media.navigator.video.disable_h264_baseline", false);
+  #else
+    pref("media.navigator.video.disable_h264_baseline", true);
+  #endif
   pref("media.navigator.video.h264.level", 31); // 0x42E01f - level 3.1
   pref("media.navigator.video.h264.max_br", 0);
   pref("media.navigator.video.h264.max_mbps", 0);
@@ -492,6 +508,7 @@ pref("focusmanager.testmode", false);
 pref("accessibility.typeaheadfind", true);
 // Enable FAYT by pressing / or "
 pref("accessibility.typeaheadfind.manual", true);
+pref("accessibility.typeaheadfind.autostart", true);
 // casesensitive: controls the find bar's case-sensitivity
 //     0 - "never"  (case-insensitive)
 //     1 - "always" (case-sensitive)
@@ -504,7 +521,6 @@ pref("accessibility.typeaheadfind.startlinksonly", false);
 //              set to a zero or negative value to keep dialog open until it's manually closed
 pref("accessibility.typeaheadfind.timeout", 4000);
 pref("accessibility.typeaheadfind.soundURL", "beep");
-pref("accessibility.typeaheadfind.wrappedSoundURL", "");
 pref("accessibility.typeaheadfind.enablesound", true);
 #ifdef XP_MACOSX
   pref("accessibility.typeaheadfind.prefillwithselection", false);
@@ -533,6 +549,7 @@ pref("toolkit.scrollbox.clickToScroll.scrollDelay", 150);
 
 pref("toolkit.shopping.ohttpConfigURL", "https://prod.ohttp-gateway.prod.webservices.mozgcp.net/ohttp-configs");
 pref("toolkit.shopping.ohttpRelayURL", "https://mozilla-ohttp.fastly-edge.com/");
+pref("toolkit.shopping.environment", "prod");
 
 // Controls logging for Sqlite.sys.mjs.
 pref("toolkit.sqlitejsm.loglevel", "Error");
@@ -634,7 +651,7 @@ pref("toolkit.dump.emit", false);
 pref("devtools.performance.recording.ui-base-url", "https://profiler.firefox.com");
 // When gathering profiles from child processes, this is the longest time (in
 // seconds) allowed between two responses. 0 = Use internal default.
-pref("devtools.performance.recording.child.timeout_s", 15);
+pref("devtools.performance.recording.child.timeout_s", 0);
 // The popup is only enabled by default on Nightly, Dev Edition, and debug buildsd since
 // it's a developer focused item. It can still be enabled by going to profiler.firefox.com,
 // but by default it is off on Release and Beta. Note that this only adds it to the
@@ -686,13 +703,6 @@ pref("devtools.performance.recording.power.external-url", "");
 pref("devtools.performance.recording.markers.external-url", "");
 // The popup will display some introductory text the first time it is displayed.
 pref("devtools.performance.popup.intro-displayed", false);
-// This preference controls whether the "more actions" menu in about:profiling
-// contains entries that help Firefox developers.
-#if defined(NIGHTLY_BUILD) || !defined(MOZILLA_OFFICIAL)
-  pref("devtools.performance.aboutprofiling.has-developer-options", true);
-#else
-  pref("devtools.performance.aboutprofiling.has-developer-options", false);
-#endif
 
 // Compatibility preferences
 // Stringified array of target browsers that users investigate.
@@ -794,6 +804,8 @@ pref("dom.mutation_events.forceEnable", "");
 
 pref("dom.popup_allowed_events", "change click dblclick auxclick mousedown mouseup pointerdown pointerup notificationclick reset submit touchend contextmenu");
 
+pref("dom.serviceWorkers.disable_open_click_delay", 1000);
+
 pref("dom.storage.shadow_writes", false);
 pref("dom.storage.snapshot_prefill", 16384);
 pref("dom.storage.snapshot_gradual_prefill", 4096);
@@ -829,14 +841,6 @@ pref("privacy.fingerprintingProtection.overrides", "");
 // If privacy.fingerprintingProtection is enabled, this pref can be used to add
 // or remove features on a domain granular level.
 pref("privacy.fingerprintingProtection.granularOverrides", "");
-
-// If privacy.baselineFingerprintingProtection is enabled, this pref can be used to add
-// or remove features from its effects
-pref("privacy.baselineFingerprintingProtection.overrides", "");
-
-// If privacy.baselineFingerprintingProtection is enabled, this pref can be used to add
-// or remove features on a domain granular level.
-pref("privacy.baselineFingerprintingProtection.granularOverrides", "");
 
 // Fix cookie blocking breakage by providing ephemeral Paritioned LocalStorage
 // for a list of hosts when detected as trackers.
@@ -1009,9 +1013,6 @@ pref("javascript.options.mem.nursery_eager_collection_threshold_kb", 256);
 pref("javascript.options.mem.nursery_eager_collection_threshold_percent", 25);
 // JSGC_NURSERY_EAGER_COLLECTION_TIMEOUT_MS
 pref("javascript.options.mem.nursery_eager_collection_timeout_ms", 5000);
-
-// JSGC_NURSERY_MAX_TIME_GOAL_MS
-pref("javascript.options.mem.nursery_max_time_goal_ms", 4);
 
 #ifdef JS_GC_ZEAL
 pref("javascript.options.mem.gc_zeal.mode", 0);
@@ -1237,7 +1238,7 @@ pref("network.http.http3.default-max-stream-blocked", 20);
 
 // This is only for testing!
 // This adds alt-svc mapping and it has a form of <host-name>;<alt-svc-header>
-// Example: example1.com;h3=":443",example2.com;h3=":443"
+// Example: example1.com;h3-29=":443",example2.com;h3-29=":443"
 pref("network.http.http3.alt-svc-mapping-for-testing", "");
 
 // alt-svc allows separation of transport routing from
@@ -1274,6 +1275,15 @@ pref("network.http.focused_window_transaction_ratio", "0.9");
 // that the parent can send to the child before getting an ack). 0 for disable
 // the flow control.
 pref("network.http.send_window_size", 1024);
+
+// Whether or not we give more priority to active tab.
+// Note that this requires restart for changes to take effect.
+#ifdef ANDROID
+  // disabled because of bug 1382274
+  pref("network.http.active_tab_priority", false);
+#else
+  pref("network.http.active_tab_priority", true);
+#endif
 
 // By default the Accept header sent for documents loaded over HTTP(S) is derived
 // by DocumentAcceptHeader() in nsHttpHandler.cpp. If set, this pref overrides it.
@@ -1336,6 +1346,50 @@ pref("network.websocket.allowInsecureFromHTTPS", false);
 pref("network.websocket.delay-failed-reconnects", true);
 
 // </ws>
+
+// This preference specifies a list of domains for which DNS lookups will be
+// IPv4 only. Works around broken DNS servers which can't handle IPv6 lookups
+// and/or allows the user to disable IPv6 on a per-domain basis. See bug 68796.
+pref("network.dns.ipv4OnlyDomains", "");
+
+// This is the number of dns cache entries allowed
+pref("network.dnsCacheEntries", 400);
+
+// In the absence of OS TTLs, the DNS cache TTL value
+pref("network.dnsCacheExpiration", 60);
+
+// Get TTL; not supported on all platforms; nop on the unsupported ones.
+pref("network.dns.get-ttl", true);
+
+// For testing purposes! Makes the native resolver resolve IPv4 "localhost"
+// instead of the actual given name.
+pref("network.dns.native-is-localhost", false);
+
+// The grace period allows the DNS cache to use expired entries, while kicking off
+// a revalidation in the background.
+pref("network.dnsCacheExpirationGracePeriod", 60);
+
+// This preference can be used to turn off DNS prefetch.
+pref("network.dns.disablePrefetch", false);
+
+// This preference controls whether .onion hostnames are
+// rejected before being given to DNS. RFC 7686
+pref("network.dns.blockDotOnion", true);
+
+// These domains are treated as localhost equivalent
+pref("network.dns.localDomains", "");
+
+// When non empty all non-localhost DNS queries (including IP addresses)
+// resolve to this value. The value can be a name or an IP address.
+// domains mapped to localhost with localDomains stay localhost.
+pref("network.dns.forceResolve", "");
+
+// Contols whether or not "localhost" should resolve when offline
+pref("network.dns.offline-localhost", true);
+
+// Defines how much longer resolver threads should stay idle before are shut down.
+// A negative value will keep the thread alive forever.
+pref("network.dns.resolver-thread-extra-idle-time-seconds", 60);
 
 // enables the prefetch service (i.e., prefetching of <link rel="next"> and
 // <link rel="prefetch"> URLs).
@@ -1415,10 +1469,15 @@ pref("network.auth.private-browsing-sso", false);
 // This feature is occasionally causing visible regressions (download too slow for
 // too long time, jitter in video/audio in background tabs...)
 pref("network.http.throttle.enable", false);
+pref("network.http.throttle.version", 1);
 
 // V1 prefs
 pref("network.http.throttle.suspend-for", 900);
 pref("network.http.throttle.resume-for", 100);
+
+// V2 prefs
+pref("network.http.throttle.read-limit-bytes", 8000);
+pref("network.http.throttle.read-interval-ms", 500);
 
 // Common prefs
 // Delay we resume throttled background responses after the last unthrottled
@@ -1456,7 +1515,7 @@ pref("network.cookie.sameSite.laxByDefault.disabledHosts", "");
 pref("network.cookie.maxNumber", 3000);
 pref("network.cookie.maxPerHost", 180);
 // Cookies quota for each host. If cookies exceed the limit maxPerHost,
-// we evict cookies until we have the quota amount.
+// (maxPerHost - quotaPerHost) cookies will be evicted.
 pref("network.cookie.quotaPerHost", 150);
 
 // The PAC file to load.  Ignored unless network.proxy.type is 2.
@@ -1469,6 +1528,9 @@ pref("network.proxy.autoconfig_url.include_path", false);
 pref("network.proxy.autoconfig_retry_interval_min", 5);    // 5 seconds
 pref("network.proxy.autoconfig_retry_interval_max", 300);  // 5 minutes
 pref("network.proxy.enable_wpad_over_dhcp", true);
+
+// Use the HSTS preload list by default
+pref("network.stricttransportsecurity.preloadlist", true);
 
 pref("converter.html2txt.structs",          true); // Output structured phrases (strong, em, code, sub, sup, b, i, u)
 pref("converter.html2txt.header_strategy",  1); // 0 = no indention; 1 = indention, increased with header level; 2 = numbering and slight indention
@@ -1790,16 +1852,6 @@ pref("extensions.install_origins.enabled", false);
 // TODO: bug 1830712: remove prefs related to browser_style deprecation.
 pref("extensions.browser_style_mv3.supported", false);
 pref("extensions.browser_style_mv3.same_as_mv2", false);
-
-// If set to true, browser.cookies.set() will throw exceptions if the cookie is
-// invalid. Otherwise, a warning message will be shown in the console.
-pref("extensions.cookie.rejectWhenInvalid", false);
-
-// Experimental Inference API
-pref("extensions.ml.enabled", true);
-
-// Local model management page enabled
-pref("extensions.htmlaboutaddons.local_model_management", true);
 
 // Middle-mouse handling
 pref("middlemouse.paste", false);
@@ -2132,7 +2184,11 @@ pref("font.size.monospace.x-math", 13);
   // Per Taiwanese users' demand. They don't want to use TC fonts for
   // rendering Latin letters. (bug 88579)
   pref("font.name-list.serif.zh-TW", "Times New Roman, PMingLiu, MingLiU, MingLiU-ExtB");
-  pref("font.name-list.sans-serif.zh-TW", "Arial, Microsoft JhengHei, PMingLiU, MingLiU, MingLiU-ExtB");
+  #ifdef EARLY_BETA_OR_EARLIER
+    pref("font.name-list.sans-serif.zh-TW", "Arial, Microsoft JhengHei, PMingLiU, MingLiU, MingLiU-ExtB");
+  #else
+    pref("font.name-list.sans-serif.zh-TW", "Arial, PMingLiU, MingLiU, MingLiU-ExtB, Microsoft JhengHei");
+  #endif
   pref("font.name-list.monospace.zh-TW", "MingLiU, MingLiU-ExtB");
   pref("font.name-list.cursive.zh-TW", "DFKai-SB");
 
@@ -2251,9 +2307,22 @@ pref("font.size.monospace.x-math", 13);
   pref("gfx.font_rendering.cleartype_params.pixel_structure", -1);
   pref("gfx.font_rendering.cleartype_params.rendering_mode", -1);
 
+#if defined(EARLY_BETA_OR_EARLIER)
   // We no longer force "GDI Classic" mode on any fonts by default.
   pref("gfx.font_rendering.cleartype_params.force_gdi_classic_for_families", "");
   pref("gfx.font_rendering.cleartype_params.force_gdi_classic_max_size", 0);
+#else
+  // A comma-separated list of font family names. Fonts in these families will
+  // be forced to use "GDI Classic" ClearType mode, provided the value
+  // of gfx.font_rendering.cleartype_params.rendering_mode is -1
+  // (i.e. a specific rendering_mode has not been explicitly set).
+  // Currently we apply this setting to the sans-serif Microsoft "core Web fonts".
+  pref("gfx.font_rendering.cleartype_params.force_gdi_classic_for_families",
+       "Arial,Consolas,Courier New,Microsoft Sans Serif,Segoe UI,Tahoma,Trebuchet MS,Verdana");
+  // The maximum size at which we will force GDI classic mode using
+  // force_gdi_classic_for_families.
+  pref("gfx.font_rendering.cleartype_params.force_gdi_classic_max_size", 15);
+#endif
 
   // Switch the keyboard layout per window
   pref("intl.keyboard.per_window_layout", false);
@@ -2285,6 +2354,9 @@ pref("font.size.monospace.x-math", 13);
   //   Google Japanese Input: "Google 日本語入力 IMM32 モジュール"
   //   ATOK 2011: "ATOK 2011" (similarly, e.g., ATOK 2013 is "ATOK 2013")
   pref("intl.imm.japanese.assume_active_tip_name_as", "");
+
+  // See bug 448927, on topmost panel, some IMEs are not usable on Windows.
+  pref("ui.panel.default_level_parent", false);
 
   // Enable system settings cache for mouse wheel message handling.
   // Note that even if this pref is set to true, Gecko may not cache the system
@@ -2526,6 +2598,9 @@ pref("font.size.monospace.x-math", 13);
   pref("font.weight-override.HelveticaNeue-Light", 300); // Ensure Light > Thin (200)
   pref("font.weight-override.HelveticaNeue-LightItalic", 300);
 
+  // See bug 404131, topmost <panel> element wins to Dashboard on MacOSX.
+  pref("ui.panel.default_level_parent", false);
+
   // Macbook touchpad two finger pixel scrolling
   pref("mousewheel.enable_pixel_scrolling", true);
 
@@ -2682,6 +2757,16 @@ pref("font.size.monospace.x-math", 13);
   pref("helpers.global_mailcap_file", "/etc/mailcap");
   pref("helpers.private_mime_types_file", "~/.mime.types");
   pref("helpers.private_mailcap_file", "~/.mailcap");
+
+  // Setting default_level_parent to true makes the default level for popup
+  // windows "top" instead of "parent".  On GTK2 platform, this is implemented
+  // with override-redirect windows which is the normal way to implement
+  // temporary popup windows.  Setting this to false would make the default
+  // level "parent" which is implemented with managed windows.
+  // A problem with using managed windows is that metacity sometimes deactivates
+  // the parent window when the managed popup is shown.
+  pref("ui.panel.default_level_parent", true);
+
 #endif // ANDROID
 
 #if !defined(ANDROID) && !defined(XP_MACOSX) && defined(XP_UNIX)
@@ -2707,7 +2792,7 @@ pref("font.size.monospace.x-math", 13);
 
   // fontconfig doesn't support emoji yet
   // https://lists.freedesktop.org/archives/fontconfig/2016-October/005842.html
-  pref("font.name-list.emoji", "Noto Color Emoji, Twemoji Mozilla");
+  pref("font.name-list.emoji", "Twemoji Mozilla");
 
   pref("font.name-list.serif.ar", "serif");
   pref("font.name-list.sans-serif.ar", "sans-serif");
@@ -2856,6 +2941,17 @@ pref("font.size.monospace.x-math", 13);
   pref("font.name-list.monospace.zh-TW", "monospace");
   pref("font.name-list.cursive.zh-TW", "cursive");
 
+  // On GTK2 platform, we should use topmost window level for the default window
+  // level of <panel> element of XUL. GTK2 has only two window types. One is
+  // normal top level window, other is popup window. The popup window is always
+  // topmost window level, therefore, we are using normal top level window for
+  // non-topmost panel, but it is pretty hacky. On some Window Managers, we have
+  // 2 problems:
+  // 1. The non-topmost panel steals focus from its parent window at showing.
+  // 2. The parent of non-topmost panel is not activated when the panel is hidden.
+  // So, we have no reasons we should use non-toplevel window for popup.
+  pref("ui.panel.default_level_parent", true);
+
   pref("intl.ime.use_simple_context_on_password_field", false);
 
   // uim may use key snooper to listen to key events.  Unfortunately, we cannot
@@ -2974,15 +3070,15 @@ pref("font.size.monospace.x-math", 13);
 
   pref("font.name-list.serif.zh-CN", "Charis SIL Compact, Noto Serif CJK SC, Noto Serif, Droid Serif, Droid Sans Fallback");
   pref("font.name-list.sans-serif.zh-CN", "Roboto, Google Sans, Droid Sans, Noto Sans SC, Noto Sans CJK SC, SEC CJK SC, Droid Sans Fallback");
-  pref("font.name-list.monospace.zh-CN", "Droid Sans Mono, Noto Sans Mono CJK SC, SEC Mono CJK SC, Noto Sans CJK SC, MiSans VF, MiSans, Droid Sans Fallback");
+  pref("font.name-list.monospace.zh-CN", "Droid Sans Mono, Noto Sans Mono CJK SC, SEC Mono CJK SC, Droid Sans Fallback");
 
   pref("font.name-list.serif.zh-HK", "Charis SIL Compact, Noto Serif CJK TC, Noto Serif, Droid Serif, Droid Sans Fallback");
   pref("font.name-list.sans-serif.zh-HK", "Roboto, Google Sans, Droid Sans, Noto Sans TC, Noto Sans SC, Noto Sans CJK TC, SEC CJK TC, Droid Sans Fallback");
-  pref("font.name-list.monospace.zh-HK", "Droid Sans Mono, Noto Sans Mono CJK TC, SEC Mono CJK TC, Noto Sans CJK TC, MiSans TC VF, MiSans TC, Droid Sans Fallback");
+  pref("font.name-list.monospace.zh-HK", "Droid Sans Mono, Noto Sans Mono CJK TC, SEC Mono CJK TC, Droid Sans Fallback");
 
   pref("font.name-list.serif.zh-TW", "Charis SIL Compact, Noto Serif CJK TC, Noto Serif, Droid Serif, Droid Sans Fallback");
   pref("font.name-list.sans-serif.zh-TW", "Roboto, Google Sans, Droid Sans, Noto Sans TC, Noto Sans SC, Noto Sans CJK TC, SEC CJK TC, Droid Sans Fallback");
-  pref("font.name-list.monospace.zh-TW", "Droid Sans Mono, Noto Sans Mono CJK TC, SEC Mono CJK TC, Noto Sans CJK TC, MiSans TC VF, MiSans TC, Droid Sans Fallback");
+  pref("font.name-list.monospace.zh-TW", "Droid Sans Mono, Noto Sans Mono CJK TC, SEC Mono CJK TC, Droid Sans Fallback");
 
   pref("font.name-list.serif.x-math", "Latin Modern Math, STIX Two Math, XITS Math, Cambria Math, Libertinus Math, DejaVu Math TeX Gyre, TeX Gyre Bonum Math, TeX Gyre Pagella Math, TeX Gyre Schola, TeX Gyre Termes Math, STIX Math, Asana Math, STIXGeneral, DejaVu Serif, DejaVu Sans, Charis SIL Compact");
   pref("font.name-list.sans-serif.x-math", "Roboto, Google Sans");
@@ -2992,6 +3088,7 @@ pref("font.size.monospace.x-math", 13);
 
 // Login Manager prefs
 pref("signon.rememberSignons",              true);
+pref("signon.rememberSignons.visibilityToggle", true);
 pref("signon.autofillForms",                true);
 pref("signon.autofillForms.autocompleteOff", true);
 pref("signon.autofillForms.http",           false);
@@ -3071,6 +3168,12 @@ pref("network.tcp.keepalive.idle_time", 600); // seconds; 10 mins
   pref("network.tcp.keepalive.probe_count", 4);
 #endif
 
+// This pref controls if we send the "public-suffix-list-updated" notification
+// from PublicSuffixList.onUpdate() - Doing so would cause the PSL graph to
+// be updated while Firefox is running which may cause principals to have an
+// inconsistent state. See bug 1582647 comment 30
+pref("network.psl.onUpdate_notify", false);
+
 #ifdef MOZ_WIDGET_GTK
   pref("widget.disable-workspace-management", false);
 #endif
@@ -3133,7 +3236,6 @@ pref("extensions.webextensions.protocol.remote", true);
 
 // Enable userScripts API by default.
 pref("extensions.webextensions.userScripts.enabled", true);
-pref("extensions.userScripts.mv3.enabled", true);
 
 // Whether or not the installed extensions should be migrated to the storage.local IndexedDB backend.
 pref("extensions.webextensions.ExtensionStorageIDB.enabled", true);
@@ -3172,6 +3274,9 @@ pref("network.buffer.cache.size",  32768);
 // Web Notification
 pref("dom.webnotifications.requireinteraction.count", 3);
 
+// Show favicons in web notifications.
+pref("alerts.showFavicons", false);
+
 // DOM full-screen API.
 #ifdef XP_MACOSX
   // Whether to use macOS native full screen for Fullscreen API
@@ -3209,7 +3314,7 @@ pref("dom.push.maxQuotaPerSubscription", 16);
 
 // The maximum number of recent message IDs to store for each push
 // subscription, to avoid duplicates for unacknowledged messages.
-pref("dom.push.maxRecentMessageIDsPerSubscription", 100);
+pref("dom.push.maxRecentMessageIDsPerSubscription", 10);
 
 // The delay between receiving a push message and updating the quota for a
 // subscription.
@@ -3230,6 +3335,11 @@ pref("dom.push.pingInterval", 1800000); // 30 minutes
 
 // How long before we timeout
 pref("dom.push.requestTimeout", 10000);
+
+// WebPush prefs:
+pref("dom.push.http2.reset_retry_count_after_ms", 60000);
+pref("dom.push.http2.maxRetries", 2);
+pref("dom.push.http2.retryInterval", 5000);
 
 // How long must we wait before declaring that a window is a "ghost" (i.e., a
 // likely leak)?  This should be longer than it usually takes for an eligible
@@ -3277,6 +3387,8 @@ pref("network.trr.confirmationNS", "example.com");
 // Comma separated list of domains that we should not use TRR for
 pref("network.trr.excluded-domains", "");
 pref("network.trr.builtin-excluded-domains", "localhost,local");
+// Whether the checkbox to display a fallback warning error page is visible in about:preferences#privacy
+pref("network.trr_ui.show_fallback_warning_option", false);
 
 pref("captivedetect.canonicalURL", "http://detectportal.firefox.com/canonical.html");
 pref("captivedetect.canonicalContent", "<meta http-equiv=\"refresh\" content=\"0;url=https://support.mozilla.org/kb/captive-portal\"/>");
@@ -3320,14 +3432,12 @@ pref("urlclassifier.features.emailtracking.blocklistTables", "base-email-track-d
 pref("urlclassifier.features.emailtracking.allowlistTables", "mozstd-trackwhite-digest256");
 pref("urlclassifier.features.emailtracking.datacollection.blocklistTables", "base-email-track-digest256,content-email-track-digest256");
 pref("urlclassifier.features.emailtracking.datacollection.allowlistTables", "mozstd-trackwhite-digest256");
-pref("urlclassifier.features.consentmanager.annotate.blocklistTables", "consent-manager-track-digest256");
-pref("urlclassifier.features.consentmanager.annotate.allowlistTables", "mozstd-trackwhite-digest256");
 
 // These tables will never trigger a gethash call.
-pref("urlclassifier.disallow_completions", "goog-downloadwhite-digest256,base-track-digest256,mozstd-trackwhite-digest256,content-track-digest256,mozplugin-block-digest256,mozplugin2-block-digest256,ads-track-digest256,social-track-digest256,analytics-track-digest256,base-fingerprinting-track-digest256,content-fingerprinting-track-digest256,base-cryptomining-track-digest256,content-cryptomining-track-digest256,fanboyannoyance-ads-digest256,fanboysocial-ads-digest256,easylist-ads-digest256,easyprivacy-ads-digest256,adguard-ads-digest256,social-tracking-protection-digest256,social-tracking-protection-facebook-digest256,social-tracking-protection-linkedin-digest256,social-tracking-protection-twitter-digest256,base-email-track-digest256,content-email-track-digest256,consent-manager-track-digest256");
+pref("urlclassifier.disallow_completions", "goog-downloadwhite-digest256,base-track-digest256,mozstd-trackwhite-digest256,content-track-digest256,mozplugin-block-digest256,mozplugin2-block-digest256,ads-track-digest256,social-track-digest256,analytics-track-digest256,base-fingerprinting-track-digest256,content-fingerprinting-track-digest256,base-cryptomining-track-digest256,content-cryptomining-track-digest256,fanboyannoyance-ads-digest256,fanboysocial-ads-digest256,easylist-ads-digest256,easyprivacy-ads-digest256,adguard-ads-digest256,social-tracking-protection-digest256,social-tracking-protection-facebook-digest256,social-tracking-protection-linkedin-digest256,social-tracking-protection-twitter-digest256,base-email-track-digest256,content-email-track-digest256");
 
 // Workaround for Google Recaptcha
-pref("urlclassifier.trackingAnnotationSkipURLs", "");
+pref("urlclassifier.trackingAnnotationSkipURLs", "google.com/recaptcha/,*.google.com/recaptcha/,d3vox9szr7t2nm.cloudfront.net");
 pref("privacy.rejectForeign.allowList", "");
 
 // The list of email webapp sites
@@ -3399,7 +3509,7 @@ pref("browser.safebrowsing.reportPhishURL", "https://%LOCALE%.phish-report.mozil
 
 // Mozilla Safe Browsing provider (for tracking protection and plugin blocking)
 pref("browser.safebrowsing.provider.mozilla.pver", "2.2");
-pref("browser.safebrowsing.provider.mozilla.lists", "base-track-digest256,mozstd-trackwhite-digest256,google-trackwhite-digest256,content-track-digest256,mozplugin-block-digest256,mozplugin2-block-digest256,ads-track-digest256,social-track-digest256,analytics-track-digest256,base-fingerprinting-track-digest256,content-fingerprinting-track-digest256,base-cryptomining-track-digest256,content-cryptomining-track-digest256,fanboyannoyance-ads-digest256,fanboysocial-ads-digest256,easylist-ads-digest256,easyprivacy-ads-digest256,adguard-ads-digest256,social-tracking-protection-digest256,social-tracking-protection-facebook-digest256,social-tracking-protection-linkedin-digest256,social-tracking-protection-twitter-digest256,base-email-track-digest256,content-email-track-digest256,consent-manager-track-digest256");
+pref("browser.safebrowsing.provider.mozilla.lists", "base-track-digest256,mozstd-trackwhite-digest256,google-trackwhite-digest256,content-track-digest256,mozplugin-block-digest256,mozplugin2-block-digest256,ads-track-digest256,social-track-digest256,analytics-track-digest256,base-fingerprinting-track-digest256,content-fingerprinting-track-digest256,base-cryptomining-track-digest256,content-cryptomining-track-digest256,fanboyannoyance-ads-digest256,fanboysocial-ads-digest256,easylist-ads-digest256,easyprivacy-ads-digest256,adguard-ads-digest256,social-tracking-protection-digest256,social-tracking-protection-facebook-digest256,social-tracking-protection-linkedin-digest256,social-tracking-protection-twitter-digest256,base-email-track-digest256,content-email-track-digest256");
 pref("browser.safebrowsing.provider.mozilla.updateURL", "moz-sbrs:://antitracking");
 pref("browser.safebrowsing.provider.mozilla.gethashURL", "https://shavar.services.mozilla.com/gethash?client=SAFEBROWSING_ID&appver=%MAJOR_VERSION%&pver=2.2");
 // Set to a date in the past to force immediate download in new profiles.
@@ -3433,9 +3543,6 @@ pref("browser.search.suggest.enabled.private", false);
 pref("browser.search.separatePrivateDefault", true);
 pref("browser.search.separatePrivateDefault.ui.enabled", false);
 pref("browser.search.removeEngineInfobar.enabled", true);
-// Temporary preference to allow switching between the Rust based search engine
-// selector and the JavaScript one (bug 1914143).
-pref("browser.search.rustSelector.featureGate", true);
 
 // GMPInstallManager prefs
 
@@ -3502,10 +3609,6 @@ pref("reader.parse-on-load.enabled", true);
 // because it'd slow things down too much
 pref("reader.parse-node-limit", 3000);
 
-// Whether or not debug mode is enabled in reader mode. If enabled, reader mode
-// will log what it's doing.
-pref("reader.debug", false);
-
 // Whether we include full URLs in browser console errors. This is disabled
 // by default because some platforms will persist these, leading to privacy issues.
 pref("reader.errors.includeURLs", false);
@@ -3531,6 +3634,9 @@ pref("reader.content_width", 3);
 // The default relative line height in reader mode (1-9)
 pref("reader.line_height", 4);
 
+// Determines if improved text and layout menu is enabled in reader mode.
+pref("reader.improved_text_menu.enabled", true);
+
 // The default character spacing in reader mode (1-9)
 pref("reader.character_spacing", 0);
 
@@ -3547,6 +3653,9 @@ pref("reader.color_scheme", "auto");
 
 // Color scheme values available in reader mode UI.
 pref("reader.color_scheme.values", "[\"auto\",\"light\",\"dark\",\"sepia\",\"contrast\",\"gray\"]");
+
+// Determines if updated color theme menu is enabled in reader mode.
+pref("reader.colors_menu.enabled", true);
 
 // The custom color scheme options in reader colors menu.
 pref("reader.custom_colors.foreground", "");
@@ -3578,12 +3687,18 @@ pref("toolkit.pageThumbs.screenSizeDivisor", 7);
 pref("toolkit.pageThumbs.minWidth", 0);
 pref("toolkit.pageThumbs.minHeight", 0);
 
+pref("webextensions.tests", false);
+
 // 16MB default non-parseable upload limit for requestBody.raw.bytes
 pref("webextensions.webRequest.requestBodyMaxRawBytes", 16777216);
 
-// Enforce a 10MB quota in the storage.session extension API.
-pref("webextensions.storage.session.enforceQuota", true);
+#ifdef NIGHTLY_BUILD
+  pref("webextensions.storage.session.enforceQuota", true);
+#else
+  pref("webextensions.storage.session.enforceQuota", false);
+#endif
 
+pref("webextensions.storage.sync.enabled", true);
 // Should we use the old kinto-based implementation of storage.sync? To be removed in bug 1637465.
 pref("webextensions.storage.sync.kinto", false);
 // Server used by the old kinto-based implementation of storage.sync.
@@ -3593,7 +3708,11 @@ pref("webextensions.storage.sync.serverURL", "https://webextensions.settings.ser
 pref("dom.input.fallbackUploadDir", "");
 
 // Turn rewriting of youtube embeds on/off
-pref("plugins.rewrite_youtube_embeds", true);
+#if defined(EARLY_BETA_OR_EARLIER)
+  pref("plugins.rewrite_youtube_embeds", false);
+#else
+  pref("plugins.rewrite_youtube_embeds", true);
+#endif
 
 // Default media volume
 pref("media.default_volume", "1.0");
@@ -3638,9 +3757,6 @@ pref("browser.translations.useHTML", false);
 pref("browser.translations.automaticallyPopup", true);
 // Simulate the behavior of using a device that does not support the translations engine.
 // Requires restart.
-// Enables or disables the usage of lexical shortlisting for the translation models.
-// Using a lexical shortlist will increase translation speed, but may reduce quality.
-pref("browser.translations.useLexicalShortlist", false);
 pref("browser.translations.simulateUnsupportedEngine", false);
 // The translations code relies on asynchronous network request. Chaos mode simulates
 // flaky and slow network connections, so that the UI may be manually tested. The
@@ -3650,23 +3766,28 @@ pref("browser.translations.chaos.errors", false);
 pref("browser.translations.chaos.timeoutMS", 0);
 
 // Enable the experimental machine learning inference engine.
-pref("browser.ml.enable", true);
+pref("browser.ml.enable", false);
 // Set to "All" to see all logs, which are useful for debugging.
 pref("browser.ml.logLevel", "Error");
 // Model hub root URL used to download models.
 pref("browser.ml.modelHubRootUrl", "https://model-hub.mozilla.org/");
 // Model URL template
 pref("browser.ml.modelHubUrlTemplate", "{model}/{revision}");
-// Maximum disk size for ML model cache (in GiB)
-pref("browser.ml.modelCacheMaxSize", 4);
+// Maximum disk size for ML model cache (in bytes)
+pref("browser.ml.modelCacheMaxSizeBytes", 1073741824);
 // Model cache timeout in ms
 pref("browser.ml.modelCacheTimeout", 120000);
-// Minimal Physical RAM required in GiB
-pref("browser.ml.minimumPhysicalMemory", 3);
+// Minimal Physical RAM required in GB
+pref("browser.ml.minimumPhysicalMemory", 4);
 // Check for memory before running
-pref("browser.ml.checkForMemory", true);
-// Allowed overrides for various ml features
-pref("browser.ml.overridePipelineOptions", "{}");
+pref("browser.ml.checkForMemory", false);
+// Maximum memory pressure (%)
+pref("browser.ml.maximumMemoryPressure", 80);
+// Queue wait timeout in seconds
+pref("browser.ml.queueWaitTimeout", 60);
+// Queue wait checks interval in seconds
+pref("browser.ml.queueWaitInterval", 1);
+
 
 // When a user cancels this number of authentication dialogs coming from
 // a single web page in a row, all following authentication dialogs will
@@ -3698,23 +3819,6 @@ pref("toolkit.aboutProcesses.showProfilerIcons", true);
 // profile is captured.
 pref("toolkit.aboutProcesses.profileDuration", 5);
 
-// This preference controls how about:logging handles profiles when stopping:
-// either it opens the profile in a new tab on profiler.firefox.com, or it
-// uploads it directly to the cloud storage, providing the URL.
-// On Android, it's not currently possible to capture a profile this way,
-// therefore the profile is uploaded by default.
-#if !defined(MOZ_WIDGET_ANDROID)
-  pref("toolkit.aboutLogging.uploadProfileToCloud", false);
-#else
-  pref("toolkit.aboutLogging.uploadProfileToCloud", true);
-#endif
-// The pref "toolkit.aboutlogging.uploadProfileUrl" can also be set to change
-// the upload endpoint. The comment below shows the default value. It's not
-// defined usually because we don't expect our users, even advanced, to change
-// it, and therefore this will likely only be used in our tests.
-// pref("toolkit.aboutlogging.uploadProfileUrl", "https://api.profiler.firefox.com/compressed-store");
-
-
 // When a crash happens, whether to include heap regions of the crash context
 // in the minidump. Enabled by default on nightly and aurora.
 #ifdef RELEASE_OR_BETA
@@ -3733,15 +3837,11 @@ pref("toolkit.legacyUserProfileCustomizations.stylesheets", false);
   pref("datareporting.policy.dataSubmissionEnabled", true);
   pref("datareporting.policy.dataSubmissionPolicyNotifiedTime", "0");
   pref("datareporting.policy.dataSubmissionPolicyAcceptedVersion", 0);
+  pref("datareporting.policy.dataSubmissionPolicyBypassNotification", false);
   pref("datareporting.policy.currentPolicyVersion", 2);
   pref("datareporting.policy.minimumPolicyVersion", 1);
   pref("datareporting.policy.minimumPolicyVersion.channel-beta", 2);
   pref("datareporting.policy.firstRunURL", "https://www.mozilla.org/privacy/firefox/");
-  #ifdef MOZILLA_OFFICIAL
-    pref("datareporting.policy.dataSubmissionPolicyBypassNotification", false);
-  #else
-    pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
-  #endif
 #endif
 
 #ifdef MOZ_SERVICES_HEALTHREPORT
@@ -3749,9 +3849,7 @@ pref("toolkit.legacyUserProfileCustomizations.stylesheets", false);
     pref("datareporting.healthreport.infoURL", "https://www.mozilla.org/legal/privacy/firefox.html#health-report");
 
     // Health Report is enabled by default on all channels.
-    // Do note that the toggle on Fenix and Focus does NOT reflect to this pref.
     pref("datareporting.healthreport.uploadEnabled", true);
-    pref("datareporting.usage.uploadEnabled", true);
   #endif
 #endif
 
@@ -3872,6 +3970,15 @@ pref("services.common.log.logger.tokenserverclient", "Debug");
   // Port to start Marionette server on.
   pref("marionette.port", 2828);
 
+  // Defines the protocols that will be active for the Remote Agent.
+  // 1: WebDriver BiDi
+  // 2: CDP (Chrome DevTools Protocol)
+  // 3: WebDriver BiDi + CDP
+  pref("remote.active-protocols", 1);
+
+  // Opt-in for async event processing (bug 1773393).
+  pref("remote.events.async.enabled", false);
+
   // Enable WebDriver BiDi experimental commands and events.
   #if defined(NIGHTLY_BUILD)
     pref("remote.experimental.enabled", true);
@@ -3897,9 +4004,6 @@ pref("services.common.log.logger.tokenserverclient", "Debug");
   // Enable retrying to execute commands in the child process in case the
   // JSWindowActor gets destroyed.
   pref("remote.retry-on-abort", true);
-
-  // Enable the NavigationManager using parent process WebProgress listeners
-  pref("remote.experimental-parent-navigation.enabled", false);
 #endif
 
 // Enable the JSON View tool (an inspector for application/json documents).
@@ -3933,8 +4037,8 @@ pref("devtools.errorconsole.deprecation_warnings", true);
   pref("devtools.debugger.remote-enabled", true, sticky);
 #endif
 
-// Enable service worker debugging on all channels.
-pref("devtools.debugger.features.windowless-service-workers", true);
+// Disable service worker debugging on all channels (see Bug 1651605).
+pref("devtools.debugger.features.windowless-service-workers", false);
 
 // Disable remote debugging protocol logging.
 pref("devtools.debugger.log", false);
@@ -3984,6 +4088,11 @@ pref("dom.postMessage.sharedArrayBuffer.bypassCOOP_COEP.insecure.enabled", false
 pref("dom.postMessage.sharedArrayBuffer.bypassCOOP_COEP.insecure.enabled", false, locked);
 #endif
 
+// Whether sites require the open-protocol-handler permission to open a
+//preferred external application for a protocol. If a site doesn't have
+// permission we will show a prompt.
+pref("security.external_protocol_requires_permission", true);
+
 // Preferences for the form autofill toolkit component.
 // The truthy values of "extensions.formautofill.addresses.available"
 // is "on" and "detect",
@@ -4032,19 +4141,7 @@ pref("extensions.formautofill.loglevel", "Warn");
 pref("extensions.formautofill.heuristics.captureOnFormRemoval", true);
 pref("extensions.formautofill.heuristics.captureOnPageNavigation", true);
 
-pref("extensions.formautofill.heuristics.detectDynamicFormChanges", true);
-pref("extensions.formautofill.heuristics.fillOnDynamicFormChanges", true);
-// Note: The greater the timeout value the higher the risk of automatically filling fields after a non-script/user action.
-pref("extensions.formautofill.heuristics.fillOnDynamicFormChanges.timeout", 1000);
-pref("extensions.formautofill.heuristics.refillOnSiteClearingFields", true);
-pref("extensions.formautofill.heuristics.refillOnSiteClearingFields.timeout", 500);
-
 pref("extensions.formautofill.heuristics.autofillSameOriginWithTop", true);
-
-#ifdef NIGHTLY_BUILD
-  pref("extensions.formautofill.ml.experiment.enabled", true);
-  pref("extensions.formautofill.ml.experiment.modelRevision", "v0.1.3");
-#endif
 
 pref("toolkit.osKeyStore.loglevel", "Warn");
 
@@ -4110,7 +4207,3 @@ pref("privacy.query_stripping.strip_on_share.enableTestMode", false);
 
 // To disable the Strip on Share context menu option if nothing can be stripped
 pref("privacy.query_stripping.strip_on_share.canDisable", true);
-
-// Captcha Detection
-pref("captchadetection.loglevel", "Warn");
-pref("captchadetection.actor.enabled", true);

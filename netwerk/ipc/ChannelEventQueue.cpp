@@ -12,7 +12,6 @@
 #include "nsIChannel.h"
 #include "mozilla/dom/Document.h"
 #include "nsThreadUtils.h"
-#include "mozilla/FlowMarkers.h"
 
 namespace mozilla {
 namespace net {
@@ -32,26 +31,36 @@ ChannelEvent* ChannelEventQueue::TakeEvent() {
 }
 
 void ChannelEventQueue::FlushQueue() {
-  mMutex.AssertCurrentThreadOwns();
   // Events flushed could include destruction of channel (and our own
   // destructor) unless we make sure its refcount doesn't drop to 0 while this
   // method is running.
   nsCOMPtr<nsISupports> kungFuDeathGrip;
-  kungFuDeathGrip = mOwner;
+  {
+    MutexAutoLock lock(mMutex);
+    kungFuDeathGrip = mOwner;
+  }
   mozilla::Unused << kungFuDeathGrip;  // Not used in this function
 
-  MOZ_ASSERT(mFlushing);
+#ifdef DEBUG
+  {
+    MutexAutoLock lock(mMutex);
+    MOZ_ASSERT(mFlushing);
+  }
+#endif  // DEBUG
 
   bool needResumeOnOtherThread = false;
 
   while (true) {
     UniquePtr<ChannelEvent> event;
-    event.reset(TakeEvent());
-    if (!event) {
-      MOZ_ASSERT(mFlushing);
-      mFlushing = false;
-      MOZ_ASSERT(mEventQueue.IsEmpty() || (mSuspended || !!mForcedCount));
-      break;
+    {
+      MutexAutoLock lock(mMutex);
+      event.reset(TakeEvent());
+      if (!event) {
+        MOZ_ASSERT(mFlushing);
+        mFlushing = false;
+        MOZ_ASSERT(mEventQueue.IsEmpty() || (mSuspended || !!mForcedCount));
+        break;
+      }
     }
 
     nsCOMPtr<nsIEventTarget> target = event->GetEventTarget();
@@ -62,28 +71,27 @@ void ChannelEventQueue::FlushQueue() {
     if (NS_WARN_IF(NS_FAILED(rv))) {
       // Simply run this event on current thread if we are not sure about it
       // in release channel, or assert in Aurora/Nightly channel.
-      MOZ_DIAGNOSTIC_CRASH("IsOnCurrentThread failed");
+      MOZ_DIAGNOSTIC_ASSERT(false);
       isCurrentThread = true;
     }
 
     if (!isCurrentThread) {
       // Next event needs to run on another thread. Put it back to
       // the front of the queue can try resume on that thread.
-      SuspendInternal();
-      PrependEventInternal(std::move(event));
+      Suspend();
+      PrependEvent(std::move(event));
 
       needResumeOnOtherThread = true;
-      MOZ_ASSERT(mFlushing);
-      mFlushing = false;
-      MOZ_ASSERT(!mEventQueue.IsEmpty());
+      {
+        MutexAutoLock lock(mMutex);
+        MOZ_ASSERT(mFlushing);
+        mFlushing = false;
+        MOZ_ASSERT(!mEventQueue.IsEmpty());
+      }
       break;
     }
-    {
-      MutexAutoUnlock unlock(mMutex);
-      AUTO_PROFILER_TERMINATING_FLOW_MARKER("ChannelEvent", NETWORK,
-                                            Flow::FromPointer(event.get()));
-      event->Run();
-    }
+
+    event->Run();
   }  // end of while(true)
 
   // The flush procedure is aborted because next event cannot be run on current
@@ -92,7 +100,7 @@ void ChannelEventQueue::FlushQueue() {
   // Note: we cannot call Resume() while "mFlushing == true" because
   // CompleteResume will not trigger FlushQueue while there is an ongoing flush.
   if (needResumeOnOtherThread) {
-    ResumeInternal();
+    Resume();
   }
 }
 

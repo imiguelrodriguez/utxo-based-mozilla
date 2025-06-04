@@ -666,7 +666,7 @@ export var ProcessHangMonitor = {
 
     // On e10s this counts slow-script notice only once.
     // This code is not reached on non-e10s.
-    Glean.dom.slowScriptNoticeCount.add(1);
+    Services.telemetry.getHistogramById("SLOW_SCRIPT_NOTICE_COUNT").add();
 
     this._activeReports.set(report, {
       deselectCount: 0,

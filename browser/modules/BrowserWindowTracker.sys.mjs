@@ -175,27 +175,17 @@ export const BrowserWindowTracker = {
   /**
    * Get the most recent browser window.
    *
-   * @param {Object} options - An object accepting the arguments for the search.
-   * @param {boolean} [options.private]
-   *   true to only search for private windows.
-   *   false to restrict the search to non-private windows.
-   *   If the property is not provided, search for either. If permanent private
-   *   browsing is enabled this option will be ignored!
-   * @param {boolean} [options.allowPopups]: true if popup windows are
-   *   permitted.
-   * @param {boolean} [options.allowTaskbarTabs] true if taskbar tab windows
-   *  are permitted.
-   *
-   * @returns {Window | null} The current top/selected window.
-   *  Can return null on MacOS when there is no open window.
+   * @param options an object accepting the arguments for the search.
+   *        * private: true to restrict the search to private windows
+   *            only, false to restrict the search to non-private only.
+   *            Omit the property to search in both groups.
+   *        * allowPopups: true if popup windows are permissable.
    */
   getTopWindow(options = {}) {
     for (let win of _trackedWindows) {
       if (
         !win.closed &&
         (options.allowPopups || win.toolbar.visible) &&
-        (options.allowTaskbarTabs ||
-          !win.document.documentElement.hasAttribute("taskbartab")) &&
         (!("private" in options) ||
           lazy.PrivateBrowsingUtils.permanentPrivateBrowsing ||
           lazy.PrivateBrowsingUtils.isWindowPrivate(win) == options.private)
@@ -392,33 +382,14 @@ export const BrowserWindowTracker = {
     return _trackedWindows.length;
   },
 
-  get orderedWindows() {
-    return this.getOrderedWindows();
-  },
-
   /**
    * Array of browser windows ordered by z-index, in reverse order.
    * This means that the top-most browser window will be the first item.
-   * @param {object} options
-   * @param {boolean}  [options.private]
-   *   If set, returns only windows with the specified privateness. i.e. `true`
-   *   will return only private windows. The default value, `null`, will return
-   *   all windows.
    */
-  getOrderedWindows({ private: isPrivate = undefined } = {}) {
-    // Clone the windows array immediately as it may change during iteration.
-    // We'd rather have an outdated order than skip/revisit windows.
-    const windows = [..._trackedWindows];
-    if (
-      typeof isPrivate !== "boolean" ||
-      (isPrivate && lazy.PrivateBrowsingUtils.permanentPrivateBrowsing)
-    ) {
-      return windows;
-    }
-
-    return windows.filter(
-      w => lazy.PrivateBrowsingUtils.isWindowPrivate(w) === isPrivate
-    );
+  get orderedWindows() {
+    // Clone the windows array immediately as it may change during iteration,
+    // we'd rather have an outdated order than skip/revisit windows.
+    return [..._trackedWindows];
   },
 
   getAllVisibleTabs() {

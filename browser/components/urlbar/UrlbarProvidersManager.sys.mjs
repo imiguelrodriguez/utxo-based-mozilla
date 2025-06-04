@@ -7,10 +7,6 @@
  * the connection between such providers and a UrlbarController.
  */
 
-/**
- * @typedef {import("UrlbarUtils.sys.mjs").UrlbarProvider} UrlbarProvider
- */
-
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
@@ -37,8 +33,6 @@ var localProviderModules = {
     "resource:///modules/UrlbarProviderAboutPages.sys.mjs",
   UrlbarProviderActionsSearchMode:
     "resource:///modules/UrlbarProviderActionsSearchMode.sys.mjs",
-  UrlbarProviderGlobalActions:
-    "resource:///modules/UrlbarProviderGlobalActions.sys.mjs",
   UrlbarProviderAliasEngines:
     "resource:///modules/UrlbarProviderAliasEngines.sys.mjs",
   UrlbarProviderAutofill: "resource:///modules/UrlbarProviderAutofill.sys.mjs",
@@ -76,8 +70,6 @@ var localProviderModules = {
     "resource:///modules/UrlbarProviderSearchTips.sys.mjs",
   UrlbarProviderSearchSuggestions:
     "resource:///modules/UrlbarProviderSearchSuggestions.sys.mjs",
-  UrlbarProviderSemanticHistorySearch:
-    "resource:///modules/UrlbarProviderSemanticHistorySearch.sys.mjs",
   UrlbarProviderTabToSearch:
     "resource:///modules/UrlbarProviderTabToSearch.sys.mjs",
   UrlbarProviderTokenAliasEngines:
@@ -85,6 +77,7 @@ var localProviderModules = {
   UrlbarProviderTopSites: "resource:///modules/UrlbarProviderTopSites.sys.mjs",
   UrlbarProviderUnitConversion:
     "resource:///modules/UrlbarProviderUnitConversion.sys.mjs",
+  UrlbarProviderWeather: "resource:///modules/UrlbarProviderWeather.sys.mjs",
 };
 
 // List of available local muxers, each is implemented in its own jsm module.
@@ -92,6 +85,14 @@ var localMuxerModules = {
   UrlbarMuxerUnifiedComplete:
     "resource:///modules/UrlbarMuxerUnifiedComplete.sys.mjs",
 };
+
+import { ActionsProviderQuickActions } from "resource:///modules/ActionsProviderQuickActions.sys.mjs";
+import { ActionsProviderContextualSearch } from "resource:///modules/ActionsProviderContextualSearch.sys.mjs";
+
+let globalActionsProviders = [
+  ActionsProviderContextualSearch,
+  ActionsProviderQuickActions,
+];
 
 const DEFAULT_MUXER = "UnifiedComplete";
 
@@ -104,9 +105,6 @@ class ProvidersManager {
   constructor() {
     // Tracks the available providers.  This is a sorted array, with HEURISTIC
     // providers at the front.
-    /**
-     * @type {UrlbarProvider[]}
-     */
     this.providers = [];
     this.providersByNotificationType = {
       onEngagement: new Set(),
@@ -207,6 +205,17 @@ class ProvidersManager {
    */
   getProvider(name) {
     return this.providers.find(p => p.name == name);
+  }
+
+  /**
+   * Returns the provider with the given name.
+   *
+   * @param {string} name
+   *   The provider name.
+   * @returns {UrlbarProvider} The provider.
+   */
+  getActionProvider(name) {
+    return globalActionsProviders.find(p => p.name == name);
   }
 
   /**
@@ -315,6 +324,14 @@ class ProvidersManager {
       // history and bookmarks even if search engines are not available.
     }
 
+    // All current global actions are currently memory lookups so it is safe to
+    // wait on them.
+    this.#globalAction = lazy.UrlbarPrefs.getScotchBonnetPref(
+      "secondaryActions.featureGate"
+    )
+      ? await this.pickGlobalAction(queryContext, controller)
+      : null;
+
     if (query.canceled) {
       return;
     }
@@ -402,8 +419,7 @@ class ProvidersManager {
         state,
         queryContext,
         controller,
-        visibleResultsByProviderName,
-        state == "engagement" && details.result ? details : null
+        visibleResultsByProviderName
       );
     }
 
@@ -449,8 +465,7 @@ class ProvidersManager {
     state,
     queryContext,
     controller,
-    visibleResultsByProviderName,
-    details
+    visibleResultsByProviderName
   ) {
     for (const provider of impressionProviders) {
       const providerVisibleResults =
@@ -462,8 +477,7 @@ class ProvidersManager {
           state,
           queryContext,
           controller,
-          providerVisibleResults,
-          details
+          providerVisibleResults
         );
       }
     }
@@ -497,6 +511,25 @@ class ProvidersManager {
       );
     }
   }
+
+  #globalAction = null;
+
+  async pickGlobalAction(queryContext, controller) {
+    for (let provider of globalActionsProviders) {
+      if (provider.isActive(queryContext)) {
+        let action = await provider.queryAction(queryContext, controller);
+        if (action) {
+          action.providerName = provider.name;
+          return action;
+        }
+      }
+    }
+    return null;
+  }
+
+  getGlobalAction() {
+    return this.#globalAction;
+  }
 }
 
 export var UrlbarProvidersManager = new ProvidersManager();
@@ -507,17 +540,17 @@ export var UrlbarProvidersManager = new ProvidersManager();
  * controllers. Each query has to track its own status and delays separately,
  * to avoid conflicting with other ones.
  */
-export class Query {
+class Query {
   /**
    * Initializes the query object.
    *
-   * @param {UrlbarQueryContext} queryContext
+   * @param {object} queryContext
    *        The query context
-   * @param {UrlbarController} controller
+   * @param {object} controller
    *        The controller to be notified
    * @param {object} muxer
    *        The muxer to sort results
-   * @param {UrlbarProvider[]} providers
+   * @param {Array} providers
    *        Array of all the providers.
    */
   constructor(queryContext, controller, muxer, providers) {
@@ -563,8 +596,12 @@ export class Query {
       //   }
       provider.queryInstance = this;
       activePromises.push(
-        provider
-          .isActive(this.context, this.controller)
+        // Not all isActive implementations are async, so wrap the call in a
+        // promise so we can be sure we can call `then` on it.  Note that
+        // Promise.resolve returns its arg directly if it's already a promise.
+        Promise.resolve(
+          provider.tryMethod("isActive", this.context, this.controller)
+        )
           .then(isActive => {
             if (isActive && !this.canceled) {
               let priority = provider.tryMethod("getPriority", this.context);
@@ -731,15 +768,7 @@ export class Query {
       // Treat form history as searches for the purpose of acceptableSources.
       (result.type != lazy.UrlbarUtils.RESULT_TYPE.SEARCH ||
         result.source != lazy.UrlbarUtils.RESULT_SOURCE.HISTORY ||
-        !this.acceptableSources.includes(
-          lazy.UrlbarUtils.RESULT_SOURCE.SEARCH
-        )) &&
-      // To enable tab group search in tabs mode, allow actions to bypass
-      // acceptableSources.
-      !(
-        result.source == lazy.UrlbarUtils.RESULT_SOURCE.ACTIONS &&
-        this.acceptableSources.includes(lazy.UrlbarUtils.RESULT_SOURCE.TABS)
-      )
+        !this.acceptableSources.includes(lazy.UrlbarUtils.RESULT_SOURCE.SEARCH))
     ) {
       return;
     }

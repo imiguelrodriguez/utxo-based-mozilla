@@ -2,14 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-:root {
-  --logins-dialog-shadow: var(--box-shadow-popup);
-  --logins-dialog-border: 1px solid var(--border-color-card);
-  --logins-dialog-border-radius: var(--border-radius-medium);
-}
-
 html {
-  position: fixed;
+   position: fixed;
 }
 html,
 body {
@@ -82,7 +76,7 @@ login-item[data-editing="true"] + login-intro,
 .primary-password-auth-required > body > header,
 .primary-password-auth-required > body > login-list,
 .primary-password-auth-required > body > section {
-  filter: blur(2px);
+  filter: blur(2px)
 }
 
 #primary-password-required-overlay {
@@ -90,7 +84,7 @@ login-item[data-editing="true"] + login-intro,
   position: fixed;
   width: 100vw;
   height: 100vh;
-  background-color: rgba(0, 0, 0, 0.2);
+  background-color: rgba(0,0,0,0.2);
 }
 
 body > section {

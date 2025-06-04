@@ -25,8 +25,10 @@ add_heuristic_tests([
           { fieldName: "cc-number" },
           { fieldName: "cc-name" },
           { fieldName: "cc-exp" },
-          { fieldName: "cc-exp" },
         ],
+      },
+      {
+        fields: [{ fieldName: "cc-exp", reason: "autocomplete" }],
       },
     ],
   },

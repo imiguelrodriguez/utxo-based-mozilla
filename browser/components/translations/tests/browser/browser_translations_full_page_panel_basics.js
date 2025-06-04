@@ -18,14 +18,14 @@ add_task(async function test_translations_panel_basics() {
       "The button is available."
     );
 
-  is(button.getAttribute("data-l10n-id"), "urlbar-translations-button-intro");
+  is(button.getAttribute("data-l10n-id"), "urlbar-translations-button2");
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await FullPageTranslationsTestUtils.openPanel({
     expectedFromLanguage: "es",
     expectedToLanguage: "en",
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
   });
 
   await FullPageTranslationsTestUtils.clickTranslateButton();
@@ -45,7 +45,7 @@ add_task(async function test_translations_panel_basics() {
 
   await resolveDownloads(1);
 
-  await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated({
+  await FullPageTranslationsTestUtils.assertPageIsTranslated({
     fromLanguage: "es",
     toLanguage: "en",
     runInPage,
@@ -58,7 +58,7 @@ add_task(async function test_translations_panel_basics() {
 
   await FullPageTranslationsTestUtils.clickRestoreButton();
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await FullPageTranslationsTestUtils.assertTranslationsButton(
     { button: true, circleArrows: false, locale: false, icon: true },

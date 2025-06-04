@@ -133,7 +133,8 @@ var TabStateCacheInternal = {
    * @param permanentKey (object)
    *        The tab or browser belonging to the given tab data.
    * @param newData (object)
-   *        The new data to be stored for the given permanent key.
+   *        The new data to be stored for the given |tab|
+   *        or associated |browser|.
    */
   update(permanentKey, newData) {
     let data = this._data.get(permanentKey) || {};

@@ -19,6 +19,7 @@ add_task(async function searchOnEnterSoon() {
   info("Search on Enter as soon as typing a char");
   const win = await BrowserTestUtils.openNewBrowserWindow();
   const browser = win.gBrowser.selectedBrowser;
+  const browserSearch = win.BrowserSearch;
 
   const onPageHide = SpecialPowers.spawn(browser, [], () => {
     return new Promise(resolve => {
@@ -39,7 +40,7 @@ add_task(async function searchOnEnterSoon() {
   });
 
   info("Focus on the search bar");
-  const searchBarTextBox = win.document.getElementById("searchbar").textbox;
+  const searchBarTextBox = browserSearch.searchBar.textbox;
   EventUtils.synthesizeMouseAtCenter(searchBarTextBox, {}, win);
   const ownerDocument = browser.ownerDocument;
   is(ownerDocument.activeElement, searchBarTextBox, "The search bar has focus");
@@ -77,7 +78,7 @@ add_task(async function typeCharWhileProcessingEnter() {
   info("Typing a char while processing enter key");
   const win = await BrowserTestUtils.openNewBrowserWindow();
   const browser = win.gBrowser.selectedBrowser;
-  const searchBar = win.document.getElementById("searchbar");
+  const searchBar = win.BrowserSearch.searchBar;
 
   const SEARCH_WORD = "test";
   const onLoad = BrowserTestUtils.browserLoaded(
@@ -118,7 +119,7 @@ add_task(async function typeCharWhileProcessingEnter() {
 add_task(async function keyupEnterWhilePressingMeta() {
   const win = await BrowserTestUtils.openNewBrowserWindow();
   const browser = win.gBrowser.selectedBrowser;
-  const searchBar = win.document.getElementById("searchbar");
+  const searchBar = win.BrowserSearch.searchBar;
 
   info("Keydown Meta+Enter");
   searchBar.textbox.focus();
@@ -153,7 +154,7 @@ add_task(async function keyupEnterWhilePressingMeta() {
 add_task(async function enterOnEmptySearchBar() {
   const win = await BrowserTestUtils.openNewBrowserWindow();
   const browser = win.gBrowser.selectedBrowser;
-  const searchBar = win.document.getElementById("searchbar");
+  const searchBar = win.BrowserSearch.searchBar;
 
   // Enter should be ignored if the searchbar is empty.
   info("Pressing Enter");
@@ -178,7 +179,7 @@ add_task(async function enterOnEmptySearchBar() {
 
 add_task(async function openSettingsWithEnter() {
   const win = await BrowserTestUtils.openNewBrowserWindow();
-  const searchBar = win.document.getElementById("searchbar");
+  const searchBar = win.BrowserSearch.searchBar;
   const searchPopup = win.document.getElementById("PopupSearchAutoComplete");
   const searchButton = searchBar.querySelector(".searchbar-search-button");
 

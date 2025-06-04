@@ -88,7 +88,7 @@ nsresult CacheFileChunkBuffer::FillInvalidRanges(
 
   const uint32_t minBufSize = kMinBufSize;
   const uint32_t maxBufSize = kChunkSize;
-  aBufSize = std::clamp(aBufSize, minBufSize, maxBufSize);
+  aBufSize = clamped(aBufSize, minBufSize, maxBufSize);
 
   if (!mChunk->CanAllocate(aBufSize - mBufSize)) {
     return NS_ERROR_OUT_OF_MEMORY;

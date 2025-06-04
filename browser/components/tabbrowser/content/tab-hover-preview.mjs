@@ -5,10 +5,6 @@
 var { XPCOMUtils } = ChromeUtils.importESModule(
   "resource://gre/modules/XPCOMUtils.sys.mjs"
 );
-const lazy = {};
-ChromeUtils.defineESModuleGetters(lazy, {
-  PageWireframes: "resource:///modules/sessionstore/PageWireframes.sys.mjs",
-});
 
 const ZERO_DELAY_ACTIVATION_TIME = 300;
 
@@ -55,15 +51,14 @@ export default class TabHoverPreviewPanel {
     );
     XPCOMUtils.defineLazyPreferenceGetter(
       this,
-      "_prefCollectWireframes",
-      "browser.history.collectWireframes"
+      "_prefShowPidAndActiveness",
+      "browser.tabs.tooltipsShowPidAndActiveness",
+      false
     );
 
     this._panelOpener = new TabPreviewPanelTimedFunction(
       () => {
-        if (!this._isDisabled()) {
-          this._panel.openPopup(this._tab, this.#popupOptions);
-        }
+        this._panel.openPopup(this._tab, this.#popupOptions);
       },
       this._prefPreviewDelay,
       ZERO_DELAY_ACTIVATION_TIME,
@@ -87,40 +82,30 @@ export default class TabHoverPreviewPanel {
       return {
         position: "topleft topright",
         x: 0,
-        y: 3,
+        y: 4,
       };
     }
     return {
       position: "topright topleft",
       x: 0,
-      y: 3,
+      y: 4,
     };
   }
 
   getPrettyURI(uri) {
-    let url = URL.parse(uri);
-    if (!url) {
+    try {
+      let url = new URL(uri);
+      if (url.protocol == "about:" && url.pathname == "reader") {
+        url = new URL(url.searchParams.get("url"));
+      }
+
+      if (url.protocol === "about:") {
+        return url.href;
+      }
+      return `${url.hostname}`.replace(/^w{3}\./, "");
+    } catch {
       return uri;
     }
-
-    if (url.protocol == "about:" && url.pathname == "reader") {
-      url = URL.parse(url.searchParams.get("url"));
-    }
-
-    if (url?.protocol === "about:") {
-      return url.href;
-    }
-    return url ? url.hostname.replace(/^w{3}\./, "") : uri;
-  }
-
-  _hasValidWireframeState(tab) {
-    return (
-      this._prefCollectWireframes &&
-      this._prefDisplayThumbnail &&
-      tab &&
-      !tab.selected &&
-      !!lazy.PageWireframes.getWireframeState(tab)
-    );
   }
 
   _hasValidThumbnailState(tab) {
@@ -137,11 +122,6 @@ export default class TabHoverPreviewPanel {
     let tab = this._tab;
 
     if (!this._hasValidThumbnailState(tab)) {
-      let wireframeElement = lazy.PageWireframes.getWireframeElementForTab(tab);
-      if (wireframeElement) {
-        this._thumbnailElement = wireframeElement;
-        this._updatePreview();
-      }
       return;
     }
     let thumbnailCanvas = this._win.document.createElement("canvas");
@@ -234,7 +214,7 @@ export default class TabHoverPreviewPanel {
     this._panel.querySelector(".tab-preview-uri").textContent =
       this._displayURI;
 
-    if (this._win.gBrowser.showPidAndActiveness) {
+    if (this._prefShowPidAndActiveness) {
       this._panel.querySelector(".tab-preview-pid").textContent =
         this._displayPids;
       this._panel.querySelector(".tab-preview-activeness").textContent =
@@ -249,8 +229,7 @@ export default class TabHoverPreviewPanel {
     );
     thumbnailContainer.classList.toggle(
       "hide-thumbnail",
-      !this._hasValidThumbnailState(this._tab) &&
-        !this._hasValidWireframeState(this._tab)
+      !this._hasValidThumbnailState(this._tab)
     );
     if (thumbnailContainer.firstChild != this._thumbnailElement) {
       thumbnailContainer.replaceChildren();

@@ -7,10 +7,6 @@
 
 "use strict";
 
-ChromeUtils.defineESModuleGetters(this, {
-  SearchUIUtils: "moz-src:///browser/components/search/SearchUIUtils.sys.mjs",
-});
-
 var { ExtensionError } = ExtensionUtils;
 
 const dispositionMap = {
@@ -90,8 +86,7 @@ this.search = class extends ExtensionAPI {
             defaultDisposition: "NEW_TAB",
           });
 
-          await SearchUIUtils.loadSearchFromExtension({
-            window: windowTracker.topWindow,
+          await windowTracker.topWindow.BrowserSearch.loadSearchFromExtension({
             query: searchProperties.query,
             where,
             engine,
@@ -109,8 +104,7 @@ this.search = class extends ExtensionAPI {
             defaultDisposition: "CURRENT_TAB",
           });
 
-          await SearchUIUtils.loadSearchFromExtension({
-            window: windowTracker.topWindow,
+          await windowTracker.topWindow.BrowserSearch.loadSearchFromExtension({
             query: queryProperties.text,
             where,
             tab,

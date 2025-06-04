@@ -6,11 +6,13 @@
 #include "SocketProcessImpl.h"
 
 #include "base/command_line.h"
+#include "base/shared_memory.h"
 #include "base/string_util.h"
 #include "mozilla/BackgroundHangMonitor.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/GeckoArgs.h"
 #include "mozilla/ipc/ProcessUtils.h"
+#include "mozilla/ipc/IOThreadChild.h"
 
 #if defined(XP_WIN) && defined(MOZ_SANDBOX)
 #  include "mozilla/sandboxTarget.h"
@@ -22,6 +24,8 @@
 #ifdef XP_UNIX
 #  include <unistd.h>  // For sleep().
 #endif
+
+using mozilla::ipc::IOThreadChild;
 
 namespace mozilla {
 namespace net {
@@ -42,12 +46,14 @@ bool SocketProcessImpl::Init(int aArgc, char* aArgv[]) {
   LoadLibraryW(L"nss3.dll");
   LoadLibraryW(L"softokn3.dll");
   LoadLibraryW(L"freebl3.dll");
+  LoadLibraryW(L"ipcclientcerts.dll");
   LoadLibraryW(L"winmm.dll");
   mozilla::SandboxTarget::Instance()->StartSandbox();
 #elif defined(__OpenBSD__) && defined(MOZ_SANDBOX)
   PR_LoadLibrary("libnss3.so");
   PR_LoadLibrary("libsoftokn3.so");
   PR_LoadLibrary("libfreebl3.so");
+  PR_LoadLibrary("libipcclientcerts.so");
   StartOpenBSDSandbox(GeckoProcessType_Socket);
 #endif
 

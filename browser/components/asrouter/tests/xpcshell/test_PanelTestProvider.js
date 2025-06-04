@@ -22,14 +22,12 @@ add_task(async function test_PanelTestProvider() {
     cfr_doorhanger: 1,
     milestone_message: 0,
     update_action: 1,
-    spotlight: 6,
-    feature_callout: 5,
+    spotlight: 4,
+    feature_callout: 2,
     pb_newtab: 2,
     toast_notification: 3,
     bookmarks_bar_button: 1,
     menu_message: 1,
-    newtab_message: 2,
-    infobar: 1,
   };
 
   const EXPECTED_TOTAL_MESSAGE_COUNT = Object.values(

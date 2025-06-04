@@ -8,7 +8,7 @@
  */
 
 ChromeUtils.defineESModuleGetters(this, {
-  SearchUtils: "moz-src:///toolkit/components/search/SearchUtils.sys.mjs",
+  SearchUtils: "resource://gre/modules/SearchUtils.sys.mjs",
 });
 
 const TEST_PROVIDER_INFO = [

@@ -14,9 +14,10 @@
 #include "nsICacheEntry.h"  // for nsICacheEntryMetaDataVisitor
 #include "nsIFile.h"
 #include "mozilla/ScopeExit.h"
+#include "mozilla/Telemetry.h"
 #include "mozilla/DebugOnly.h"
 #include "mozilla/IntegerPrintfMacros.h"
-#include "mozilla/glean/NetwerkMetrics.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "prnetdb.h"
 
 namespace mozilla::net {
@@ -354,12 +355,6 @@ nsresult CacheFileMetadata::SyncReadMetadata(nsIFile* aFile) {
   return NS_OK;
 }
 
-void CacheFileMetadata::HandleCorruptMetaData() const {
-  if (mHandle) {
-    CacheFileIOManager::DoomFile(mHandle, nullptr);
-  }
-}
-
 const char* CacheFileMetadata::GetElement(const char* aKey) {
   const char* data = mBuf;
   const char* limit = mBuf + mElementsSize;
@@ -367,20 +362,19 @@ const char* CacheFileMetadata::GetElement(const char* aKey) {
   while (data != limit) {
     size_t maxLen = limit - data;
     size_t keyLen = strnlen(data, maxLen);
-
-    if (keyLen == maxLen ||      // Key isn't null terminated!
-        keyLen + 1 == maxLen) {  // There is no value for the key!
-      HandleCorruptMetaData();
-      return nullptr;
-    }
+    MOZ_RELEASE_ASSERT(keyLen != maxLen,
+                       "Metadata elements corrupted. Key "
+                       "isn't null terminated!");
+    MOZ_RELEASE_ASSERT(keyLen + 1 != maxLen,
+                       "Metadata elements corrupted. "
+                       "There is no value for the key!");
 
     const char* value = data + keyLen + 1;
     maxLen = limit - value;
     size_t valueLen = strnlen(value, maxLen);
-    if (valueLen == maxLen) {  // Value isn't null terminated
-      HandleCorruptMetaData();
-      return nullptr;
-    }
+    MOZ_RELEASE_ASSERT(valueLen != maxLen,
+                       "Metadata elements corrupted. Value "
+                       "isn't null terminated!");
 
     if (strcmp(data, aKey) == 0) {
       LOG(("CacheFileMetadata::GetElement() - Key found [this=%p, key=%s]",

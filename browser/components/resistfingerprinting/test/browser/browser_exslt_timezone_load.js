@@ -4,7 +4,7 @@
  *               resistance is enabled.
  */
 
-function getTimeZoneOnTab(tab) {
+function getTimeZone(tab) {
   const extractTime = function () {
     const xslText = `
     <xsl:stylesheet version="1.0"
@@ -17,7 +17,7 @@ function getTimeZoneOnTab(tab) {
       </xsl:template>
     </xsl:stylesheet>`;
 
-    SpecialPowers.Cu.getJSTestingFunctions().setTimeZone("JST");
+    SpecialPowers.Cu.getJSTestingFunctions().setTimeZone("PST8PDT");
 
     const parser = new DOMParser();
     const xsltProcessor = new XSLTProcessor();
@@ -28,10 +28,7 @@ function getTimeZoneOnTab(tab) {
     const time = styledDoc.firstChild.textContent;
 
     SpecialPowers.Cu.getJSTestingFunctions().setTimeZone(undefined);
-
-    return time
-      .match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}([+-]\d{2}:\d{2})/)
-      .pop();
+    return time;
   };
 
   const extractTimeExpr = `(${extractTime.toString()})();`;
@@ -43,7 +40,7 @@ function getTimeZoneOnTab(tab) {
   );
 }
 
-async function getTimeZone(enabled) {
+async function run_test(enabled) {
   const overrides = enabled ? "+JSDateTimeUTC" : "-JSDateTimeUTC";
   await SpecialPowers.pushPrefEnv({
     set: [
@@ -52,7 +49,7 @@ async function getTimeZone(enabled) {
     ],
   });
 
-  SpecialPowers.Cu.getJSTestingFunctions().setTimeZone("JST");
+  SpecialPowers.Cu.getJSTestingFunctions().setTimeZone("PST8PDT");
 
   // Open a tab for extracting the time zone from XSLT.
   const tab = await BrowserTestUtils.openNewForegroundTab({
@@ -60,26 +57,13 @@ async function getTimeZone(enabled) {
     opening: TEST_PATH + "file_dummy.html",
   });
 
-  const timeZone = await getTimeZoneOnTab(tab);
+  const timeZone = await getTimeZone(tab);
+
+  const expected = enabled ? "+00:00" : "-07:00";
+  ok(timeZone.endsWith(expected), `Timezone is ${expected}.`);
 
   BrowserTestUtils.removeTab(tab);
-  SpecialPowers.Cu.getJSTestingFunctions().setTimeZone(undefined);
   await SpecialPowers.popPrefEnv();
-
-  return timeZone;
-}
-
-let realTimeZone = "";
-add_setup(async () => {
-  realTimeZone = await getTimeZone(false);
-});
-
-async function run_test(enabled) {
-  const timeZone = await getTimeZone(enabled);
-  const expected = enabled ? "+00:00" : realTimeZone;
-
-  info(`Timezone is ${timeZone}. Expected: ${expected}`);
-  ok(timeZone.endsWith(expected), `Timezone is ${expected}.`);
 }
 
 add_task(() => run_test(true));

@@ -19,10 +19,10 @@ add_task(async function test_RestoreMultipleGroups() {
   const mozillaTabGroupId = mozillaTabGroup.id;
   BrowserTestUtils.addTab(win.gBrowser, "about:robots");
 
-  let aboutAboutTab = BrowserTestUtils.addTab(win.gBrowser, "about:about");
+  let aboutCrashesTab = BrowserTestUtils.addTab(win.gBrowser, "about:crashes");
   let aboutMemoryTab = BrowserTestUtils.addTab(win.gBrowser, "about:memory");
   let systemTabGroup = win.gBrowser.addTabGroup(
-    [aboutAboutTab, aboutMemoryTab],
+    [aboutCrashesTab, aboutMemoryTab],
     { color: "blue", label: "system stuff" }
   );
   systemTabGroup.collapsed = true;
@@ -32,6 +32,7 @@ add_task(async function test_RestoreMultipleGroups() {
 
   await TabStateFlusher.flushWindow(win);
   await BrowserTestUtils.closeWindow(win);
+  await forceSaveState();
 
   // Now restore the window
   win = SessionStore.undoCloseWindow(0);
@@ -77,7 +78,7 @@ add_task(async function test_RestoreMultipleGroups() {
   Assert.equal(
     win.gBrowser.tabs[5].group.id,
     systemTabGroupId,
-    "about:about tab should be in the system stuff group"
+    "about:crashes tab should be in the system stuff group"
   );
   Assert.equal(
     win.gBrowser.tabs[6].group.id,
@@ -131,5 +132,4 @@ add_task(async function test_RestoreMultipleGroups() {
   );
 
   await BrowserTestUtils.closeWindow(win);
-  forgetClosedWindows();
 });

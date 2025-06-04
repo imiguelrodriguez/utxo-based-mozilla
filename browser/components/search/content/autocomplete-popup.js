@@ -7,10 +7,8 @@
 // Wrap in a block to prevent leaking to window scope.
 {
   ChromeUtils.defineESModuleGetters(this, {
-    BrowserSearchTelemetry:
-      "moz-src:///browser/components/search/BrowserSearchTelemetry.sys.mjs",
     BrowserUtils: "resource://gre/modules/BrowserUtils.sys.mjs",
-    SearchOneOffs: "moz-src:///browser/components/search/SearchOneOffs.sys.mjs",
+    SearchOneOffs: "resource:///modules/SearchOneOffs.sys.mjs",
   });
 
   /**
@@ -193,6 +191,7 @@
       // Check for middle-click or modified clicks on the search bar
       BrowserSearchTelemetry.recordSearchSuggestionSelectionMethod(
         aEvent,
+        "searchbar",
         this.selectedIndex
       );
 
@@ -258,6 +257,7 @@
      * This is called when a one-off is clicked and when "search in new tab"
      * is selected from a one-off context menu.
      */
+    /* eslint-disable-next-line valid-jsdoc */
     handleOneOffSearch(event, engine, where, params) {
       this.searchbar.handleSearchCommandWhere(event, engine, where, params);
     }

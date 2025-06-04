@@ -10,7 +10,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
   DevToolsShim: "chrome://devtools-startup/content/DevToolsShim.sys.mjs",
   ResetProfile: "resource://gre/modules/ResetProfile.sys.mjs",
-  ScreenshotsUtils: "resource:///modules/ScreenshotsUtils.sys.mjs",
   ActionsProviderQuickActions:
     "resource:///modules/ActionsProviderQuickActions.sys.mjs",
 });
@@ -25,6 +24,12 @@ if (AppConstants.MOZ_UPDATER) {
     "nsIApplicationUpdateService"
   );
 }
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "SCREENSHOT_BROWSER_COMPONENT",
+  "screenshots.browser.component.enabled",
+  false
+);
 
 let openUrlFun = url => () => openUrl(url);
 let openUrl = url => {
@@ -56,19 +61,12 @@ let currentTab = () =>
   lazy.BrowserWindowTracker.getTopWindow()?.gBrowser.selectedTab;
 
 ChromeUtils.defineLazyGetter(lazy, "gFluentStrings", function () {
-  return new Localization(
-    [
-      "branding/brand.ftl",
-      "browser/browser.ftl",
-      "toolkit/branding/brandings.ftl",
-    ],
-    true
-  );
+  return new Localization(["branding/brand.ftl", "browser/browser.ftl"], true);
 });
 
 const DEFAULT_ACTIONS = {
   addons: {
-    l10nCommands: ["quickactions-cmd-addons3"],
+    l10nCommands: ["quickactions-cmd-addons2", "quickactions-addons"],
     icon: "chrome://mozapps/skin/extensions/category-extensions.svg",
     label: "quickactions-addons",
     onPick: openAddonsUrl("addons://discover/"),
@@ -85,10 +83,10 @@ const DEFAULT_ACTIONS = {
   },
   clear: {
     l10nCommands: [
-      "quickactions-cmd-clearrecenthistory",
-      "quickactions-clearrecenthistory",
+      "quickactions-cmd-clearhistory",
+      "quickactions-clearhistory",
     ],
-    label: "quickactions-clearrecenthistory",
+    label: "quickactions-clearhistory",
     onPick: () => {
       lazy.BrowserWindowTracker.getTopWindow()
         .document.getElementById("Tools:Sanitize")
@@ -107,24 +105,8 @@ const DEFAULT_ACTIONS = {
     label: "quickactions-extensions",
     onPick: openAddonsUrl("addons://list/extension"),
   },
-  help: {
-    l10nCommands: ["quickactions-cmd-help"],
-    icon: "chrome://global/skin/icons/help.svg",
-    label: "quickactions-help",
-    onPick: openUrlFun(
-      "https://support.mozilla.org/products/firefox?as=u&utm_source=inproduct"
-    ),
-  },
-  firefoxview: {
-    l10nCommands: ["quickactions-cmd-firefoxview"],
-    icon: "chrome://browser/skin/firefox-view.svg",
-    label: "quickactions-firefoxview",
-    onPick: () => {
-      lazy.BrowserWindowTracker.getTopWindow().FirefoxViewHandler.openTab();
-    },
-  },
   inspect: {
-    l10nCommands: ["quickactions-cmd-inspector2"],
+    l10nCommands: ["quickactions-cmd-inspector"],
     icon: "chrome://devtools/skin/images/open-inspector.svg",
     label: "quickactions-inspector2",
     isVisible: () => {
@@ -148,6 +130,12 @@ const DEFAULT_ACTIONS = {
     l10nCommands: ["quickactions-cmd-logins"],
     label: "quickactions-logins2",
     onPick: openUrlFun("about:logins"),
+  },
+  plugins: {
+    l10nCommands: ["quickactions-cmd-plugins"],
+    icon: "chrome://mozapps/skin/extensions/category-extensions.svg",
+    label: "quickactions-plugins",
+    onPick: openAddonsUrl("addons://list/plugin"),
   },
   print: {
     l10nCommands: ["quickactions-cmd-print"],
@@ -184,7 +172,7 @@ const DEFAULT_ACTIONS = {
     onPick: restartBrowser,
   },
   savepdf: {
-    l10nCommands: ["quickactions-cmd-savepdf2"],
+    l10nCommands: ["quickactions-cmd-savepdf"],
     label: "quickactions-savepdf",
     icon: "chrome://global/skin/icons/print.svg",
     onPick: () => {
@@ -204,23 +192,31 @@ const DEFAULT_ACTIONS = {
     },
   },
   screenshot: {
-    l10nCommands: ["quickactions-cmd-screenshot2"],
+    l10nCommands: ["quickactions-cmd-screenshot"],
     label: "quickactions-screenshot3",
     icon: "chrome://browser/skin/screenshot.svg",
     isVisible: () => {
-      return lazy.ScreenshotsUtils.screenshotsEnabled;
+      return !lazy.BrowserWindowTracker.getTopWindow().gScreenshots.shouldScreenshotsButtonBeDisabled();
     },
     onPick: () => {
-      Services.obs.notifyObservers(
-        lazy.BrowserWindowTracker.getTopWindow(),
-        "menuitem-screenshot",
-        "QuickActions"
-      );
+      if (lazy.SCREENSHOT_BROWSER_COMPONENT) {
+        Services.obs.notifyObservers(
+          lazy.BrowserWindowTracker.getTopWindow(),
+          "menuitem-screenshot",
+          "QuickActions"
+        );
+      } else {
+        Services.obs.notifyObservers(
+          null,
+          "menuitem-screenshot-extension",
+          "quickaction"
+        );
+      }
       return { focusContent: true };
     },
   },
   settings: {
-    l10nCommands: ["quickactions-cmd-settings2"],
+    l10nCommands: ["quickactions-cmd-settings"],
     icon: "chrome://global/skin/icons/settings.svg",
     label: "quickactions-settings2",
     onPick: openUrlFun("about:preferences"),
@@ -245,7 +241,7 @@ const DEFAULT_ACTIONS = {
     onPick: restartBrowser,
   },
   viewsource: {
-    l10nCommands: ["quickactions-cmd-viewsource2"],
+    l10nCommands: ["quickactions-cmd-viewsource"],
     icon: "chrome://global/skin/icons/settings.svg",
     label: "quickactions-viewsource2",
     isVisible: () => currentBrowser()?.currentURI.scheme !== "view-source",

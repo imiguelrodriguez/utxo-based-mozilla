@@ -45,8 +45,6 @@
 #include "sandbox/linux/system_headers/linux_syscalls.h"
 #include "sandbox/linux/services/syscall_wrappers.h"
 
-#include "mozilla/pthread_atfork.h"
-
 #ifdef MOZ_X11
 #  ifndef MOZ_WIDGET_GTK
 #    error "Unknown toolkit"
@@ -188,7 +186,7 @@ static bool ContentNeedsSysVIPC() {
   }
 #endif
 
-  if (GetEffectiveContentSandboxLevel() < 5) {
+  if (!StaticPrefs::security_sandbox_content_headless_AtStartup()) {
     // Bug 1438391: VirtualGL uses SysV shm for images and configuration.
     if (PR_GetEnv("VGL_ISACTIVE") != nullptr) {
       return true;
@@ -253,9 +251,9 @@ static int GetEffectiveSandboxLevel(GeckoProcessType aType,
   auto info = SandboxInfo::Get();
   switch (aType) {
 #ifdef MOZ_ENABLE_FORKSERVER
-      // With this mozsandbox will be preloaded for the fork server.  Sandboxed
-      // child processes rely on wrappers defined by mozsandbox to work
-      // properly.
+      // With this env MOZ_SANDBOXED will be set, and mozsandbox will
+      // be preloaded for the fork server.  Sandboxed child processes
+      // rely on wrappers defined by mozsandbox to work properly.
     case GeckoProcessType_ForkServer:
       return 1;
       break;
@@ -304,10 +302,11 @@ bool SandboxLaunch::Configure(GeckoProcessType aType, SandboxingKind aKind,
   }
 
   // At this point, we know we'll be using sandboxing; generic
-  // sandboxing support goes here.
+  // sandboxing support goes here.  The MOZ_SANDBOXED env var tells
+  // the child process whether this is the case.
+  aOptions->env_map["MOZ_SANDBOXED"] = "1";
   PreloadSandboxLib(&aOptions->env_map);
-  if (aType != GeckoProcessType_ForkServer &&
-      !AttachSandboxReporter(aExtraOpts)) {
+  if (!AttachSandboxReporter(aExtraOpts)) {
     return false;
   }
 
@@ -324,9 +323,7 @@ bool SandboxLaunch::Configure(GeckoProcessType aType, SandboxingKind aKind,
       flags |= CLONE_NEWIPC;
     }
 
-    // The intent of level 5 is to block display server access, so
-    // tell the content process not to attempt to connect.
-    if (GetEffectiveContentSandboxLevel() >= 5) {
+    if (StaticPrefs::security_sandbox_content_headless_AtStartup()) {
       aOptions->env_map["MOZ_HEADLESS"] = "1";
     }
   }
@@ -366,8 +363,9 @@ bool SandboxLaunch::Configure(GeckoProcessType aType, SandboxingKind aKind,
         // function definition above for details.  (The display
         // local-ness is cached because it won't change.)
         static const bool canCloneNet =
-            level >= 5 || (IsGraphicsOkWithoutNetwork() &&
-                           !PR_GetEnv("RENDERDOC_CAPTUREOPTS"));
+            StaticPrefs::security_sandbox_content_headless_AtStartup() ||
+            (IsGraphicsOkWithoutNetwork() &&
+             !PR_GetEnv("RENDERDOC_CAPTUREOPTS"));
 
         if (canCloneNet) {
           flags |= CLONE_NEWNET;
@@ -439,7 +437,7 @@ static void RestoreSignals(const sigset_t* aOldSigs) {
 }
 
 static bool IsSignalIgnored(int aSig) {
-  struct sigaction sa{};
+  struct sigaction sa {};
 
   if (sigaction(aSig, nullptr, &sa) != 0) {
     if (errno != EINVAL) {
@@ -470,7 +468,7 @@ namespace {
  */
 
 #  if !defined(CHECK_EQ)
-#    define CHECK_EQ(a, b) MOZ_RELEASE_ASSERT((a) == (b))
+#    define CHECK_EQ(a, b) MOZ_ASSERT((a) == (b))
 #  endif
 
 // for sys_gettid()
@@ -517,7 +515,7 @@ MOZ_NEVER_INLINE MOZ_ASAN_IGNORE static pid_t DoClone(int aFlags,
 #ifdef __hppa__
   void* stackPtr = miniStack;
 #else
-  void* stackPtr = std::end(miniStack);
+  void* stackPtr = ArrayEnd(miniStack);
 #endif
   return clone(CloneCallee, stackPtr, aFlags, aCtx);
 }
@@ -543,15 +541,11 @@ static pid_t ForkWithFlags(int aFlags) {
   if (setjmp(ctx) == 0) {
     // In the parent and just called setjmp:
     ret = DoClone(aFlags | SIGCHLD, &ctx);
-    // ret is >0 on success (a valid tid) or -1 on error
-    MOZ_DIAGNOSTIC_ASSERT(ret != 0);
   }
-  // The child longjmps to here, with ret = 0.
   RestoreSignals(&oldSigs);
+  // In the child and have longjmp'ed:
 #if defined(LIBC_GLIBC)
-  if (ret == 0) {
-    MaybeUpdateGlibcTidCache();
-  }
+  MaybeUpdateGlibcTidCache();
 #endif
   return ret;
 }
@@ -629,24 +623,11 @@ pid_t SandboxLaunch::Fork() {
   // can't run atfork hooks.)
   sigset_t oldSigs;
   BlockAllSignals(&oldSigs);
-
-#if defined(MOZ_ENABLE_FORKSERVER)
-  run_moz_pthread_atfork_handlers_prefork();
-#endif
-
   pid_t pid = ForkWithFlags(mFlags);
   if (pid != 0) {
-#if defined(MOZ_ENABLE_FORKSERVER)
-    run_moz_pthread_atfork_handlers_postfork_parent();
-#endif
-
     RestoreSignals(&oldSigs);
     return pid;
   }
-
-#if defined(MOZ_ENABLE_FORKSERVER)
-  run_moz_pthread_atfork_handlers_postfork_child();
-#endif
 
   // WARNING: all code from this point on (and in StartChrootServer)
   // must be async signal safe.  In particular, it cannot do anything
@@ -694,7 +675,7 @@ void SandboxLaunch::StartChrootServer() {
   caps.Effective(CAP_SYS_CHROOT) = true;
   if (!caps.SetCurrent()) {
     SANDBOX_LOG_ERRNO("capset (chroot helper)");
-    MOZ_DIAGNOSTIC_CRASH("caps.SetCurrent() failed");
+    MOZ_DIAGNOSTIC_ASSERT(false);
   }
 
   base::CloseSuperfluousFds(this, [](void* aCtx, int aFd) {

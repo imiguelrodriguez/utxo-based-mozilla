@@ -1,12 +1,13 @@
 import {
+  EventEmitter,
   FakePrefs,
   FakensIPrefService,
   GlobalOverrider,
   FakeConsoleAPI,
   FakeLogger,
-  FakeNimbusFeatures,
-} from "tests/unit/utils";
+} from "newtab/test/unit/utils";
 import Adapter from "enzyme-adapter-react-16";
+import { chaiAssertions } from "newtab/test/schemas/pings";
 import chaiJsonSchema from "chai-json-schema";
 import enzyme from "enzyme";
 import FxMSCommonSchema from "../../content-src/schemas/FxMSCommon.schema.json";
@@ -14,7 +15,6 @@ import {
   MESSAGE_TYPE_LIST,
   MESSAGE_TYPE_HASH,
 } from "modules/ActorConstants.mjs";
-import { MESSAGING_EXPERIMENTS_DEFAULT_FEATURES } from "modules/MessagingExperimentConstants.sys.mjs";
 
 enzyme.configure({ adapter: new Adapter() });
 
@@ -38,6 +38,7 @@ const files = req.keys();
 // This exposes sinon assertions to chai.assert
 sinon.assert.expose(assert, { prefix: "" });
 
+chai.use(chaiAssertions);
 chai.use(chaiJsonSchema);
 chai.tv4.addSchema("file:///FxMSCommon.schema.json", FxMSCommonSchema);
 
@@ -118,6 +119,9 @@ const TEST_GLOBAL = {
   AppConstants: {
     MOZILLA_OFFICIAL: true,
     MOZ_APP_VERSION: "69.0a1",
+    isChinaRepack() {
+      return false;
+    },
     isPlatformAndVersionAtMost() {
       return false;
     },
@@ -158,9 +162,13 @@ const TEST_GLOBAL = {
     defineLazyGetter(object, name, f) {
       updateGlobalOrObject(object)[name] = f();
     },
+    defineModuleGetter: updateGlobalOrObject,
     defineESModuleGetters: updateGlobalOrObject,
     generateQI() {
       return {};
+    },
+    import() {
+      return global;
     },
     importESModule() {
       return global;
@@ -218,6 +226,17 @@ const TEST_GLOBAL = {
         return {};
       },
     },
+    "@mozilla.org/security/hash;1": {
+      createInstance() {
+        return {
+          init() {},
+          updateFromStream() {},
+          finish() {
+            return "0";
+          },
+        };
+      },
+    },
     "@mozilla.org/updates/update-checker;1": { createInstance() {} },
     "@mozilla.org/widget/useridleservice;1": {
       getService() {
@@ -263,7 +282,6 @@ const TEST_GLOBAL = {
     importGlobalProperties() {},
     now: () => window.performance.now(),
     cloneInto: o => JSON.parse(JSON.stringify(o)),
-    isInAutomation: true,
   },
   console: {
     ...console,
@@ -346,9 +364,6 @@ const TEST_GLOBAL = {
     getLocalProfileDir() {
       return Promise.resolve("/");
     },
-    toFileURI(path) {
-      return `file://${path}`;
-    },
   },
   PlacesUtils: {
     get bookmarks() {
@@ -390,9 +405,7 @@ const TEST_GLOBAL = {
       get: () => ({ parent: { parent: { path: "appPath" } } }),
     },
     env: {
-      get: () => undefined,
       set: () => undefined,
-      exists: () => false,
     },
     locale: {
       get appLocaleAsBCP47() {
@@ -409,6 +422,10 @@ const TEST_GLOBAL = {
       addObserver() {},
       removeObserver() {},
       notifyObservers() {},
+    },
+    telemetry: {
+      scalarSet: () => {},
+      keyedScalarAdd: () => {},
     },
     uuid: {
       generateUUID() {
@@ -485,6 +502,7 @@ const TEST_GLOBAL = {
   },
   XPCOMUtils: {
     defineLazyGlobalGetters: updateGlobalOrObject,
+    defineLazyModuleGetters: updateGlobalOrObject,
     defineLazyServiceGetter: updateGlobalOrObject,
     defineLazyServiceGetters: updateGlobalOrObject,
     defineLazyPreferenceGetter(object, name) {
@@ -494,6 +512,7 @@ const TEST_GLOBAL = {
       return {};
     },
   },
+  EventEmitter,
   ShellService: {
     doesAppNeedPin: () => false,
     isDefaultBrowser: () => true,
@@ -520,17 +539,31 @@ const TEST_GLOBAL = {
     },
   },
   FX_MONITOR_OAUTH_CLIENT_ID: "fake_client_id",
-  ExperimentAPI: {},
-  FeatureCalloutBroker: {
-    showFeatureCallout() {},
+  ExperimentAPI: {
+    getExperiment() {},
+    getExperimentMetaData() {},
+    getRolloutMetaData() {},
   },
-  NimbusFeatures: FakeNimbusFeatures([
-    ...MESSAGING_EXPERIMENTS_DEFAULT_FEATURES,
-    "glean",
-    "newtab",
-    "pocketNewtab",
-    "cookieBannerHandling",
-  ]),
+  NimbusFeatures: {
+    glean: {
+      getVariable() {},
+    },
+    newtab: {
+      getVariable() {},
+      getAllVariables() {},
+      onUpdate() {},
+      offUpdate() {},
+    },
+    pocketNewtab: {
+      getVariable() {},
+      getAllVariables() {},
+      onUpdate() {},
+      offUpdate() {},
+    },
+    cookieBannerHandling: {
+      getVariable() {},
+    },
+  },
   TelemetryEnvironment: {
     setExperimentActive() {},
     currentEnvironment: {
@@ -539,6 +572,10 @@ const TEST_GLOBAL = {
       },
       settings: {},
     },
+  },
+  TelemetryStopwatch: {
+    start: () => {},
+    finish: () => {},
   },
   Sampling: {
     ratioSample(_seed, _ratios) {
@@ -569,15 +606,6 @@ const TEST_GLOBAL = {
     messagingExperiments: {
       reachCfr: {
         record() {},
-      },
-      reachFxmsMessage15: {
-        record() {},
-      },
-    },
-    messagingSystem: {
-      messageRequestTime: {
-        start() {},
-        stopAndAccumulate() {},
       },
     },
     newtab: {
@@ -700,8 +728,5 @@ overrider.set(TEST_GLOBAL);
 
 describe("asrouter", () => {
   after(() => overrider.restore());
-  console.log(
-    "Loading files from unit-entry.js (msg should show once - bug 1967579)"
-  );
   files.forEach(file => req(file));
 });

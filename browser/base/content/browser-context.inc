@@ -88,7 +88,8 @@
             class="context-menu-open-link"
             data-l10n-id="main-context-menu-open-link-container-tab"
             hidden="true">
-        <menupopup id="context-openlinkinusercontext-popup"/>
+        <menupopup oncommand="gContextMenu.openLinkInTab(event);"
+                   onpopupshowing="return gContextMenu.createContainerMenu(event);" />
       </menu>
 
       <menuitem id="context-openlink"
@@ -98,9 +99,6 @@
       <menuitem id="context-openlinkprivate"
                 class="context-menu-open-link"
                 data-l10n-id="main-context-menu-open-link-new-private-window"
-                />
-      <menuitem id="context-previewlink"
-                data-l10n-id="main-context-menu-preview-link"
                 />
       <menuseparator id="context-sep-open"/>
       <menuitem id="context-bookmarklink"
@@ -122,14 +120,15 @@
                 data-l10n-id="main-context-menu-copy-link-simple"
                 />
       <menuitem id="context-stripOnShareLink"
-                data-l10n-id="main-context-menu-copy-clean-link"
+                data-l10n-id="main-context-menu-strip-on-share-link"
                 hidden="true"
                 />
       <menu id="context-sendlinktodevice"
             class="sync-ui-item"
             data-l10n-id="main-context-menu-link-send-to-device"
             hidden="true">
-            <menupopup id="context-sendlinktodevice-popup"/>
+            <menupopup id="context-sendlinktodevice-popup"
+                  onpopupshowing="gSync.populateSendTabToDevicesMenu(event.target, gContextMenu.linkURI, gContextMenu.linkTextStr);"/>
       </menu>
       <menuseparator id="context-sep-sendlinktodevice" class="sync-ui-item"
                 hidden="true"/>
@@ -219,9 +218,11 @@
       <menuitem id="context-saveaudio"
                 data-l10n-id="main-context-menu-audio-save-as"
                 />
+#ifdef CONTEXT_COPY_IMAGE_CONTENTS
       <menuitem id="context-copyimage-contents"
                 data-l10n-id="main-context-menu-image-copy"
                 />
+#endif
       <menuitem id="context-copyimage"
                 data-l10n-id="main-context-menu-image-copy-link"
                 />
@@ -270,7 +271,8 @@
             class="sync-ui-item"
             data-l10n-id="main-context-menu-send-to-device"
             hidden="true">
-        <menupopup id="context-sendpagetodevice-popup"/>
+        <menupopup id="context-sendpagetodevice-popup"
+                   onpopupshowing="(() => { gSync.populateSendTabToDevicesMenu(event.target, gBrowser.currentURI, gBrowser.contentTitle); })()"/>
       </menu>
       <menu id="fill-login" hidden="true">
         <menupopup id="fill-login-popup" />
@@ -288,16 +290,6 @@
                 hidden="true"
                 />
       <menuseparator id="passwordmgr-items-separator"/>
-      <menuitem id="context-copy-link-to-highlight"
-                data-l10n-id="text-action-copy-link-to-highlight"
-                />
-      <menuitem id="context-copy-clean-link-to-highlight"
-                data-l10n-id="text-action-copy-clean-link-to-highlight"
-                />
-      <menuitem id="context-remove-all-highlights"
-                data-l10n-id="text-action-remove-all-highlights"
-                />
-      <menuseparator id="context-sep-highlights"/>
       <menuitem id="context-undo"
                 data-l10n-id="text-action-undo"
                 command="cmd_undo"/>
@@ -354,8 +346,6 @@
       <menuseparator id="context-sep-screenshots"/>
       <menuitem id="context-keywordfield"
                 data-l10n-id="main-context-menu-keyword"/>
-      <menuitem id="context-add-engine"
-                data-l10n-id="main-context-menu-add-engine"/>
       <menuitem id="context-searchselect"/>
       <menuitem id="context-searchselect-private"/>
       <menuitem id="context-translate-selection"
@@ -390,6 +380,10 @@
                     data-l10n-id="main-context-menu-frame-print"
                     />
           <menuseparator/>
+          <menuitem id="context-take-frame-screenshot"
+                    data-l10n-id="main-context-menu-take-frame-screenshot"
+                    />
+          <menuseparator id="context-sep-frame-screenshot"/>
           <menuitem id="context-viewframesource"
                     data-l10n-id="main-context-menu-frame-view-source"
                     />

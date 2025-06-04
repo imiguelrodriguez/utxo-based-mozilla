@@ -4,17 +4,18 @@
 add_setup(async () => {
   await SpecialPowers.pushPrefEnv({
     set: [
-      [VERTICAL_TABS_PREF, true],
-      [SIDEBAR_VISIBILITY_PREF, "always-show"],
+      ["sidebar.verticalTabs", true],
       ["browser.ml.chat.enabled", true],
-      ["browser.contextual-password-manager.enabled", true],
-      ["sidebar.main.tools", "aichat,passwords,syncedtabs,history"],
+      ["browser.shopping.experience2023.integratedSidebar", true],
+      ["sidebar.main.tools", "aichat,reviewchecker,syncedtabs,history"],
     ],
   });
 });
 registerCleanupFunction(async () => {
   await SpecialPowers.popPrefEnv();
-  cleanUpExtraTabs();
+  while (gBrowser.tabs.length > 1) {
+    BrowserTestUtils.removeTab(gBrowser.tabs.at(-1));
+  }
 });
 
 add_task(async function test_tools_overflow() {
@@ -41,7 +42,10 @@ add_task(async function test_tools_overflow() {
 
   await SpecialPowers.pushPrefEnv({
     set: [
-      ["sidebar.main.tools", "aichat,passwords,syncedtabs,history,bookmarks"],
+      [
+        "sidebar.main.tools",
+        "aichat,reviewchecker,syncedtabs,history,bookmarks",
+      ],
     ],
   });
   await sidebar.updateComplete;

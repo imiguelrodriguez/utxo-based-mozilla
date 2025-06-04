@@ -43,9 +43,7 @@ let gLocalization = new Localization(["browser/newtab/asrouter.ftl"], true);
 async function* iterateSubviews(parentView) {
   let navButtons = Array.from(
     // Ensure that only enabled buttons are tested
-    parentView.querySelectorAll(
-      ".subviewbutton-nav:not([disabled]):not([hidden])"
-    )
+    parentView.querySelectorAll(".subviewbutton-nav:not([disabled])")
   );
   if (!navButtons) {
     return;

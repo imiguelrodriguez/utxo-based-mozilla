@@ -53,9 +53,11 @@ CommonSocketControl::CommonSocketControl(const nsCString& aHostName,
 }
 
 void CommonSocketControl::SetStatusErrorBits(
+    const nsCOMPtr<nsIX509Cert>& cert,
     nsITransportSecurityInfo::OverridableErrorCategory
         overridableErrorCategory) {
   COMMON_SOCKET_CONTROL_ASSERT_ON_OWNING_THREAD();
+  SetServerCert(cert, mozilla::psm::EVStatus::NotEV);
   mOverridableErrorCategory = Some(overridableErrorCategory);
 }
 
@@ -305,10 +307,11 @@ void CommonSocketControl::RebuildCertificateInfoFromSSLTokenCache() {
   mozilla::net::SessionCacheInfo& info = *mSessionCacheInfo;
   nsCOMPtr<nsIX509Cert> cert(
       new nsNSSCertificate(std::move(info.mServerCertBytes)));
-  SetServerCert(cert, info.mEVStatus);
-  if (info.mOverridableErrorCategory !=
+  if (info.mOverridableErrorCategory ==
       nsITransportSecurityInfo::OverridableErrorCategory::ERROR_UNSET) {
-    SetStatusErrorBits(info.mOverridableErrorCategory);
+    SetServerCert(cert, info.mEVStatus);
+  } else {
+    SetStatusErrorBits(cert, info.mOverridableErrorCategory);
   }
   SetCertificateTransparencyStatus(info.mCertificateTransparencyStatus);
   if (info.mSucceededCertChainBytes) {

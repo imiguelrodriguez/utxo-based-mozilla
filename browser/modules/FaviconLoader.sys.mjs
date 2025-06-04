@@ -243,18 +243,14 @@ class FaviconLoad {
       }
     }
 
-    // By default we don't store icons added after the `pageshow` event as they
-    // may be used to show a badge, indicate a service status, or other form
-    // of icon animations.
+    // By default don't store icons added after "pageshow".
     let canStoreIcon = this.icon.beforePageShow;
-    // We make an exception for root icons, as they are unlikely to be used
-    // as status indicators, and in general they are always usable.
-    if (this.icon.iconUri.filePath == "/favicon.ico") {
-      canStoreIcon = true;
-    } else {
-      // Do not store non-root icons if `Cache-Control: no-store` header is set.
+    if (canStoreIcon) {
+      // Don't store icons responding with Cache-Control: no-store, but always
+      // allow root domain icons.
       try {
         if (
+          this.icon.iconUri.filePath != "/favicon.ico" &&
           this.channel instanceof Ci.nsIHttpChannel &&
           this.channel.isNoStoreResponse()
         ) {
@@ -385,9 +381,13 @@ function extractIconSize(aSizes) {
 
   // Telemetry probes for measuring the sizes attribute
   // usage and available dimensions.
-  Glean.linkIconSizesAttr.usage.accumulateSingleSample(sizesType);
+  Services.telemetry
+    .getHistogramById("LINK_ICON_SIZES_ATTR_USAGE")
+    .add(sizesType);
   if (width > 0) {
-    Glean.linkIconSizesAttr.dimension.accumulateSingleSample(width);
+    Services.telemetry
+      .getHistogramById("LINK_ICON_SIZES_ATTR_DIMENSION")
+      .add(width);
   }
 
   return width;
@@ -525,10 +525,6 @@ class IconLoader {
 
   async load(iconInfo) {
     if (this._loader) {
-      // If we're already loading this icon, just let it finish.
-      if (this._loader.icon.iconUri.equals(iconInfo.iconUri)) {
-        return;
-      }
       this._loader.cancel();
     }
 
@@ -640,11 +636,11 @@ export class FaviconLoader {
     this.iconInfos = [];
 
     if (richIcon) {
-      this.richIconLoader.load(richIcon).catch(console.error);
+      this.richIconLoader.load(richIcon);
     }
 
     if (tabIcon) {
-      this.tabIconLoader.load(tabIcon).catch(console.error);
+      this.tabIconLoader.load(tabIcon);
     }
   }
 

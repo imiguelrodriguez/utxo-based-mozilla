@@ -54,7 +54,7 @@ function checkChain(
     certdb,
     eeCert,
     eeExpectedError,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
 }
 

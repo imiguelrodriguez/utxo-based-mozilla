@@ -1,6 +1,6 @@
 "use strict";
 
-const { NimbusTestUtils } = ChromeUtils.importESModule(
+const { ExperimentFakes } = ChromeUtils.importESModule(
   "resource://testing-common/NimbusTestUtils.sys.mjs"
 );
 
@@ -28,12 +28,28 @@ const makeTestContent = (id, contentAdditions) => {
   };
 };
 
+async function openAboutWelcome(json) {
+  if (json) {
+    await setAboutWelcomeMultiStage(json);
+  }
+
+  let tab = await BrowserTestUtils.openNewForegroundTab(
+    gBrowser,
+    "about:welcome",
+    true
+  );
+  registerCleanupFunction(() => {
+    BrowserTestUtils.removeTab(tab);
+  });
+  return tab.linkedBrowser;
+}
+
 async function testAboutWelcomeLogoFor(logo = {}) {
   info(`Testing logo: ${JSON.stringify(logo)}`);
 
   let screens = [makeTestContent("TEST_LOGO_SELECTION_STEP", { logo })];
 
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     value: { enabled: true, screens },
   });
@@ -367,7 +383,7 @@ add_task(async function test_aboutwelcome_with_url_backdrop() {
   const TEST_BACKDROP_VALUE = `#212121 ${TEST_BACKDROP_URL} center/cover no-repeat fixed`;
   const TEST_URL_BACKDROP_CONTENT = makeTestContent("TEST_URL_BACKDROP_STEP");
 
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     value: {
       enabled: true,
@@ -383,7 +399,7 @@ add_task(async function test_aboutwelcome_with_url_backdrop() {
     // Expected selectors:
     [`div.outer-wrapper.onboardingContainer[style*='${TEST_BACKDROP_URL}']`]
   );
-  await doExperimentCleanup();
+  doExperimentCleanup();
   browser.closeBrowser();
 });
 
@@ -396,7 +412,7 @@ add_task(async function test_aboutwelcome_with_color_backdrop() {
     "TEST_COLOR_NAME_BACKDROP_STEP"
   );
 
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     value: {
       enabled: true,
@@ -412,7 +428,7 @@ add_task(async function test_aboutwelcome_with_color_backdrop() {
     // Expected selectors:
     [`div.outer-wrapper.onboardingContainer[style*='${TEST_BACKDROP_COLOR}']`]
   );
-  await doExperimentCleanup();
+  doExperimentCleanup();
   browser.closeBrowser();
 });
 
@@ -438,7 +454,7 @@ add_task(async function test_aboutwelcome_with_text_color_override() {
     );
   }
 
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     value: {
       enabled: true,
@@ -476,7 +492,7 @@ add_task(async function test_aboutwelcome_with_text_color_override() {
     }
   );
 
-  await doExperimentCleanup();
+  doExperimentCleanup();
   await SpecialPowers.popPrefEnv();
   browser.closeBrowser();
 });
@@ -508,7 +524,7 @@ add_task(async function test_aboutwelcome_with_progress_bar() {
     );
   }
 
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     value: {
       enabled: true,
@@ -535,7 +551,7 @@ add_task(async function test_aboutwelcome_with_progress_bar() {
     for (let [key, val] of Object.entries({
       // The filled "completed" element should have
       // `background-color: var(--in-content-primary-button-background);`
-      "background-color": "oklch(0.55 0.24 260)",
+      "background-color": "rgb(0, 97, 224)",
       // Base progress bar step styles.
       height: "6px",
       "margin-inline": "-1px",
@@ -553,7 +569,7 @@ add_task(async function test_aboutwelcome_with_progress_bar() {
     );
   });
 
-  await doExperimentCleanup();
+  doExperimentCleanup();
   browser.closeBrowser();
 });
 
@@ -566,7 +582,7 @@ add_task(async function test_aboutwelcome_history_updates_disabled() {
   for (let i = 1; i < 3; i++) {
     screens.push(makeTestContent(`TEST_PUSH_STATE_STEP_${i}`));
   }
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     value: {
       enabled: true,
@@ -595,7 +611,7 @@ add_task(async function test_aboutwelcome_history_updates_disabled() {
     "No entries added to the session's history stack with history updates disabled"
   );
 
-  await doExperimentCleanup();
+  doExperimentCleanup();
   browser.closeBrowser();
 });
 
@@ -644,7 +660,7 @@ add_task(async function test_aboutwelcome_start_screen_configured() {
   for (let i = 1; i < 3; i++) {
     screens.push(makeTestContent(`TEST_START_STEP_${i}`));
   }
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     value: {
       enabled: true,
@@ -702,7 +718,7 @@ add_task(async function test_aboutwelcome_start_screen_configured() {
     ok(false, "No telemetry sent");
   }
 
-  await doExperimentCleanup();
+  doExperimentCleanup();
   browser.closeBrowser();
   sandbox.restore();
 });
@@ -713,7 +729,7 @@ add_task(async function test_aboutwelcome_start_screen_configured() {
 add_task(async function test_aboutwelcome_rdm_property() {
   let screens = [makeTestContent(`TEST_NO_RDM`, { no_rdm: true })];
 
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     value: { enabled: true, screens },
   });
@@ -727,7 +743,7 @@ add_task(async function test_aboutwelcome_rdm_property() {
     ["main.TEST_NO_RDM[no-rdm]"]
   );
 
-  await doExperimentCleanup();
+  doExperimentCleanup();
   browser.closeBrowser();
 });
 
@@ -743,7 +759,7 @@ add_task(async function test_aboutwelcome_reverse_dismiss() {
     }),
   ];
 
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     value: { enabled: true, screens },
   });
@@ -771,7 +787,7 @@ add_task(async function test_aboutwelcome_reverse_dismiss() {
   await BrowserTestUtils.browserLoaded(browser, false, "about:home");
   is(browser.currentURI.spec, "about:home", "about:home loaded");
 
-  await doExperimentCleanup();
+  doExperimentCleanup();
   browser.closeBrowser();
 });
 
@@ -781,7 +797,7 @@ add_task(async function test_aboutwelcome_reverse_dismiss() {
 add_task(async function test_aboutwelcome_fullscreen_property() {
   let screens = [makeTestContent(`TEST_FULLSCREEN`, { fullscreen: true })];
 
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     value: { enabled: true, screens },
   });
@@ -795,7 +811,7 @@ add_task(async function test_aboutwelcome_fullscreen_property() {
     ["main.TEST_FULLSCREEN[fullscreen]"]
   );
 
-  await doExperimentCleanup();
+  doExperimentCleanup();
   browser.closeBrowser();
 });
 
@@ -819,7 +835,7 @@ add_task(async function test_aboutwelcome_narrow_property() {
     }),
   ];
 
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     value: { enabled: true, screens },
   });
@@ -862,7 +878,7 @@ add_task(async function test_aboutwelcome_narrow_property() {
     }
   );
 
-  await doExperimentCleanup();
+  doExperimentCleanup();
   browser.closeBrowser();
 });
 
@@ -929,7 +945,7 @@ add_task(async function test_aboutwelcome_single_select_icon_styles() {
     }),
   ];
 
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     value: { enabled: true, screens },
   });
@@ -952,6 +968,6 @@ add_task(async function test_aboutwelcome_single_select_icon_styles() {
     }
   );
 
-  await doExperimentCleanup();
+  doExperimentCleanup();
   browser.closeBrowser();
 });

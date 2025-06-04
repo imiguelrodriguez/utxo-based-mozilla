@@ -7,11 +7,9 @@
 #ifndef mozilla__net__FileChannelParent_h
 #define mozilla__net__FileChannelParent_h
 
-#include "nsFileChannel.h"
 #include "nsIParentChannel.h"
 #include "nsISupportsImpl.h"
 
-#include "mozilla/net/NeckoParent.h"
 #include "mozilla/net/PFileChannelParent.h"
 
 namespace mozilla {
@@ -27,10 +25,7 @@ class FileChannelParent : public nsIParentChannel, public PFileChannelParent {
   NS_DECL_NSIREQUESTOBSERVER
   NS_DECL_NSISTREAMLISTENER
 
-  virtual mozilla::ipc::IPCResult RecvNotifyListeners(
-      const FileChannelInfo& aFileChannelInfo);
-  virtual mozilla::ipc::IPCResult RecvSetChannelIdForRedirect(
-      const uint64_t& aChannelId);
+  [[nodiscard]] bool Init(const uint64_t& aChannelId);
 
  private:
   ~FileChannelParent() = default;

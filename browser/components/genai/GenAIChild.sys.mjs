@@ -11,48 +11,33 @@ XPCOMUtils.defineLazyPreferenceGetter(
   "browser.ml.chat.shortcuts.longPress"
 );
 
-// Events to register after shortcuts are shown
-const HIDE_EVENTS = ["pagehide", "resize", "scroll"];
+// Additional events to listen with others to create the actor in BrowserGlue
+const EVENTS = ["mousedown", "mouseup", "pagehide"];
 
 /**
  * JSWindowActor to detect content page events to send GenAI related data.
  */
 export class GenAIChild extends JSWindowActorChild {
-  mouseUpTimeout = null;
-  downSelection = null;
-  downTimeStamp = 0;
-  debounceDelay = 200;
-  pendingHide = false;
-
-  registerHideEvents() {
+  actorCreated() {
     this.document.addEventListener("selectionchange", this);
-    HIDE_EVENTS.forEach(ev =>
-      this.contentWindow.addEventListener(ev, this, true)
-    );
-    this.pendingHide = true;
+    // Use capture as some pages might stop the events
+    EVENTS.forEach(ev => this.contentWindow.addEventListener(ev, this, true));
   }
 
-  removeHideEvents() {
+  didDestroy() {
     this.document.removeEventListener("selectionchange", this);
-    HIDE_EVENTS.forEach(ev =>
+    EVENTS.forEach(ev =>
       this.contentWindow?.removeEventListener(ev, this, true)
     );
-    this.pendingHide = false;
   }
 
   handleEvent(event) {
-    const sendHide = () => {
-      // Only remove events and send message if shortcuts are actually visible
-      if (this.pendingHide) {
-        this.sendAsyncMessage("GenAI:HideShortcuts", event.type);
-        this.removeHideEvents();
-      }
-    };
-
+    const sendHide = () =>
+      this.sendAsyncMessage("GenAI:HideShortcuts", event.type);
     switch (event.type) {
       case "mousedown":
         this.downSelection = this.getSelectionInfo().selection;
-        this.downTimeStamp = event.timeStamp;
+        this.downTime = Date.now();
         sendHide();
         break;
       case "mouseup": {
@@ -67,36 +52,21 @@ export class GenAIChild extends JSWindowActorChild {
           return;
         }
 
-        // Clear any previously scheduled mouseup actions
-        if (this.mouseUpTimeout) {
-          this.contentWindow.clearTimeout(this.mouseUpTimeout);
+        // Show immediately on selection or allow long press with no selection
+        const selectionInfo = this.getSelectionInfo();
+        const delay = Date.now() - (this.downTime ?? 0);
+        if (
+          (selectionInfo.selection &&
+            selectionInfo.selection != this.downSelection) ||
+          delay > lazy.shortcutsDelay
+        ) {
+          this.sendAsyncMessage("GenAI:ShowShortcuts", {
+            ...selectionInfo,
+            delay,
+            x: event.screenX,
+            y: event.screenY,
+          });
         }
-
-        const { screenX, screenY } = event;
-
-        this.mouseUpTimeout = this.contentWindow.setTimeout(() => {
-          const selectionInfo = this.getSelectionInfo();
-          const delay = event.timeStamp - this.downTimeStamp;
-
-          // Only send a message if there's a new selection or a long press
-          if (
-            (selectionInfo.selection &&
-              selectionInfo.selection !== this.downSelection) ||
-            delay > lazy.shortcutsDelay
-          ) {
-            this.sendAsyncMessage("GenAI:ShowShortcuts", {
-              ...selectionInfo,
-              delay,
-              screenXDevPx: screenX * this.contentWindow.devicePixelRatio,
-              screenYDevPx: screenY * this.contentWindow.devicePixelRatio,
-            });
-            this.registerHideEvents();
-          }
-
-          // Clear the timeout reference after execution
-          this.mouseUpTimeout = null;
-        }, this.debounceDelay);
-
         break;
       }
       case "pagehide":

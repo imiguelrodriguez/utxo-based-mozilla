@@ -91,6 +91,9 @@ class BackCert final {
     return MaybeInput(signedCertificateTimestamps);
   }
 
+  const Input* GetUTXO() const {
+    return MaybeInput(utxo);
+  }
  private:
   const Input der;
 
@@ -133,6 +136,7 @@ class BackCert final {
   Input criticalNetscapeCertificateType;
   Input requiredTLSFeatures;
   Input signedCertificateTimestamps;  // RFC 6962 (Certificate Transparency)
+  Input utxo;
 
   Result RememberExtension(Reader& extnID, Input extnValue, bool critical,
                            /*out*/ bool& understood);

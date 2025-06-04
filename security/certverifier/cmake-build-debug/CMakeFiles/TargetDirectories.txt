@@ -1,0 +1,3 @@
+C:/mozilla-source/mozilla-unified/security/certverifier/cmake-build-debug/CMakeFiles/certverifier.dir
+C:/mozilla-source/mozilla-unified/security/certverifier/cmake-build-debug/CMakeFiles/edit_cache.dir
+C:/mozilla-source/mozilla-unified/security/certverifier/cmake-build-debug/CMakeFiles/rebuild_cache.dir

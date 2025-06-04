@@ -11,9 +11,17 @@ ChromeUtils.defineESModuleGetters(this, {
   WindowsLaunchOnLogin: "resource://gre/modules/WindowsLaunchOnLogin.sys.mjs",
 });
 
+const { ExperimentAPI } = ChromeUtils.importESModule(
+  "resource://nimbus/ExperimentAPI.sys.mjs"
+);
+
+const { ExperimentFakes } = ChromeUtils.importESModule(
+  "resource://testing-common/NimbusTestUtils.sys.mjs"
+);
+
 add_task(async function test_check_uncheck_checkbox() {
   await ExperimentAPI.ready();
-  let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "windowsLaunchOnLogin",
     value: { enabled: true },
   });
@@ -44,17 +52,17 @@ add_task(async function test_check_uncheck_checkbox() {
   }, "Wait for async get enabled operation to return false");
 
   gBrowser.removeCurrentTab();
-  await doCleanup();
+  doCleanup();
 });
 
 add_task(async function enable_external_startuptask() {
   await ExperimentAPI.ready();
-  let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "windowsLaunchOnLogin",
     value: { enabled: true },
   });
   // Ensure the task is disabled before enabling it
-  await WindowsLaunchOnLogin._disableLaunchOnLoginMSIX();
+  await WindowsLaunchOnLogin.disableLaunchOnLoginMSIX();
   let enabled = await WindowsLaunchOnLogin.enableLaunchOnLoginMSIX();
   ok(enabled, "Task is enabled");
 
@@ -68,17 +76,17 @@ add_task(async function enable_external_startuptask() {
   ok(launchOnLoginCheckbox.checked, "Autostart checkbox automatically checked");
 
   gBrowser.removeCurrentTab();
-  await doCleanup();
+  doCleanup();
 });
 
 add_task(async function disable_external_startuptask() {
   await ExperimentAPI.ready();
-  let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "windowsLaunchOnLogin",
     value: { enabled: true },
   });
   // Disable the startup task to ensure it's reflected in the settings
-  await WindowsLaunchOnLogin._disableLaunchOnLoginMSIX();
+  await WindowsLaunchOnLogin.disableLaunchOnLoginMSIX();
 
   // Open preferences to general pane
   await openPreferencesViaOpenPreferencesAPI("paneGeneral", {
@@ -93,5 +101,5 @@ add_task(async function disable_external_startuptask() {
   );
 
   gBrowser.removeCurrentTab();
-  await doCleanup();
+  doCleanup();
 });

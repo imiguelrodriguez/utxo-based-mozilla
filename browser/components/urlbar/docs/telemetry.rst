@@ -20,25 +20,14 @@ PLACES_AUTOCOMPLETE_1ST_RESULT_TIME_MS
   This probe tracks the amount of time it takes to get the first result.
   It is an exponential histogram with values between 5 and 100.
 
-  Changelog
-    Firefox 138
-      Mirrored from Glean (urlbar.autocomplete_first_result_time) . (See bug 1938938)
-
 PLACES_AUTOCOMPLETE_6_FIRST_RESULTS_TIME_MS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   This probe tracks the amount of time it takes to get the first six results.
   It is an exponential histogram with values between 50 and 1000.
 
-  Changelog
-    Firefox 138
-      Mirrored from Glean (urlbar.autocomplete_sixth_result_time). (See bug 1938938)
-
 FX_URLBAR_SELECTED_RESULT_METHOD
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-  NOTE: This histogram has been completely removed, as its data is now
-  collected as part of the `urlbar.engagement` Glean event. (See bug 1932707)
 
   This probe tracks how a result was picked by the user from the list.
   It is a categorical histogram with these values:
@@ -77,10 +66,6 @@ FX_URLBAR_ZERO_PREFIX_DWELL_TIME_MS
   with 50 buckets. Values are in milliseconds. This histogram was introduced in
   Firefox 110.0 in bug 1806765.
 
-  Changelog
-    Firefox 138
-      Removed completely. (See bug 1938938)
-
 PLACES_FRECENCY_RECALC_CHUNK_TIME_MS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -93,20 +78,11 @@ Scalars
 urlbar.abandonment
 ~~~~~~~~~~~~~~~~~~
 
-  NOTE: This telemetry is no longer collected. See changelog below.
-
   A uint recording the number of abandoned engagements in the urlbar. An
   abandonment occurs when the user begins using the urlbar but stops before
   completing the engagement. This can happen when the user clicks outside the
   urlbar to focus a different part of the window. It can also happen when the
   user switches to another window while the urlbar is focused.
-
-  Changelog
-    Firefox 134
-      Legacy ``urlbar.abandonment`` telemetry mirrored to Glean. (See bug 1927093)
-    Firefox 137
-      Legacy ``urlbar.abandonment`` telemetry and Glean ``urlbar.abandonment_count`` telemetry
-      removed completely. (See bug 1932711)
 
 urlbar.autofill_deletion
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -118,24 +94,13 @@ urlbar.autofill_deletion
 urlbar.engagement
 ~~~~~~~~~~~~~~~~~
 
-  NOTE: This telemetry is no longer collected. See changelog below.
-
   A uint recording the number of engagements the user completes in the urlbar.
   An engagement occurs when the user navigates to a page using the urlbar, for
   example by picking a result in the urlbar panel or typing a search term or URL
   in the urlbar and pressing the enter key.
 
-  Changelog
-    Firefox 134
-      Legacy ``urlbar.engagement`` telemetry mirrored to Glean. (See bug 1927093)
-    Firefox 137
-      Legacy ``urlbar.engagement`` telemetry and Glean ``urlbar.engagement_count`` telemetry
-      removed completely. (See bug 1932711)
-
 urlbar.impression.*
 ~~~~~~~~~~~~~~~~~~~
-
-  NOTE: This telemetry is no longer collected. See changelog below.
 
   A uint recording the number of impression that was displaying when user picks
   any result.
@@ -154,13 +119,6 @@ urlbar.impression.*
     code that is not properly setting a specific autofill type.
   - ``autofill_url``
     For url type autofill.
-
-  Changelog
-    Firefox 134
-      Legacy ``urlbar.impression.*`` telemetry mirrored to Glean. (See bug 1927093)
-    Firefox 138
-      Legacy ``urlbar.impression.*`` telemetry and Glean ``urlbar.impression.*`` telemetry
-      removed completely. (See bug 1932712)
 
 urlbar.persistedsearchterms.revert_by_popup_count
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -187,8 +145,6 @@ urlbar.persistedsearchterms.view_count
 
 urlbar.tips
 ~~~~~~~~~~~
-
-  NOTE: This telemetry is no longer collected. See changelog below.
 
   This is a keyed scalar whose values are uints and are incremented each time a
   tip result is shown, a tip is picked, and a tip's help button is picked. The
@@ -265,13 +221,6 @@ urlbar.tips
   - ``searchTip_redirect-shown``
     Incremented when the redirect search tip is shown.
 
-  Changelog
-    Firefox 134
-      Legacy ``urlbar.tips`` telemetry mirrored to Glean. (See bug 1927093)
-    Firefox 137
-      Legacy ``urlbar.tips`` telemetry and Glean ``urlbar.tips`` telemetry
-      removed completely. (See bug 1932716)
-
 urlbar.searchmode.*
 ~~~~~~~~~~~~~~~~~~~
 
@@ -291,10 +240,6 @@ urlbar.searchmode.*
     Used when the user selects a keyword offer result.
   - ``oneoff``
     Used when the user selects a one-off engine in the Urlbar.
-  - ``searchbutton``
-    Used when the user entered search mode via the unified search button.
-    Added in Firefox 133, but the unified search button was not enabled in
-    release until 136.
   - ``shortcut``
     Used when the user enters search mode with a keyboard shortcut or menu bar
     item (e.g. ``Accel+K``).
@@ -369,19 +314,9 @@ urlbar.searchmode.*
       Please note that symbols cannot trigger the ``urlbar.searchmode.keywordoffer``
       telemetry, as symbols are only valid for typed. [Bug `1919180`_]
 
-    Firefox 133
-      Added ``urlbar.searchmode.searchbutton``:
-        - This new probe is for accesses to search mode from the unified search
-          button. The button was released in Firefox 136 and replaced the previous
-          one-off buttons (``urlbar.searchmode.oneoff``).
-
-      Added Glean equivalents of the probes as labeled counters.
-
 
 urlbar.picked.*
 ~~~~~~~~~~~~~~~
-
-  NOTE: This telemetry is no longer collected. See changelog below.
 
   This is a set of keyed scalars whose values are uints incremented each
   time a result is picked from the Urlbar. The suffix on the scalar name
@@ -502,17 +437,8 @@ urlbar.picked.*
   .. _adaptive history autofill document: https://docs.google.com/document/d/e/2PACX-1vRBLr_2dxus-aYhZRUkW9Q3B1K0uC-a0qQyE3kQDTU3pcNpDHb36-Pfo9fbETk89e7Jz4nkrqwRhi4j/pub
   .. _origin: https://html.spec.whatwg.org/multipage/origin.html#origin
 
-  Changelog
-    Firefox 134
-      Legacy ``urlbar.picked`` telemetry mirrored to Glean. (See bug 1927093)
-    Firefox 137
-      Legacy ``urlbar.picked`` telemetry and Glean ``urlbar.picked`` telemetry
-      removed completely. (See bug 1932713)
-
 urlbar.picked.searchmode.*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-  NOTE: This telemetry is no longer collected. See changelog below.
 
   This is a set of keyed scalars whose values are uints incremented each time a
   result is picked from the Urlbar while the Urlbar is in search mode. The
@@ -532,19 +458,8 @@ urlbar.picked.searchmode.*
     a Google search suggestion at index 2, we would record in **both**
     ``urlbar.picked.searchsuggestion`` and ``urlbar.picked.searchmode.oneoff``.
 
-  Changelog
-    Firefox 134
-      Legacy ``urlbar.picked.searchmode`` telemetry mirrored to Glean. (See
-      bug 1927093)
-    Firefox 137
-      Legacy ``urlbar.picked.searchmode`` telemetry and Glean
-      ``urlbar.picked.searchmode`` telemetry removed completely. (See
-      bug 1932713)
-
 urlbar.tabtosearch.*
 ~~~~~~~~~~~~~~~~~~~~
-
-  NOTE: This telemetry is no longer collected. See changelog below.
 
   This is a set of keyed scalars whose values are uints incremented when a
   tab-to-search result is shown, once per engine per engagement. There are two
@@ -559,14 +474,6 @@ urlbar.tabtosearch.*
   .. note::
     Due to the potentially sensitive nature of these data, they are currently
     collected only on pre-release version of Firefox. See bug 1686330.
-
-  Changelog
-    Firefox 134
-      Legacy ``urlbar.tabtosearch.*`` telemetry mirrored to Glean. (See
-      bug 1927093)
-    Firefox 137
-      Legacy ``urlbar.tabtosearch.*`` telemetry and Glean
-      ``urlbar.tabtosearch.*`` telemetry removed completely. (See bug 1932715)
 
 urlbar.zeroprefix.abandonment
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -599,25 +506,19 @@ urlbar.zeroprefix.exposure
   the "top sites" view since normally it shows the user's top sites. This scalar
   was introduced in Firefox 110.0 in bug 1806765.
 
+urlbar.quickaction.impression
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  A uint recording the number of times the user was shown a quickaction, the
+  key is in the form $key-$n where $n is the number of characters the user typed
+  in order for the suggestion to show. See bug 1806024.
+
 urlbar.quickaction.picked
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
   A uint recording the number of times the user selected a quickaction, the
   key is in the form $key-$n where $n is the number of characters the user typed
   in order for the suggestion to show. See bug 1783155.
-
-urlbar.unifiedsearchbutton.opened
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-  A uint recording the number of times the user opens search mode popup via
-  Unified Search Button.
-  See bug 1936673.
-
-urlbar.unifiedsearchbutton.picked
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-  A uint recording the number of times the user selected a search mode via
-  Unified Search Button. See bug 1936673.
 
 places.*
 ~~~~~~~~

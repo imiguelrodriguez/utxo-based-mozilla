@@ -187,7 +187,9 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
   uint32_t TailBlockingDelayMax() { return mTailDelayMax; }
   uint32_t TailBlockingTotalMax() { return mTailTotalMax; }
 
-  uint32_t ThrottlingReadLimit() { return 0; }
+  uint32_t ThrottlingReadLimit() {
+    return mThrottleVersion == 1 ? 0 : mThrottleReadLimit;
+  }
   int32_t SendWindowSize() { return mSendWindowSize * 1024; }
 
   // TCP Keepalive configuration values.
@@ -239,10 +241,6 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
   // cache support
   uint32_t GenerateUniqueID() { return ++mLastUniqueID; }
   uint32_t SessionStartTime() { return mSessionStartTime; }
-
-  void GenerateIdempotencyKeyForPost(const uint32_t aPostId,
-                                     nsILoadInfo* aLoadInfo,
-                                     nsACString& aOutKey);
 
   //
   // Connection management methods:
@@ -465,6 +463,8 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
     return mFocusedWindowTransactionRatio;
   }
 
+  bool ActiveTabPriority() const { return mActiveTabPriority; }
+
   // Called when an optimization feature affecting active vs background tab load
   // took place.  Called only on the parent process and only updates
   // mLastActiveTabLoadOptimizationHit timestamp to now.
@@ -486,7 +486,7 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
                                 nsIInterfaceRequestor* aCallbacks,
                                 const OriginAttributes& aOriginAttributes);
 
-  static bool EchConfigEnabled(bool aIsHttp3 = false);
+  bool EchConfigEnabled(bool aIsHttp3 = false) const;
   // When EchConfig is enabled and all records with echConfig are failed, this
   // functon indicate whether we can fallback to the origin server.
   // In the case an HTTPS RRSet contains some RRs with echConfig and some
@@ -506,6 +506,8 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
 
   static bool GetParentalControlsEnabled() { return sParentalControlsEnabled; }
   static void UpdateParentalControlsEnabled(bool waitForCompletion);
+  static void CheckThirdPartyRoots();
+  static void SetHasThirdPartyRoots(bool aResult);
 
  private:
   nsHttpHandler();
@@ -589,8 +591,11 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
   uint8_t mMaxPersistentConnectionsPerProxy{4};
 
   bool mThrottleEnabled{true};
+  uint32_t mThrottleVersion{2};
   uint32_t mThrottleSuspendFor{3000};
   uint32_t mThrottleResumeFor{200};
+  uint32_t mThrottleReadLimit{8000};
+  uint32_t mThrottleReadInterval{500};
   uint32_t mThrottleHoldTime{600};
   uint32_t mThrottleMaxTime{3000};
 
@@ -633,8 +638,6 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
   // useragent components
   nsCString mLegacyAppName{"Mozilla"};
   nsCString mLegacyAppVersion{"5.0"};
-  uint64_t mIdempotencyKeySeed;
-  uint64_t mPrivateBrowsingIdempotencyKeySeed;
   nsCString mPlatform;
   nsCString mOscpu;
   nsCString mMisc;
@@ -738,6 +741,9 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
 
   // The ratio for dispatching transactions from the focused window.
   float mFocusedWindowTransactionRatio{0.9f};
+
+  // If true, the transactions from active tab will be dispatched first.
+  bool mActiveTabPriority{true};
 
   HttpTrafficAnalyzer mHttpTrafficAnalyzer;
 

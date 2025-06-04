@@ -46,12 +46,12 @@ interface nsICacheStorageService : nsISupports
   nsICacheStorage pinningCacheStorage(in nsILoadContextInfo aLoadContextInfo);
 
   /**
-   * Evict any cache entry having the same principal origin and OriginAttributes
+   * Evict any cache entry having the same origin of aPrincipal.
    *
    * @param aPrincipal
    *   The principal to compare the entries with.
    */
-  void clearOriginsByPrincipal(in nsIPrincipal aPrincipal);
+  void clearOrigin(in nsIPrincipal aPrincipal);
 
   /**
    * Evict any cache entry which belongs to a base domain. This includes entries
@@ -68,7 +68,7 @@ interface nsICacheStorageService : nsISupports
    * @param aOriginAttributes
    *   The origin attributes in string format to compare the entries with.
    */
-  void clearOriginsByOriginAttributes(in AString aOriginAttributes);
+  void clearOriginAttributes(in AString aOriginAttributes);
 
   /**
    * Evict the whole cache.

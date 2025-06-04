@@ -98,8 +98,7 @@ UrlClassifierFeatureTrackingProtection::MaybeCreate(nsIChannel* aChannel) {
     return nullptr;
   }
 
-  RefPtr<nsILoadInfo> loadInfo = aChannel->LoadInfo();
-  bool isThirdParty = loadInfo->GetIsThirdPartyContextToTopWindow();
+  bool isThirdParty = AntiTrackingUtils::IsThirdPartyChannel(aChannel);
   if (!isThirdParty) {
     UC_LOG(
         ("UrlClassifierFeatureTrackingProtection::MaybeCreate - "
@@ -149,15 +148,6 @@ UrlClassifierFeatureTrackingProtection::ProcessChannel(
   *aShouldContinue = isAllowListed;
 
   if (isAllowListed) {
-    return NS_OK;
-  }
-
-  bool ShouldProcessByProtectionFeature =
-      UrlClassifierCommon::ShouldProcessWithProtectionFeature(aChannel);
-
-  *aShouldContinue = !ShouldProcessByProtectionFeature;
-
-  if (!ShouldProcessByProtectionFeature) {
     return NS_OK;
   }
 

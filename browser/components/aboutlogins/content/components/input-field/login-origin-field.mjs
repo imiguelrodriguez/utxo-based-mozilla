@@ -8,32 +8,8 @@ import { editableFieldTemplate, stylesTemplate } from "./input-field.mjs";
 class LoginOriginField extends MozLitElement {
   static properties = {
     value: { type: String, reflect: true },
-    name: { type: String },
     readonly: { type: Boolean, reflect: true },
-    required: { type: Boolean, reflect: true },
-    onOriginClick: { type: Function },
   };
-
-  static queries = {
-    input: "input",
-  };
-
-  constructor() {
-    super();
-    this.value = "";
-  }
-
-  addHTTPSPrefix(e) {
-    const input = e.composedTarget;
-    let originValue = input.value.trim();
-    if (!originValue) {
-      return;
-    }
-
-    if (!originValue.match(/:\/\//)) {
-      input.value = "https://" + originValue;
-    }
-  }
 
   get readonlyTemplate() {
     return html`
@@ -51,7 +27,6 @@ class LoginOriginField extends MozLitElement {
         rel="noreferrer"
         name="origin"
         href=${this.value}
-        @click=${this.onOriginClick}
       >
         ${this.value}
       </a>
@@ -66,11 +41,8 @@ class LoginOriginField extends MozLitElement {
         : editableFieldTemplate({
             type: "url",
             value: this.value,
-            required: this.required,
             labelL10nId: "login-item-origin-label",
-            noteL10nId: "contextual-manager-passwords-origin-tooltip",
-            inputL10nId: "login-item-origin",
-            onBlur: e => this.addHTTPSPrefix(e),
+            noteL10nId: "passwords-origin-tooltip",
           })}
     `;
   }

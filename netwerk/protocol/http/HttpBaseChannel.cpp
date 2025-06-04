@@ -32,7 +32,7 @@
 #include "mozilla/StaticPrefs_fission.h"
 #include "mozilla/StaticPrefs_network.h"
 #include "mozilla/StaticPrefs_security.h"
-#include "mozilla/glean/NetwerkProtocolHttpMetrics.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/Telemetry.h"
 #include "mozilla/Tokenizer.h"
 #include "mozilla/browser/NimbusFeatures.h"
@@ -167,7 +167,7 @@ static bool IsHeaderBlacklistedForRedirectCopy(nsHttpAtom const& aHeader) {
   };
 
   size_t unused;
-  return BinarySearchIf(blackList, 0, std::size(blackList),
+  return BinarySearchIf(blackList, 0, ArrayLength(blackList),
                         HttpAtomComparator(aHeader), &unused);
 }
 
@@ -1547,7 +1547,7 @@ HttpBaseChannel::DoApplyContentConversions(nsIStreamListener* aNextListener,
         } else if (from.EqualsLiteral("zstd")) {
           mode = 4;
         }
-        glean::http::content_encoding.AccumulateSingleSample(mode);
+        Telemetry::Accumulate(Telemetry::HTTP_CONTENT_ENCODING, mode);
       }
       nextListener = converter;
     } else {
@@ -2948,9 +2948,8 @@ nsresult EnsureMIMEOfScript(HttpBaseChannel* aChannel, nsIURI* aURI,
 
   if (nsContentUtils::IsJavascriptMIMEType(typeString)) {
     // script load has type script
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eJavascript)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::javaScript);
     return NS_OK;
   }
 
@@ -2960,9 +2959,8 @@ nsresult EnsureMIMEOfScript(HttpBaseChannel* aChannel, nsIURI* aURI,
       internalType == nsIContentPolicy::TYPE_INTERNAL_MODULE_PRELOAD;
 
   if (isModule && nsContentUtils::IsJsonMimeType(typeString)) {
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eJavascript)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::javaScript);
     return NS_OK;
   }
 
@@ -2974,34 +2972,27 @@ nsresult EnsureMIMEOfScript(HttpBaseChannel* aChannel, nsIURI* aURI,
     case nsIContentPolicy::TYPE_INTERNAL_MODULE_PRELOAD:
     case nsIContentPolicy::TYPE_INTERNAL_CHROMEUTILS_COMPILED_SCRIPT:
     case nsIContentPolicy::TYPE_INTERNAL_FRAME_MESSAGEMANAGER_SCRIPT:
-      glean::http::script_block_incorrect_mime
-          .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eScriptLoad)
-          .Add();
+      AccumulateCategorical(
+          Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::script_load);
       break;
     case nsIContentPolicy::TYPE_INTERNAL_WORKER:
     case nsIContentPolicy::TYPE_INTERNAL_WORKER_STATIC_MODULE:
     case nsIContentPolicy::TYPE_INTERNAL_SHARED_WORKER:
-      glean::http::script_block_incorrect_mime
-          .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eWorkerLoad)
-          .Add();
+      AccumulateCategorical(
+          Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::worker_load);
       break;
     case nsIContentPolicy::TYPE_INTERNAL_SERVICE_WORKER:
-      glean::http::script_block_incorrect_mime
-          .EnumGet(
-              glean::http::ScriptBlockIncorrectMimeLabel::eServiceworkerLoad)
-          .Add();
+      AccumulateCategorical(
+          Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::serviceworker_load);
       break;
     case nsIContentPolicy::TYPE_INTERNAL_WORKER_IMPORT_SCRIPTS:
-      glean::http::script_block_incorrect_mime
-          .EnumGet(
-              glean::http::ScriptBlockIncorrectMimeLabel::eImportscriptLoad)
-          .Add();
+      AccumulateCategorical(
+          Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::importScript_load);
       break;
     case nsIContentPolicy::TYPE_INTERNAL_AUDIOWORKLET:
     case nsIContentPolicy::TYPE_INTERNAL_PAINTWORKLET:
-      glean::http::script_block_incorrect_mime
-          .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eWorkletLoad)
-          .Add();
+      AccumulateCategorical(
+          Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::worklet_load);
       break;
     default:
       MOZ_ASSERT_UNREACHABLE("unexpected script type");
@@ -3010,9 +3001,8 @@ nsresult EnsureMIMEOfScript(HttpBaseChannel* aChannel, nsIURI* aURI,
 
   if (aLoadInfo->GetLoadingPrincipal()->IsSameOrigin(aURI)) {
     // same origin
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eSameOrigin)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::same_origin);
   } else {
     bool cors = false;
     nsAutoCString corsOrigin;
@@ -3033,41 +3023,35 @@ nsresult EnsureMIMEOfScript(HttpBaseChannel* aChannel, nsIURI* aURI,
     }
     if (cors) {
       // cors origin
-      glean::http::script_block_incorrect_mime
-          .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eCorsOrigin)
-          .Add();
+      AccumulateCategorical(
+          Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::CORS_origin);
     } else {
       // cross origin
-      glean::http::script_block_incorrect_mime
-          .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eCrossOrigin)
-          .Add();
+      AccumulateCategorical(
+          Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::cross_origin);
     }
   }
 
   bool block = false;
   if (StringBeginsWith(contentType, "image/"_ns)) {
     // script load has type image
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eImage)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::image);
     block = true;
   } else if (StringBeginsWith(contentType, "audio/"_ns)) {
     // script load has type audio
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eAudio)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::audio);
     block = true;
   } else if (StringBeginsWith(contentType, "video/"_ns)) {
     // script load has type video
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eVideo)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::video);
     block = true;
   } else if (StringBeginsWith(contentType, "text/csv"_ns)) {
     // script load has type text/csv
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eTextCsv)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::text_csv);
     block = true;
   }
 
@@ -3079,49 +3063,40 @@ nsresult EnsureMIMEOfScript(HttpBaseChannel* aChannel, nsIURI* aURI,
 
   if (StringBeginsWith(contentType, "text/plain"_ns)) {
     // script load has type text/plain
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eTextPlain)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::text_plain);
   } else if (StringBeginsWith(contentType, "text/xml"_ns)) {
     // script load has type text/xml
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eTextXml)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::text_xml);
   } else if (StringBeginsWith(contentType, "application/octet-stream"_ns)) {
     // script load has type application/octet-stream
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eAppOctetStream)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::app_octet_stream);
   } else if (StringBeginsWith(contentType, "application/xml"_ns)) {
     // script load has type application/xml
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eAppXml)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::app_xml);
   } else if (StringBeginsWith(contentType, "application/json"_ns)) {
     // script load has type application/json
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eAppJson)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::app_json);
   } else if (StringBeginsWith(contentType, "text/json"_ns)) {
     // script load has type text/json
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eTextJson)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::text_json);
   } else if (StringBeginsWith(contentType, "text/html"_ns)) {
     // script load has type text/html
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eTextHtml)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::text_html);
   } else if (contentType.IsEmpty()) {
     // script load has no type
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eEmpty)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::empty);
   } else {
     // script load has unknown type
-    glean::http::script_block_incorrect_mime
-        .EnumGet(glean::http::ScriptBlockIncorrectMimeLabel::eUnknown)
-        .Add();
+    AccumulateCategorical(
+        Telemetry::LABELS_SCRIPT_BLOCK_INCORRECT_MIME_3::unknown);
   }
 
   // We restrict importScripts() in worker code to JavaScript MIME types.
@@ -3274,6 +3249,7 @@ bool HttpBaseChannel::ShouldBlockOpaqueResponse() const {
 
   auto extContentPolicyType = mLoadInfo->GetExternalContentPolicyType();
   if (extContentPolicyType == ExtContentPolicy::TYPE_OBJECT ||
+      extContentPolicyType == ExtContentPolicy::TYPE_OBJECT_SUBREQUEST ||
       extContentPolicyType == ExtContentPolicy::TYPE_WEBSOCKET ||
       extContentPolicyType == ExtContentPolicy::TYPE_SAVEAS_DOWNLOAD) {
     LOGORB("No block: object || websocket request || save as download");
@@ -3291,16 +3267,6 @@ bool HttpBaseChannel::ShouldBlockOpaqueResponse() const {
     if (securityMode ==
         nsILoadInfo::SEC_ALLOW_CROSS_ORIGIN_INHERITS_SEC_CONTEXT) {
       LOGORB("No block: System XHR");
-      return false;
-    }
-  }
-
-  // Exclude no_cors web-identity
-  if (extContentPolicyType == ExtContentPolicy::TYPE_WEB_IDENTITY) {
-    if (securityMode ==
-        nsILoadInfo::SEC_ALLOW_CROSS_ORIGIN_INHERITS_SEC_CONTEXT) {
-      printf("Allowing ORB for web-identity\n");
-      LOGORB("No block: System web-identity");
       return false;
     }
   }
@@ -3340,9 +3306,8 @@ OpaqueResponse HttpBaseChannel::BlockOrFilterOpaqueResponse(
   }
 
   if (shouldFilter) {
-    glean::orb::block_initiator
-        .EnumGet(glean::orb::BlockInitiatorLabel::eFilteredFetch)
-        .Add();
+    Telemetry::AccumulateCategorical(
+        Telemetry::LABELS_ORB_BLOCK_INITIATOR::FILTERED_FETCH);
     // The existence of `mORB` depends on `BlockOrFilterOpaqueResponse` being
     // called before or after sniffing has completed.
     // Another requirement is that `OpaqueResponseFilter` must come after
@@ -3436,14 +3401,14 @@ HttpBaseChannel::PerformOpaqueResponseSafelistCheckBeforeSniff() {
     case OpaqueResponseBlockedReason::BLOCKED_BLOCKLISTED_NEVER_SNIFFED:
       return BlockOrFilterOpaqueResponse(
           mORB, u"mimeType is an opaque-blocklisted-never-sniffed MIME type"_ns,
-          OpaqueResponseBlockedTelemetryReason::eMimeNeverSniffed,
+          OpaqueResponseBlockedTelemetryReason::MIME_NEVER_SNIFFED,
           "BLOCKED_BLOCKLISTED_NEVER_SNIFFED");
     case OpaqueResponseBlockedReason::BLOCKED_206_AND_BLOCKLISTED:
       // Step 3.3
       return BlockOrFilterOpaqueResponse(
           mORB,
           u"response's status is 206 and mimeType is an opaque-blocklisted MIME type"_ns,
-          OpaqueResponseBlockedTelemetryReason::eResp206Blclisted,
+          OpaqueResponseBlockedTelemetryReason::RESP_206_BLCLISTED,
           "BLOCKED_206_AND_BLOCKEDLISTED");
     case OpaqueResponseBlockedReason::
         BLOCKED_NOSNIFF_AND_EITHER_BLOCKLISTED_OR_TEXTPLAIN:
@@ -3451,7 +3416,7 @@ HttpBaseChannel::PerformOpaqueResponseSafelistCheckBeforeSniff() {
       return BlockOrFilterOpaqueResponse(
           mORB,
           u"nosniff is true and mimeType is an opaque-blocklisted MIME type or its essence is 'text/plain'"_ns,
-          OpaqueResponseBlockedTelemetryReason::eNosniffBlcOrTextp,
+          OpaqueResponseBlockedTelemetryReason::NOSNIFF_BLC_OR_TEXTP,
           "BLOCKED_NOSNIFF_AND_EITHER_BLOCKLISTED_OR_TEXTPLAIN");
     default:
       break;
@@ -3475,7 +3440,7 @@ HttpBaseChannel::PerformOpaqueResponseSafelistCheckBeforeSniff() {
       !IsFirstPartialResponse(*mResponseHead)) {
     return BlockOrFilterOpaqueResponse(
         mORB, u"response status is 206 and not first partial response"_ns,
-        OpaqueResponseBlockedTelemetryReason::eResp206Blclisted,
+        OpaqueResponseBlockedTelemetryReason::RESP_206_BLCLISTED,
         "Is not a valid partial response given 0");
   }
 
@@ -3533,7 +3498,7 @@ OpaqueResponse HttpBaseChannel::PerformOpaqueResponseSafelistCheckAfterSniff(
   if (isMediaRequest) {
     return BlockOrFilterOpaqueResponse(
         mORB, u"after sniff: media request"_ns,
-        OpaqueResponseBlockedTelemetryReason::eAfterSniffMedia,
+        OpaqueResponseBlockedTelemetryReason::AFTER_SNIFF_MEDIA,
         "media request");
   }
 
@@ -3541,7 +3506,7 @@ OpaqueResponse HttpBaseChannel::PerformOpaqueResponseSafelistCheckAfterSniff(
   if (aNoSniff) {
     return BlockOrFilterOpaqueResponse(
         mORB, u"after sniff: nosniff is true"_ns,
-        OpaqueResponseBlockedTelemetryReason::eAfterSniffNosniff, "nosniff");
+        OpaqueResponseBlockedTelemetryReason::AFTER_SNIFF_NOSNIFF, "nosniff");
   }
 
   // Step 12
@@ -3549,7 +3514,7 @@ OpaqueResponse HttpBaseChannel::PerformOpaqueResponseSafelistCheckAfterSniff(
       (mResponseHead->Status() < 200 || mResponseHead->Status() > 299)) {
     return BlockOrFilterOpaqueResponse(
         mORB, u"after sniff: status code is not in allowed range"_ns,
-        OpaqueResponseBlockedTelemetryReason::eAfterSniffStaCode,
+        OpaqueResponseBlockedTelemetryReason::AFTER_SNIFF_STA_CODE,
         "status code (%d) is not allowed", mResponseHead->Status());
   }
 
@@ -3566,7 +3531,7 @@ OpaqueResponse HttpBaseChannel::PerformOpaqueResponseSafelistCheckAfterSniff(
     return BlockOrFilterOpaqueResponse(
         mORB,
         u"after sniff: content-type declares image/video/audio, but sniffing fails"_ns,
-        OpaqueResponseBlockedTelemetryReason::eAfterSniffCtFail,
+        OpaqueResponseBlockedTelemetryReason::AFTER_SNIFF_CT_FAIL,
         "ContentType is image/video/audio");
   }
 
@@ -3607,7 +3572,7 @@ void HttpBaseChannel::SetChannelBlockedByOpaqueResponse() {
 }
 
 NS_IMETHODIMP
-HttpBaseChannel::SetCookieHeaders(const nsTArray<nsCString>& aCookieHeaders) {
+HttpBaseChannel::SetCookie(const nsACString& aCookieHeader) {
   if (mLoadFlags & LOAD_ANONYMOUS) return NS_OK;
 
   if (IsBrowsingContextDiscarded()) {
@@ -3615,19 +3580,14 @@ HttpBaseChannel::SetCookieHeaders(const nsTArray<nsCString>& aCookieHeaders) {
   }
 
   // empty header isn't an error
-  if (aCookieHeaders.IsEmpty()) {
+  if (aCookieHeader.IsEmpty()) {
     return NS_OK;
   }
 
   nsICookieService* cs = gHttpHandler->GetCookieService();
   NS_ENSURE_TRUE(cs, NS_ERROR_FAILURE);
 
-  for (const nsCString& cookieHeader : aCookieHeaders) {
-    nsresult rv = cs->SetCookieStringFromHttp(mURI, cookieHeader, this);
-    NS_ENSURE_SUCCESS(rv, rv);
-  }
-
-  return NS_OK;
+  return cs->SetCookieStringFromHttp(mURI, aCookieHeader, this);
 }
 
 NS_IMETHODIMP
@@ -4497,24 +4457,10 @@ already_AddRefed<nsILoadInfo> HttpBaseChannel::CloneLoadInfoForRedirect(
     // the "external" flag, as loads that now go to other apps should be
     // allowed to go ahead and not trip infinite-loop protection
     // (see bug 1717314 for context).
-    if (!net::SchemeIsHttpOrHttps(aNewURI)) {
+    if (!aNewURI->SchemeIs("http") && !aNewURI->SchemeIs("https")) {
       newLoadInfo->SetLoadTriggeredFromExternal(false);
     }
     newLoadInfo->ResetSandboxedNullPrincipalID();
-
-    if (isTopLevelDoc) {
-      // Reset HTTPS-first and -only status on http redirect. To not
-      // unexpectedly downgrade requests that weren't upgraded via HTTPS-First
-      // (Bug 1904238).
-      Unused << newLoadInfo->SetHttpsOnlyStatus(
-          nsILoadInfo::HTTPS_ONLY_UNINITIALIZED);
-
-      // Reset schemeless status flag to prevent schemeless HTTPS-First from
-      // repeatedly trying to upgrade loads that get downgraded again from the
-      // server by a redirect (Bug 1937386).
-      Unused << newLoadInfo->SetSchemelessInput(
-          nsILoadInfo::SchemelessInputTypeUnset);
-    }
   }
 
   newLoadInfo->AppendRedirectHistoryEntry(this, isInternalRedirect);
@@ -4765,6 +4711,7 @@ HttpBaseChannel::CloneReplacementChannelConfig(bool aPreserveMethod,
       do_QueryInterface(static_cast<nsIHttpChannel*>(this)));
   if (oldTimedChannel) {
     config.timedChannelInfo = Some(dom::TimedChannelInfo());
+    config.timedChannelInfo->timingEnabled() = LoadTimingEnabled();
     config.timedChannelInfo->redirectCount() = mRedirectCount;
     config.timedChannelInfo->internalRedirectCount() = mInternalRedirectCount;
     config.timedChannelInfo->asyncOpen() = mAsyncOpenTime;
@@ -4860,6 +4807,8 @@ HttpBaseChannel::CloneReplacementChannelConfig(bool aPreserveMethod,
   // Transfer the timing data (if we are dealing with an nsITimedChannel).
   nsCOMPtr<nsITimedChannel> newTimedChannel(do_QueryInterface(newChannel));
   if (config.timedChannelInfo && newTimedChannel) {
+    newTimedChannel->SetTimingEnabled(config.timedChannelInfo->timingEnabled());
+
     // If we're an internal redirect, or a document channel replacement,
     // then we shouldn't record any new timing for this and just copy
     // over the existing values.
@@ -5428,6 +5377,18 @@ HttpBaseChannel::SetMatchedTrackingInfo(
 //-----------------------------------------------------------------------------
 
 NS_IMETHODIMP
+HttpBaseChannel::SetTimingEnabled(bool enabled) {
+  StoreTimingEnabled(enabled);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+HttpBaseChannel::GetTimingEnabled(bool* _retval) {
+  *_retval = LoadTimingEnabled();
+  return NS_OK;
+}
+
+NS_IMETHODIMP
 HttpBaseChannel::GetChannelCreation(TimeStamp* _retval) {
   *_retval = mChannelCreationTimestamp;
   return NS_OK;
@@ -5899,6 +5860,12 @@ IMPL_TIMING_ATTR(TransactionPending)
 #undef IMPL_TIMING_ATTR
 
 void HttpBaseChannel::MaybeReportTimingData() {
+  // If performance timing is disabled, there is no need for the Performance
+  // object anymore.
+  if (!LoadTimingEnabled()) {
+    return;
+  }
+
   // There is no point in continuing, since the performance object in the parent
   // isn't the same as the one in the child which will be reporting resource
   // performance.
@@ -6213,12 +6180,12 @@ nsresult HttpBaseChannel::CheckRedirectLimit(nsIURI* aNewURI,
   // upgrade behavior if we have upgrade-downgrade loop to break the loop and
   // load the http request next
   if (mozilla::StaticPrefs::
-          dom_security_https_first_add_exception_on_failure() &&
+          dom_security_https_first_add_exception_on_failiure() &&
       nsHTTPSOnlyUtils::IsUpgradeDowngradeEndlessLoop(
           mURI, aNewURI, mLoadInfo,
           {nsHTTPSOnlyUtils::UpgradeDowngradeEndlessLoopOptions::
                EnforceForHTTPSFirstMode})) {
-    nsHTTPSOnlyUtils::AddHTTPSFirstException(mURI, mLoadInfo);
+    nsHTTPSOnlyUtils::AddHTTPSFirstExceptionForSession(mURI, mLoadInfo);
   }
 
   return NS_OK;
@@ -6466,38 +6433,6 @@ HttpBaseChannel::HasCrossOriginOpenerPolicyMismatch(bool* aIsMismatch) {
   return NS_OK;
 }
 
-NS_IMETHODIMP
-HttpBaseChannel::GetOriginAgentClusterHeader(bool* aValue) {
-  MOZ_ASSERT(XRE_IsParentProcess());
-  if (!mResponseHead) {
-    return NS_ERROR_NOT_AVAILABLE;
-  }
-
-  nsAutoCString content;
-  nsresult rv = mResponseHead->GetHeader(nsHttp::OriginAgentCluster, content);
-  if (NS_FAILED(rv)) {
-    return rv;
-  }
-
-  // Origin-Agent-Cluster = <boolean>
-  nsCOMPtr<nsISFVService> sfv = GetSFVService();
-  nsCOMPtr<nsISFVItem> item;
-  rv = sfv->ParseItem(content, getter_AddRefs(item));
-  if (NS_FAILED(rv)) {
-    return rv;
-  }
-  nsCOMPtr<nsISFVBareItem> value;
-  rv = item->GetValue(getter_AddRefs(value));
-  if (NS_FAILED(rv)) {
-    return rv;
-  }
-  nsCOMPtr<nsISFVBool> flag = do_QueryInterface(value);
-  if (!flag) {
-    return NS_ERROR_NOT_AVAILABLE;
-  }
-  return flag->GetValue(aValue);
-}
-
 void HttpBaseChannel::MaybeFlushConsoleReports() {
   // Flush if we have a known window ID.
   if (mLoadInfo->GetInnerWindowID() > 0) {
@@ -6611,130 +6546,107 @@ HttpBaseChannel::GetIsProxyUsed(bool* aIsProxyUsed) {
 static void CollectORBBlockTelemetry(
     const OpaqueResponseBlockedTelemetryReason aTelemetryReason,
     ExtContentPolicy aPolicy) {
-  glean::orb::block_reason.EnumGet(aTelemetryReason).Add();
+  Telemetry::LABELS_ORB_BLOCK_REASON label{
+      static_cast<uint32_t>(aTelemetryReason)};
+  Telemetry::AccumulateCategorical(label);
 
   switch (aPolicy) {
     case ExtContentPolicy::TYPE_INVALID:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eInvalid)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::INVALID);
       break;
     case ExtContentPolicy::TYPE_OTHER:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eOther)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::OTHER);
       break;
     case ExtContentPolicy::TYPE_FETCH:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eBlockedFetch)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::BLOCKED_FETCH);
       break;
     case ExtContentPolicy::TYPE_SCRIPT:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eScript)
-          .Add();
-      break;
-    case ExtContentPolicy::TYPE_JSON:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eJson)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::SCRIPT);
       break;
     case ExtContentPolicy::TYPE_IMAGE:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eImage)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::IMAGE);
       break;
     case ExtContentPolicy::TYPE_STYLESHEET:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eStylesheet)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::STYLESHEET);
       break;
     case ExtContentPolicy::TYPE_XMLHTTPREQUEST:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eXmlhttprequest)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::XMLHTTPREQUEST);
       break;
     case ExtContentPolicy::TYPE_DTD:
-      glean::orb::block_initiator.EnumGet(glean::orb::BlockInitiatorLabel::eDtd)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::DTD);
       break;
     case ExtContentPolicy::TYPE_FONT:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eFont)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::FONT);
       break;
     case ExtContentPolicy::TYPE_MEDIA:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eMedia)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::MEDIA);
       break;
     case ExtContentPolicy::TYPE_CSP_REPORT:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eCspReport)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::CSP_REPORT);
       break;
     case ExtContentPolicy::TYPE_XSLT:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eXslt)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::XSLT);
       break;
     case ExtContentPolicy::TYPE_IMAGESET:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eImageset)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::IMAGESET);
       break;
     case ExtContentPolicy::TYPE_WEB_MANIFEST:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eWebManifest)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::WEB_MANIFEST);
       break;
     case ExtContentPolicy::TYPE_SPECULATIVE:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eSpeculative)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::SPECULATIVE);
       break;
     case ExtContentPolicy::TYPE_UA_FONT:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eUaFont)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::UA_FONT);
       break;
     case ExtContentPolicy::TYPE_PROXIED_WEBRTC_MEDIA:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eProxiedWebrtcMedia)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::PROXIED_WEBRTC_MEDIA);
       break;
     case ExtContentPolicy::TYPE_PING:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::ePing)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::PING);
       break;
     case ExtContentPolicy::TYPE_BEACON:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eBeacon)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::BEACON);
       break;
     case ExtContentPolicy::TYPE_WEB_TRANSPORT:
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eWebTransport)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::WEB_TRANSPORT);
       break;
     case ExtContentPolicy::TYPE_WEB_IDENTITY:
       // Don't bother extending the telemetry for this.
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eOther)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::OTHER);
       break;
     case ExtContentPolicy::TYPE_DOCUMENT:
     case ExtContentPolicy::TYPE_SUBDOCUMENT:
     case ExtContentPolicy::TYPE_OBJECT:
+    case ExtContentPolicy::TYPE_OBJECT_SUBREQUEST:
     case ExtContentPolicy::TYPE_WEBSOCKET:
     case ExtContentPolicy::TYPE_SAVEAS_DOWNLOAD:
       MOZ_ASSERT_UNREACHABLE("Shouldn't block this type");
-      // DOCUMENT, SUBDOCUMENT, OBJECT,
+      // DOCUMENT, SUBDOCUMENT, OBJECT, OBJECT_SUBREQUEST,
       // WEBSOCKET and SAVEAS_DOWNLOAD are excluded from ORB
-      glean::orb::block_initiator
-          .EnumGet(glean::orb::BlockInitiatorLabel::eExcluded)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          Telemetry::LABELS_ORB_BLOCK_INITIATOR::EXCLUDED);
       break;
       // Do not add default: so that compilers can catch the missing case.
   }

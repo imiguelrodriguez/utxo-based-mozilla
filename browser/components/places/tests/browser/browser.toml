@@ -18,9 +18,6 @@ prefs = [
 ["browser_addBookmarkForFrame.js"]
 
 ["browser_autoshow_bookmarks_toolbar.js"]
-skip-if = [
-  "os == 'linux' && os_version == '18.04' && processor == 'x86_64' && asan", # Bug 1829323
-]
 
 ["browser_bookmarkMenu_hiddenWindow.js"]
 run-if = ["os == 'mac'"] # Mac-only functionality
@@ -46,9 +43,6 @@ run-if = ["os == 'mac'"] # Mac-only functionality
 ["browser_bookmarkProperties_readOnlyRoot.js"]
 
 ["browser_bookmarkProperties_remember_folders.js"]
-skip-if = [
-  "os == 'mac' && os_version == '14.70' && processor == 'x86_64' && debug", # Bug 1869782
-]
 
 ["browser_bookmarkProperties_speculativeConnection.js"]
 
@@ -89,13 +83,8 @@ support-files = ["bookmarklet_windowOpen_dummy.html"]
 ["browser_bookmarksProperties.js"]
 
 ["browser_bookmarks_change_title.js"]
-skip-if = ["os == 'mac' && os_version == '15.30' && arch == 'aarch64' && opt"] # Bug 1961550
 
 ["browser_bookmarks_change_url.js"]
-
-["browser_bookmarks_checkDefaultBookmarks.js"]
-
-["browser_bookmarks_close_panel.js"]
 
 ["browser_bookmarks_sidebar_search.js"]
 support-files = ["pageopeningwindow.html"]
@@ -151,8 +140,6 @@ skip-if = ["verify && debug && os == 'win'"]
 ["browser_import_button.js"]
 
 ["browser_library_bookmark_clear_visits.js"]
-
-["browser_library_bookmark_move.js"]
 
 ["browser_library_bookmark_pages.js"]
 

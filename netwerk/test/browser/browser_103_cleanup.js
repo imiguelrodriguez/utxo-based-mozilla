@@ -7,9 +7,7 @@
 Services.prefs.setBoolPref("network.early-hints.enabled", true);
 
 add_task(async function test_103_cancel_parent_connect() {
-  await SpecialPowers.pushPrefEnv({
-    set: [["network.early-hints.parent-connect-timeout", 1]],
-  });
+  Services.prefs.setIntPref("network.early-hints.parent-connect-timeout", 1);
 
   let callback;
   let promise = new Promise(resolve => {
@@ -37,7 +35,7 @@ add_task(async function test_103_cancel_parent_connect() {
   await BrowserTestUtils.withNewTab(
     {
       gBrowser,
-      url: "https://example.com/browser/netwerk/test/browser/103_preload_no_img.html",
+      url: "https://example.com/browser/netwerk/test/browser/103_preload.html",
       waitForLoad: true,
     },
     async function () {}

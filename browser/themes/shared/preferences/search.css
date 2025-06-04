@@ -13,8 +13,13 @@
   width: 16px;
 }
 
+/* work around a display: none in Linux's menu.css, see bug 1112310 */
+.searchengine-menuitem > .menu-iconic-left {
+  display: flex;
+}
+
 #engineList {
-  margin: 0.5em 0;
+  margin: .5em 0;
 }
 
 #engineList treechildren::-moz-tree-image(engineName) {
@@ -66,10 +71,7 @@
   margin-bottom: 1em;
 }
 
-#removeEngineButton {
-  margin-inline-end: 0;
-}
-
+#removeEngineButton,
 #restoreDefaultSearchEngines {
-  margin-inline-start: 0;
+  margin-inline: 0;
 }

@@ -55,7 +55,7 @@ registerCleanupFunction(async () => {
 });
 
 add_task(async function setup() {
-  await http3_setup_tests("h3");
+  await http3_setup_tests("h3-29");
 });
 
 add_task(async function early_hints() {

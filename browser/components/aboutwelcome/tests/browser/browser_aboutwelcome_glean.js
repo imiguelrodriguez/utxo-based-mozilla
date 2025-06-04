@@ -61,6 +61,21 @@ const TEST_DEFAULT_CONTENT = [
 
 const TEST_DEFAULT_JSON = JSON.stringify(TEST_DEFAULT_CONTENT);
 
+async function openAboutWelcome() {
+  await setAboutWelcomePref(true);
+  await setAboutWelcomeMultiStage(TEST_DEFAULT_JSON);
+
+  let tab = await BrowserTestUtils.openNewForegroundTab(
+    gBrowser,
+    "about:welcome",
+    true
+  );
+  registerCleanupFunction(() => {
+    BrowserTestUtils.removeTab(tab);
+  });
+  return tab.linkedBrowser;
+}
+
 add_task(async function test_welcome_telemetry() {
   // Have to turn on AS telemetry for anything to be recorded.
   await SpecialPowers.pushPrefEnv({
@@ -99,7 +114,7 @@ add_task(async function test_welcome_telemetry() {
     );
   });
 
-  let browser = await openAboutWelcome(TEST_DEFAULT_JSON);
+  let browser = await openAboutWelcome();
   // `openAboutWelcome` isn't synchronous wrt the onboarding flow impressing.
   await TestUtils.waitForCondition(
     () => pingSubmitted,

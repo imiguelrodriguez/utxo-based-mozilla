@@ -17,12 +17,12 @@ add_task(async function test_translations_panel_switch_language() {
     "The button is available."
   );
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await FullPageTranslationsTestUtils.openPanel({
     expectedFromLanguage: "es",
     expectedToLanguage: "en",
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
   });
 
   const { translateButton } = FullPageTranslationsPanel.elements;
@@ -69,7 +69,7 @@ add_task(async function test_translations_panel_switch_language() {
     downloadHandler: resolveDownloads,
   });
 
-  await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated({
+  await FullPageTranslationsTestUtils.assertPageIsTranslated({
     fromLanguage: "en",
     toLanguage: "fr",
     runInPage,

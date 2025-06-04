@@ -28,12 +28,8 @@ let shareUrlSpy = sinon.spy();
 let openSharingPreferencesSpy = sinon.spy();
 let getSharingProvidersSpy = sinon.spy();
 
-let { MockRegistrar } = ChromeUtils.importESModule(
-  "resource://testing-common/MockRegistrar.sys.mjs"
-);
-let mockMacSharingService = MockRegistrar.register(
-  "@mozilla.org/widget/macsharingservice;1",
-  {
+let stub = sinon.stub(gBrowser, "MacSharingService").get(() => {
+  return {
     getSharingProviders(url) {
       getSharingProvidersSpy(url);
       return mockShareData;
@@ -44,12 +40,11 @@ let mockMacSharingService = MockRegistrar.register(
     openSharingPreferences() {
       openSharingPreferencesSpy();
     },
-    QueryInterface: ChromeUtils.generateQI([Ci.nsIMacSharingService]),
-  }
-);
+  };
+});
 
-registerCleanupFunction(function () {
-  MockRegistrar.unregister(mockMacSharingService);
+registerCleanupFunction(async function () {
+  stub.restore();
 });
 
 /**
@@ -73,15 +68,13 @@ add_task(async function test_file_menu_share() {
     ok(getSharingProvidersSpy.calledOnce, "getSharingProviders called");
 
     info(
-      "Check we have copy link, a service and one extra menu item for the More... button"
+      "Check we have a service and one extra menu item for the More... button"
     );
-    let items = Array.from(popup.querySelectorAll("menuitem"));
-    is(items.length, 3, "There should be 2 sharing services.");
+    let items = popup.querySelectorAll("menuitem");
+    is(items.length, 2, "There should be 2 sharing services.");
 
     info("Click on the sharing service");
-    let shareButton = items.find(
-      t => t.label == mockShareData[0].menuItemTitle
-    );
+    let shareButton = items[0];
     is(
       shareButton.label,
       mockShareData[0].menuItemTitle,
@@ -105,25 +98,6 @@ add_task(async function test_file_menu_share() {
     await simulateMenuClosed(popup);
     await simulateMenuClosed(menu);
 
-    info("Test the copy link button");
-    await simulateMenuOpen(menu);
-    popup = menu.querySelector(".share-tab-url-item").menupopup;
-    await simulateMenuOpen(popup);
-    // Since the menu was collapsed previously, the popup needs to get the
-    // providers again.
-    ok(getSharingProvidersSpy.calledTwice, "getSharingProviders called again");
-    items = Array.from(popup.querySelectorAll("menuitem"));
-    is(items.length, 3, "There should be 3 sharing services.");
-    info("Click on the Copy Link item");
-    let copyLinkItem = items.find(
-      item => item.dataset.l10nId == "menu-share-copy-link"
-    );
-    await SimpleTest.promiseClipboardChange(TEST_URL, () =>
-      copyLinkItem.doCommand()
-    );
-    await simulateMenuClosed(popup);
-    await simulateMenuClosed(menu);
-
     info("Test the More... button");
 
     await simulateMenuOpen(menu);
@@ -131,12 +105,12 @@ add_task(async function test_file_menu_share() {
     await simulateMenuOpen(popup);
     // Since the menu was collapsed previously, the popup needs to get the
     // providers again.
-    is(getSharingProvidersSpy.callCount, 3, "getSharingProviders called again");
+    ok(getSharingProvidersSpy.calledTwice, "getSharingProviders called again");
     items = popup.querySelectorAll("menuitem");
-    is(items.length, 3, "There should be 3 sharing services.");
+    is(items.length, 2, "There should be 2 sharing services.");
 
     info("Click on the More Button");
-    let moreButton = items[2];
+    let moreButton = items[1];
     moreButton.doCommand();
     ok(openSharingPreferencesSpy.calledOnce, "openSharingPreferences called");
     // Tidy up:

@@ -146,8 +146,6 @@ implementation details may vary deeply among different providers.
     }
     /**
      * The type of the provider, must be one of UrlbarUtils.PROVIDER_TYPE.
-     *
-     * @returns {Values<typeof UrlbarUtils.PROVIDER_TYPE>}
      * @abstract
      */
     get type() {
@@ -157,13 +155,8 @@ implementation details may vary deeply among different providers.
      * Whether this provider should be invoked for the given context.
      * If this method returns false, the providers manager won't start a query
      * with this provider, to save on resources.
-     *
-     * @param {UrlbarQueryContext} queryContext
-     *   The query context object
-     * @param {UrlbarController} controller
-     *   The current controller.
-     * @returns {Promise<boolean>}
-     *   Whether this provider should be invoked for the search.
+     * @param {UrlbarQueryContext} queryContext The query context object
+     * @returns {boolean} Whether this provider should be invoked for the search.
      * @abstract
      */
     isActive(queryContext) {
@@ -259,8 +252,8 @@ View (e.g. showing/hiding a panel). It is also responsible for reporting Telemet
     // Invoked by the ProvidersManager when results are available.
     receiveResults(queryContext);
     // Used by the View to listen for results.
-    addListener(listener);
-    removeListener(listener);
+    addQueryListener(listener);
+    removeQueryListener(listener);
   }
 
 

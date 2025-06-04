@@ -7,7 +7,7 @@
 
 #include "mozilla/Atomics.h"
 #include "mozilla/ChaosMode.h"
-#include "mozilla/glean/NetwerkMetrics.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/IntegerPrintfMacros.h"
 #include "mozilla/Likely.h"
 #include "mozilla/PodOperations.h"
@@ -412,12 +412,6 @@ bool nsSocketTransportService::CanAttachSocket() {
     static bool reported_socket_limit_reached = false;
     if (!reported_socket_limit_reached) {
       mozilla::glean::networking::os_socket_limit_reached.Add(1);
-      // GLAM EXPERIMENT
-      // This metric is temporary, disabled by default, and will be enabled only
-      // for the purpose of experimenting with client-side sampling of data for
-      // GLAM use. See Bug 1947604 for more information.
-      glean::glam_experiment::os_socket_limit_reached.Add(1);
-      // END GLAM EXPERIMENT
       reported_socket_limit_reached = true;
     }
     SOCKET_LOG(
@@ -1177,9 +1171,11 @@ nsSocketTransportService::Run() {
       DoPollIteration(&singlePollDuration);
 
       if (Telemetry::CanRecordPrereleaseData() && !pollCycleStart.IsNull()) {
-        glean::sts::poll_block_time.AccumulateRawDuration(singlePollDuration);
-        glean::sts::poll_cycle.AccumulateRawDuration(
-            TimeStamp::NowLoRes() - (pollCycleStart + singlePollDuration));
+        Telemetry::Accumulate(Telemetry::STS_POLL_BLOCK_TIME,
+                              singlePollDuration.ToMilliseconds());
+        Telemetry::AccumulateTimeDelta(Telemetry::STS_POLL_CYCLE,
+                                       pollCycleStart + singlePollDuration,
+                                       TimeStamp::NowLoRes());
         pollDuration += singlePollDuration;
       }
 
@@ -1221,8 +1217,9 @@ nsSocketTransportService::Run() {
 
         if (Telemetry::CanRecordPrereleaseData() && !mServingPendingQueue &&
             !startOfIteration.IsNull()) {
-          glean::sts::poll_and_events_cycle.AccumulateRawDuration(
-              TimeStamp::NowLoRes() - (startOfIteration + pollDuration));
+          Telemetry::AccumulateTimeDelta(Telemetry::STS_POLL_AND_EVENTS_CYCLE,
+                                         startOfIteration + pollDuration,
+                                         TimeStamp::NowLoRes());
           pollDuration = nullptr;
         }
       }
@@ -1233,8 +1230,9 @@ nsSocketTransportService::Run() {
     if (mShuttingDown) {
       if (Telemetry::CanRecordPrereleaseData() &&
           !startOfCycleForLastCycleCalc.IsNull()) {
-        glean::sts::poll_and_event_the_last_cycle.AccumulateRawDuration(
-            TimeStamp::NowLoRes() - startOfCycleForLastCycleCalc);
+        Telemetry::AccumulateTimeDelta(
+            Telemetry::STS_POLL_AND_EVENT_THE_LAST_CYCLE,
+            startOfCycleForLastCycleCalc, TimeStamp::NowLoRes());
       }
       break;
     }
@@ -1505,7 +1503,7 @@ nsresult nsSocketTransportService::UpdatePrefs() {
   nsresult rv =
       Preferences::GetInt(KEEPALIVE_IDLE_TIME_PREF, &keepaliveIdleTimeS);
   if (NS_SUCCEEDED(rv)) {
-    mKeepaliveIdleTimeS = std::clamp(keepaliveIdleTimeS, 1, kMaxTCPKeepIdle);
+    mKeepaliveIdleTimeS = clamped(keepaliveIdleTimeS, 1, kMaxTCPKeepIdle);
   }
 
   int32_t keepaliveRetryIntervalS;
@@ -1513,13 +1511,13 @@ nsresult nsSocketTransportService::UpdatePrefs() {
                            &keepaliveRetryIntervalS);
   if (NS_SUCCEEDED(rv)) {
     mKeepaliveRetryIntervalS =
-        std::clamp(keepaliveRetryIntervalS, 1, kMaxTCPKeepIntvl);
+        clamped(keepaliveRetryIntervalS, 1, kMaxTCPKeepIntvl);
   }
 
   int32_t keepaliveProbeCount;
   rv = Preferences::GetInt(KEEPALIVE_PROBE_COUNT_PREF, &keepaliveProbeCount);
   if (NS_SUCCEEDED(rv)) {
-    mKeepaliveProbeCount = std::clamp(keepaliveProbeCount, 1, kMaxTCPKeepCount);
+    mKeepaliveProbeCount = clamped(keepaliveProbeCount, 1, kMaxTCPKeepCount);
   }
   bool keepaliveEnabled = false;
   rv = Preferences::GetBool(KEEPALIVE_ENABLED_PREF, &keepaliveEnabled);
@@ -1701,7 +1699,7 @@ PRStatus nsSocketTransportService::DiscoverMaxCount() {
   // most linux at 1000. We can reliably use [sg]rlimit to
   // query that and raise it if needed.
 
-  struct rlimit rlimitData{};
+  struct rlimit rlimitData {};
   if (getrlimit(RLIMIT_NOFILE, &rlimitData) == -1) {  // rlimit broken - use min
     return PR_SUCCESS;
   }

@@ -35,7 +35,15 @@ const QUERYINDEX_SWITCHTAB = 9;
 const QUERYINDEX_FRECENCY = 10;
 const QUERYINDEX_USERCONTEXTID = 11;
 const QUERYINDEX_LASTVIST = 12;
-const QUERYINDEX_TABGROUP = 13;
+
+// Constants to support an alternative frecency algorithm.
+const PAGES_USE_ALT_FRECENCY = Services.prefs.getBoolPref(
+  "places.frecency.pages.alternative.featureGate",
+  false
+);
+const PAGES_FRECENCY_FIELD = PAGES_USE_ALT_FRECENCY
+  ? "alt_frecency"
+  : "frecency";
 
 // This SQL query fragment provides the following:
 //   - whether the entry is bookmarked (QUERYINDEX_BOOKMARKED)
@@ -57,15 +65,12 @@ const SQL_BOOKMARK_TAGS_FRAGMENT = `EXISTS(SELECT 1 FROM moz_bookmarks WHERE fk 
 // condition once, and avoid evaluating "btitle" and "tags" when it is false.
 function defaultQuery(conditions = "") {
   let query = `SELECT :query_type, h.url, h.title, ${SQL_BOOKMARK_TAGS_FRAGMENT},
-            h.visit_count, h.typed, h.id, t.open_count, ${lazy.PAGES_FRECENCY_FIELD}, t.userContextId, h.last_visit_date, t.groupId
+            h.visit_count, h.typed, h.id, t.open_count, ${PAGES_FRECENCY_FIELD}, t.userContextId, h.last_visit_date
      FROM moz_places h
      LEFT JOIN moz_openpages_temp t
             ON t.url = h.url
             AND (t.userContextId = :userContextId OR (t.userContextId <> -1 AND :userContextId IS NULL))
-     WHERE (
-        (:switchTabsEnabled AND t.open_count > 0) OR
-        ${lazy.PAGES_FRECENCY_FIELD} <> 0
-       )
+     WHERE ${PAGES_FRECENCY_FIELD} <> 0
        AND CASE WHEN bookmarked
          THEN
            AUTOCOMPLETE_MATCH(:searchString, h.url,
@@ -81,13 +86,13 @@ function defaultQuery(conditions = "") {
                               :matchBehavior, :searchBehavior, NULL)
          END
        ${conditions ? "AND" : ""} ${conditions}
-     ORDER BY ${lazy.PAGES_FRECENCY_FIELD} DESC, h.id DESC
+     ORDER BY ${PAGES_FRECENCY_FIELD} DESC, h.id DESC
      LIMIT :maxResults`;
   return query;
 }
 
 const SQL_SWITCHTAB_QUERY = `SELECT :query_type, t.url, t.url, NULL, NULL, NULL, NULL, NULL, NULL,
-          t.open_count, NULL, t.userContextId, NULL, t.groupId
+          t.open_count, NULL, t.userContextId, NULL
    FROM moz_openpages_temp t
    LEFT JOIN moz_places h ON h.url_hash = hash(t.url) AND h.url = t.url
    WHERE h.id IS NULL
@@ -118,13 +123,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
   UrlbarResult: "resource:///modules/UrlbarResult.sys.mjs",
   UrlbarSearchUtils: "resource:///modules/UrlbarSearchUtils.sys.mjs",
   UrlbarTokenizer: "resource:///modules/UrlbarTokenizer.sys.mjs",
-});
-
-// Constants to support an alternative frecency algorithm.
-ChromeUtils.defineLazyGetter(lazy, "PAGES_FRECENCY_FIELD", () => {
-  return lazy.PlacesUtils.history.isAlternativeFrecencyEnabled
-    ? "alt_frecency"
-    : "frecency";
 });
 
 function setTimeout(callback, ms) {
@@ -292,7 +290,6 @@ function convertLegacyMatches(context, matches, urls) {
       firstToken: context.tokens[0],
       userContextId: match.userContextId,
       lastVisit: match.lastVisit,
-      tabGroup: match.tabGroup,
     });
     // Should not happen, but better safe than sorry.
     if (!result) {
@@ -342,7 +339,6 @@ function makeUrlbarResult(tokens, info) {
           icon: info.icon,
           userContextId: info.userContextId,
           lastVisit: info.lastVisit,
-          tabGroup: info.tabGroup,
         });
         if (lazy.UrlbarPrefs.get("secondaryActions.switchToTab")) {
           payload[0].action = UrlbarUtils.createTabSwitchSecondaryAction(
@@ -1133,7 +1129,6 @@ Search.prototype = {
     let lastVisit = lastVisitPRTime
       ? lazy.PlacesUtils.toDate(lastVisitPRTime).getTime()
       : undefined;
-    let tabGroup = row.getResultByIndex(QUERYINDEX_TABGROUP);
 
     let match = {
       placeId,
@@ -1143,7 +1138,6 @@ Search.prototype = {
       frecency: frecency || FRECENCY_DEFAULT,
       userContextId,
       lastVisit,
-      tabGroup,
     };
     if (openPageCount > 0 && this.hasBehavior("openpage")) {
       if (
@@ -1304,7 +1298,6 @@ Search.prototype = {
       // Limit the query to the the maximum number of desired results.
       // This way we can avoid doing more work than needed.
       maxResults: this._maxResults,
-      switchTabsEnabled: this.hasBehavior("openpage"),
     };
     params.userContextId = lazy.UrlbarPrefs.get(
       "switchTabs.searchAllContainers"
@@ -1407,7 +1400,9 @@ class ProviderPlaces extends UrlbarProvider {
   }
 
   /**
-   * @returns {Values<typeof UrlbarUtils.PROVIDER_TYPE>}
+   * Returns the type of this provider.
+   *
+   * @returns {integer} one of the types from UrlbarUtils.PROVIDER_TYPE.*
    */
   get type() {
     return UrlbarUtils.PROVIDER_TYPE.PROFILE;
@@ -1448,8 +1443,9 @@ class ProviderPlaces extends UrlbarProvider {
    * with this provider, to save on resources.
    *
    * @param {UrlbarQueryContext} queryContext The query context object
+   * @returns {boolean} Whether this provider should be invoked for the search.
    */
-  async isActive(queryContext) {
+  isActive(queryContext) {
     if (
       !queryContext.trimmedSearchString &&
       queryContext.searchMode?.engineName

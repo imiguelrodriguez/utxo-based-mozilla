@@ -10,7 +10,7 @@ const { SearchTestUtils } = ChromeUtils.importESModule(
   "resource://testing-common/SearchTestUtils.sys.mjs"
 );
 const { SearchUtils } = ChromeUtils.importESModule(
-  "moz-src:///toolkit/components/search/SearchUtils.sys.mjs"
+  "resource://gre/modules/SearchUtils.sys.mjs"
 );
 const { updateAppInfo } = ChromeUtils.importESModule(
   "resource://testing-common/AppInfo.sys.mjs"

@@ -306,8 +306,8 @@ add_task(async function test_empty_states() {
       "Empty state with never remember history header has the expected text."
     );
     ok(
-      emptyStateCard.descriptionEls[0].textContent.includes(
-        "does not remember your browsing activity"
+      emptyStateCard.descriptionEls[1].textContent.includes(
+        "remember your activity as you browse. To change that"
       ),
       "Empty state with never remember history description has the expected text."
     );
@@ -471,8 +471,7 @@ add_task(async function test_search_history() {
     }, "There are no matching search results.");
 
     info("Clear the search query.");
-    searchTextbox.select();
-    EventUtils.synthesizeKey("VK_BACK_SPACE");
+    EventUtils.synthesizeMouseAtCenter(searchTextbox.clearButton, {}, content);
     await BrowserTestUtils.waitForMutationCondition(
       historyComponent.shadowRoot,
       { childList: true, subtree: true },
@@ -489,6 +488,26 @@ add_task(async function test_search_history() {
       const tabList = historyComponent.lists[0];
       return tabList?.emptyState;
     }, "There are no matching search results.");
+
+    info("Clear the search query with keyboard.");
+    is(
+      historyComponent.shadowRoot.activeElement,
+      searchTextbox,
+      "Search input is focused"
+    );
+    EventUtils.synthesizeKey("KEY_Tab", {}, content);
+    ok(
+      searchTextbox.clearButton.matches(":focus-visible"),
+      "Clear Search button is focused"
+    );
+    EventUtils.synthesizeKey("KEY_Enter", {}, content);
+    await BrowserTestUtils.waitForMutationCondition(
+      historyComponent.shadowRoot,
+      { childList: true, subtree: true },
+      () =>
+        historyComponent.cards.length ===
+        historyComponent.controller.historyVisits.length
+    );
   });
 });
 
@@ -531,8 +550,7 @@ add_task(async function test_search_ignores_stale_queries() {
     await TestUtils.waitForCondition(() => bogusQueryInProgress);
 
     info("Clear the bogus query.");
-    searchTextbox.select();
-    EventUtils.synthesizeKey("VK_BACK_SPACE");
+    EventUtils.synthesizeMouseAtCenter(searchTextbox.clearButton, {}, content);
     await searchTextbox.updateComplete;
 
     info("Input a real search query.");

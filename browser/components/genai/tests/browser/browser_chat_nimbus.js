@@ -1,7 +1,7 @@
 /* Any copyright is dedicated to the Public Domain.
  * http://creativecommons.org/publicdomain/zero/1.0/ */
 
-const { NimbusTestUtils } = ChromeUtils.importESModule(
+const { ExperimentFakes } = ChromeUtils.importESModule(
   "resource://testing-common/NimbusTestUtils.sys.mjs"
 );
 
@@ -18,7 +18,7 @@ add_task(async function test_nimbus_user_prefs() {
     "No user nimbus pref yet"
   );
 
-  let cleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let cleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "chatbot",
     value: {
       prefs: {
@@ -40,7 +40,7 @@ add_task(async function test_nimbus_user_prefs() {
     "nimbus pref has user value"
   );
 
-  await cleanup();
+  cleanup();
 
   Assert.equal(Services.prefs.getStringPref(foo), "bar", "foo pref still set");
   Assert.equal(
@@ -54,7 +54,7 @@ add_task(async function test_nimbus_user_prefs() {
     "sidebar used default value"
   );
 
-  cleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  cleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "chatbot",
     value: {
       prefs: {
@@ -76,7 +76,7 @@ add_task(async function test_nimbus_user_prefs() {
     "sidebar pref has user value"
   );
 
-  await cleanup();
+  cleanup();
   Services.prefs.clearUserPref(nimbus);
   Services.prefs.clearUserPref(sidebar);
 });
@@ -92,7 +92,7 @@ add_task(async function test_nimbus_default_prefs() {
     "sidebar used default value"
   );
 
-  const cleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  const cleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "chatbot",
     value: {
       prefs: {
@@ -107,7 +107,7 @@ add_task(async function test_nimbus_default_prefs() {
     "sidebar still is default value"
   );
 
-  await cleanup();
+  cleanup();
   Services.prefs.clearUserPref("browser.ml.chat.nimbus");
   Services.prefs.getDefaultBranch("").setBoolPref(pref, true);
 });
@@ -118,7 +118,7 @@ add_task(async function test_nimbus_default_prefs() {
 add_task(async function test_nimbus_rollout_experiment() {
   const foo = "browser.ml.chat.foo";
   const nimbus = "browser.ml.chat.nimbus";
-  const cleanRollout = await NimbusTestUtils.enrollWithFeatureConfig(
+  const cleanRollout = await ExperimentFakes.enrollWithFeatureConfig(
     {
       featureId: "chatbot",
       value: {
@@ -138,7 +138,7 @@ add_task(async function test_nimbus_rollout_experiment() {
   const nimbusValue = Services.prefs.getStringPref(nimbus);
   Assert.ok(nimbusValue, "Set some nimbus slug");
 
-  const cleanExperiment = await NimbusTestUtils.enrollWithFeatureConfig({
+  const cleanExperiment = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "chatbot",
     value: {
       prefs: {
@@ -158,8 +158,8 @@ add_task(async function test_nimbus_rollout_experiment() {
     "nimbus pref changed by experiment"
   );
 
-  await cleanRollout();
-  await cleanExperiment();
+  cleanRollout();
+  cleanExperiment();
   Services.prefs.clearUserPref(nimbus);
   Services.prefs.clearUserPref(foo);
 });
@@ -170,7 +170,7 @@ add_task(async function test_nimbus_rollout_experiment() {
 add_task(async function test_nimbus_minimum_version() {
   const foo = "browser.ml.chat.foo";
   const nimbus = "browser.ml.chat.nimbus";
-  let cleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let cleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "chatbot",
     value: {
       minVersion: AppConstants.MOZ_APP_VERSION_DISPLAY + ".1",
@@ -186,9 +186,9 @@ add_task(async function test_nimbus_minimum_version() {
   );
   Assert.ok(!Services.prefs.prefHasUserValue(nimbus), "nimbus pref not set");
 
-  await cleanup();
+  cleanup();
 
-  cleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  cleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "chatbot",
     value: {
       minVersion: AppConstants.MOZ_APP_VERSION_DISPLAY,
@@ -205,7 +205,7 @@ add_task(async function test_nimbus_minimum_version() {
   );
   Assert.ok(Services.prefs.getStringPref(nimbus), "nimbus pref set");
 
-  await cleanup();
+  cleanup();
   Services.prefs.clearUserPref(nimbus);
   Services.prefs.clearUserPref(foo);
 });

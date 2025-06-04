@@ -17,12 +17,12 @@ add_task(async function test_translations_telemetry_switch_from_language() {
     "The button is available."
   );
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await FullPageTranslationsTestUtils.openPanel({
     expectedFromLanguage: "es",
     expectedToLanguage: "en",
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
   });
 
   await FullPageTranslationsTestUtils.changeSelectedFromLanguage({
@@ -91,10 +91,6 @@ add_task(async function test_translations_telemetry_switch_from_language() {
     }
   );
 
-  await TestTranslationsTelemetry.assertTranslationsEnginePerformance({
-    expectedEventCount: 0,
-  });
-
   await cleanup();
 });
 
@@ -112,12 +108,12 @@ add_task(async function test_translations_telemetry_switch_to_language() {
     "The button is available."
   );
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await FullPageTranslationsTestUtils.openPanel({
     expectedFromLanguage: "es",
     expectedToLanguage: "en",
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
   });
 
   await FullPageTranslationsTestUtils.changeSelectedToLanguage({
@@ -183,10 +179,6 @@ add_task(async function test_translations_telemetry_switch_to_language() {
       },
     }
   );
-
-  await TestTranslationsTelemetry.assertTranslationsEnginePerformance({
-    expectedEventCount: 0,
-  });
 
   await cleanup();
 });

@@ -12,12 +12,10 @@
   const lazy = {};
 
   ChromeUtils.defineESModuleGetters(lazy, {
-    BrowserSearchTelemetry:
-      "moz-src:///browser/components/search/BrowserSearchTelemetry.sys.mjs",
     BrowserUtils: "resource://gre/modules/BrowserUtils.sys.mjs",
     FormHistory: "resource://gre/modules/FormHistory.sys.mjs",
     SearchSuggestionController:
-      "moz-src:///toolkit/components/search/SearchSuggestionController.sys.mjs",
+      "resource://gre/modules/SearchSuggestionController.sys.mjs",
   });
 
   /**
@@ -42,7 +40,7 @@
         <html:input class="searchbar-textbox" is="autocomplete-input" type="search" data-l10n-id="searchbar-input" autocompletepopup="PopupSearchAutoComplete" autocompletesearch="search-autocomplete" autocompletesearchparam="searchbar-history" maxrows="10" completeselectedindex="true" minresultsforpopup="0"/>
         <menupopup class="textbox-contextmenu"></menupopup>
         <hbox class="search-go-container" align="center">
-          <image class="search-go-button urlbar-icon" role="button" keyNav="false" hidden="true" data-l10n-id="searchbar-submit"></image>
+          <image class="search-go-button urlbar-icon" role="button" keyNav="false" hidden="true" onclick="handleSearchCommand(event);" data-l10n-id="searchbar-submit"></image>
         </hbox>
       `;
     }
@@ -130,7 +128,7 @@
               this._textbox.popup.updateHeader();
               // Refresh the display (updating icon, etc)
               this.updateDisplay();
-              OpenSearchManager.updateOpenSearchBadge(window);
+              BrowserSearch.updateOpenSearchBadge();
             })
             .catch(status =>
               console.error(
@@ -158,10 +156,6 @@
           }
         },
         { capture: true, once: true }
-      );
-
-      this.querySelector(".search-go-button").addEventListener("click", event =>
-        this.handleSearchCommand(event)
       );
     }
 
@@ -330,8 +324,9 @@
       let selectedIndex = this.telemetrySelectedIndex;
       let isOneOff = false;
 
-      lazy.BrowserSearchTelemetry.recordSearchSuggestionSelectionMethod(
+      BrowserSearchTelemetry.recordSearchSuggestionSelectionMethod(
         aEvent,
+        "searchbar",
         selectedIndex
       );
 
@@ -388,6 +383,13 @@
 
       this.telemetrySelectedIndex = -1;
 
+      BrowserSearchTelemetry.recordSearch(
+        gBrowser.selectedBrowser,
+        engine,
+        "searchbar",
+        details
+      );
+
       // Record when the user uses the search bar
       Services.prefs.setStringPref(
         "browser.search.widget.lastUsed",
@@ -406,28 +408,6 @@
           params[key] = aParams[key];
         }
       }
-
-      if (aWhere == "tab") {
-        gBrowser.tabContainer.addEventListener(
-          "TabOpen",
-          event =>
-            lazy.BrowserSearchTelemetry.recordSearch(
-              event.target.linkedBrowser,
-              engine,
-              "searchbar",
-              details
-            ),
-          { once: true }
-        );
-      } else {
-        lazy.BrowserSearchTelemetry.recordSearch(
-          gBrowser.selectedBrowser,
-          engine,
-          "searchbar",
-          details
-        );
-      }
-
       openTrustedLinkIn(submission.uri.spec, aWhere, params);
     }
 
@@ -505,7 +485,7 @@
      */
     openSearchFormWhere(aEvent, aEngine, where, params = {}) {
       let engine = aEngine || this.currentEngine;
-      let searchForm = engine.searchForm;
+      let searchForm = engine.wrappedJSObject.searchForm;
 
       if (where === "tab" && !!params.inBackground) {
         // Keep the focus in the search bar.
@@ -519,7 +499,6 @@
         this._needBrowserFocusAtEnterKeyUp = true;
       }
 
-      lazy.BrowserSearchTelemetry.recordSearchForm(engine, "searchbar");
       openTrustedLinkIn(searchForm, where, params);
     }
 
@@ -795,7 +774,6 @@
           } else {
             this.textbox.select();
           }
-          aEvent.preventDefault();
           return true;
         }
         return false;

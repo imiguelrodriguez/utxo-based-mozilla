@@ -27,7 +27,6 @@
 #include "nsIHttpAuthenticableChannel.h"
 #include "nsIProtocolProxyCallback.h"
 #include "nsIRaceCacheWithNetwork.h"
-#include "nsIRequestContext.h"
 #include "nsIStreamListener.h"
 #include "nsIThreadRetargetableRequest.h"
 #include "nsIThreadRetargetableStreamListener.h"
@@ -56,8 +55,12 @@ using DNSPromise = MozPromise<nsCOMPtr<nsIDNSRecord>, nsresult, false>;
 //-----------------------------------------------------------------------------
 
 // Use to support QI nsIChannel to nsHttpChannel
-#define NS_HTTPCHANNEL_IID \
-  {0x301bf95b, 0x7bb3, 0x4ae1, {0xa9, 0x71, 0x40, 0xbc, 0xfa, 0x81, 0xde, 0x12}}
+#define NS_HTTPCHANNEL_IID                           \
+  {                                                  \
+    0x301bf95b, 0x7bb3, 0x4ae1, {                    \
+      0xa9, 0x71, 0x40, 0xbc, 0xfa, 0x81, 0xde, 0x12 \
+    }                                                \
+  }
 
 class nsHttpChannel final : public HttpBaseChannel,
                             public HttpAsyncAborter<nsHttpChannel>,
@@ -89,7 +92,7 @@ class nsHttpChannel final : public HttpBaseChannel,
   NS_DECL_NSIASYNCVERIFYREDIRECTCALLBACK
   NS_DECL_NSITHREADRETARGETABLEREQUEST
   NS_DECL_NSIDNSLISTENER
-  NS_INLINE_DECL_STATIC_IID(NS_HTTPCHANNEL_IID)
+  NS_DECLARE_STATIC_IID_ACCESSOR(NS_HTTPCHANNEL_IID)
   NS_DECL_NSIRACECACHEWITHNETWORK
   NS_DECL_NSIREQUESTTAILUNBLOCKCALLBACK
   NS_DECL_NSIEARLYHINTOBSERVER
@@ -127,6 +130,11 @@ class nsHttpChannel final : public HttpBaseChannel,
                                       nsIURI* aProxyURI, uint64_t aChannelId,
                                       ExtContentPolicyType aContentPolicyType,
                                       nsILoadInfo* aLoadInfo) override;
+
+  [[nodiscard]] nsresult OnPush(uint32_t aPushedStreamId,
+                                const nsACString& aUrl,
+                                const nsACString& aRequestString,
+                                HttpTransactionShell* aTransaction);
 
   static bool IsRedirectStatus(uint32_t status);
   static bool WillRedirect(const nsHttpResponseHead& response);
@@ -327,10 +335,9 @@ class nsHttpChannel final : public HttpBaseChannel,
   [[nodiscard]] nsresult DispatchTransaction(
       HttpTransactionShell* aTransWithStickyConn);
   [[nodiscard]] nsresult CallOnStartRequest();
-  [[nodiscard]] nsresult ProcessResponse(nsHttpConnectionInfo* aConnInfo);
-  void AsyncContinueProcessResponse(nsHttpConnectionInfo* aConnInfo);
-  [[nodiscard]] nsresult ContinueProcessResponse1(
-      nsHttpConnectionInfo* aConnInfo);
+  [[nodiscard]] nsresult ProcessResponse();
+  void AsyncContinueProcessResponse();
+  [[nodiscard]] nsresult ContinueProcessResponse1();
   [[nodiscard]] nsresult ContinueProcessResponse2(nsresult);
   nsresult HandleOverrideResponse();
 
@@ -340,7 +347,7 @@ class nsHttpChannel final : public HttpBaseChannel,
   [[nodiscard]] nsresult ContinueProcessResponse4(nsresult);
   [[nodiscard]] nsresult ProcessNormal();
   [[nodiscard]] nsresult ContinueProcessNormal(nsresult);
-  void ProcessAltService(nsHttpConnectionInfo* aTransConnInfo = nullptr);
+  void ProcessAltService();
   bool ShouldBypassProcessNotModified();
   [[nodiscard]] nsresult ProcessNotModified(
       const std::function<nsresult(nsHttpChannel*, nsresult)>&
@@ -503,6 +510,9 @@ class nsHttpChannel final : public HttpBaseChannel,
   [[nodiscard]] nsresult OpenCacheInputStream(nsICacheEntry* cacheEntry,
                                               bool startBuffering);
 
+  void SetPushedStreamTransactionAndId(
+      HttpTransactionShell* aTransWithPushedStream, uint32_t aPushedStreamId);
+
   void SetOriginHeader();
   void SetDoNotTrack();
   void SetGlobalPrivacyControl();
@@ -616,6 +626,7 @@ class nsHttpChannel final : public HttpBaseChannel,
   bool mCacheOpenWithPriority{false};
   uint32_t mCacheQueueSizeWhenOpen{0};
 
+  Atomic<bool, Relaxed> mCachedContentIsValid{false};
   Atomic<bool> mIsAuthChannel{false};
   Atomic<bool> mAuthRetryPending{false};
 
@@ -690,10 +701,6 @@ class nsHttpChannel final : public HttpBaseChannel,
   // Broken up into two bitfields to avoid alignment requirements of uint64_t.
   // (Too many bits used for one uint32_t.)
   MOZ_ATOMIC_BITFIELDS(mAtomicBitfields6, 32, (
-    // True if network request gets to OnStart before we get a response from the cache
-    (uint32_t, NetworkWonRace, 1),
-    // Valid values are CachedContentValid
-    (uint32_t, CachedContentIsValid, 2),
     // Only set to true when we receive an HTTPSSVC record before the
     // transaction is created.
     (uint32_t, HTTPSSVCTelemetryReported, 1),
@@ -701,16 +708,14 @@ class nsHttpChannel final : public HttpBaseChannel,
     (uint32_t, AuthRedirectedChannel, 1)
   ))
   // clang-format on
-  enum CachedContentValidity : uint8_t { Unset = 0, Invalid = 1, Valid = 2 };
-
-  bool CachedContentIsValid() {
-    return LoadCachedContentIsValid() == CachedContentValidity::Valid;
-  }
 
   nsTArray<nsContinueRedirectionFunc> mRedirectFuncStack;
 
   // Needed for accurate DNS timing
   RefPtr<nsDNSPrefetch> mDNSPrefetch;
+
+  uint32_t mPushedStreamId{0};
+  RefPtr<HttpTransactionShell> mTransWithPushedStream;
 
   // True if the channel's principal was found on a phishing, malware, or
   // tracking (if tracking protection is enabled) blocklist
@@ -815,7 +820,6 @@ class nsHttpChannel final : public HttpBaseChannel,
   // SetupTransaction removed conditional headers and decisions made in
   // OnCacheEntryCheck are no longer valid.
   bool mIgnoreCacheEntry{false};
-  bool mAllowRCWN{true};
   // Lock preventing SetupTransaction/MaybeCreateCacheEntryWhenRCWN and
   // OnCacheEntryCheck being called at the same time.
   mozilla::Mutex mRCWNLock MOZ_UNANNOTATED{"nsHttpChannel.mRCWNLock"};
@@ -857,6 +861,7 @@ class nsHttpChannel final : public HttpBaseChannel,
   nsMainThreadPtrHandle<nsIReplacedHttpResponse> mOverrideResponse;
 };
 
+NS_DEFINE_STATIC_IID_ACCESSOR(nsHttpChannel, NS_HTTPCHANNEL_IID)
 }  // namespace net
 }  // namespace mozilla
 

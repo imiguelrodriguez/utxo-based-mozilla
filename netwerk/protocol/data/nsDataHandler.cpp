@@ -93,10 +93,7 @@ nsDataHandler::NewChannel(nsIURI* uri, nsILoadInfo* aLoadInfo,
   nsresult rv = channel->SetLoadInfo(aLoadInfo);
   NS_ENSURE_SUCCESS(rv, rv);
 
-  rv = channel->Init();
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  *result = channel.forget().downcast<nsBaseChannel>().take();
+  channel.forget(result);
   return NS_OK;
 }
 
@@ -153,11 +150,12 @@ bool TrimSpacesAndBase64(nsACString& aMimeType) {
 
 }  // namespace
 
-static nsresult ParsePathWithoutRef(const nsACString& aPath,
-                                    nsCString& aContentType,
-                                    nsCString* aContentCharset, bool& aIsBase64,
-                                    nsDependentCSubstring* aDataBuffer,
-                                    RefPtr<CMimeType>* aMimeType) {
+nsresult nsDataHandler::ParsePathWithoutRef(const nsACString& aPath,
+                                            nsCString& aContentType,
+                                            nsCString* aContentCharset,
+                                            bool& aIsBase64,
+                                            nsDependentCSubstring* aDataBuffer,
+                                            RefPtr<CMimeType>* aMimeType) {
   static constexpr auto kCharset = "charset"_ns;
 
   // This implements https://fetch.spec.whatwg.org/#data-url-processor
@@ -201,6 +199,10 @@ static nsresult ParsePathWithoutRef(const nsACString& aPath,
     if (aContentCharset) {
       parsed->GetParameterValue(kCharset, *aContentCharset);
     }
+    if (parsed->IsBase64() &&
+        !StaticPrefs::network_url_strict_data_url_base64_placement()) {
+      aIsBase64 = true;
+    }
     if (aMimeType) {
       *aMimeType = std::move(parsed);
     }
@@ -231,30 +233,35 @@ static inline char ToLower(const char c) {
   return c;
 }
 
-nsresult nsDataHandler::ParseURI(const nsACString& aSpec,
-                                 nsCString& aContentType,
-                                 nsCString* aContentCharset, bool& aIsBase64,
-                                 nsDependentCSubstring* aDataBuffer,
-                                 RefPtr<CMimeType>* aMimeType) {
+nsresult nsDataHandler::ParseURI(const nsACString& spec, nsCString& contentType,
+                                 nsCString* contentCharset, bool& isBase64,
+                                 nsCString* dataBuffer) {
   static constexpr auto kDataScheme = "data:"_ns;
 
   // move past "data:"
   const char* pos = std::search(
-      aSpec.BeginReading(), aSpec.EndReading(), kDataScheme.BeginReading(),
+      spec.BeginReading(), spec.EndReading(), kDataScheme.BeginReading(),
       kDataScheme.EndReading(),
       [](const char a, const char b) { return ToLower(a) == ToLower(b); });
-  if (pos == aSpec.EndReading()) {
+  if (pos == spec.EndReading()) {
     return NS_ERROR_MALFORMED_URI;
   }
 
-  uint32_t scheme = pos - aSpec.BeginReading();
+  uint32_t scheme = pos - spec.BeginReading();
   scheme += kDataScheme.Length();
 
   // Find the start of the hash ref if present.
-  int32_t hash = aSpec.FindChar('#', scheme);
+  int32_t hash = spec.FindChar('#', scheme);
 
-  auto pathWithoutRef =
-      Substring(aSpec, scheme, hash != kNotFound ? hash - scheme : -1);
-  return ParsePathWithoutRef(pathWithoutRef, aContentType, aContentCharset,
-                             aIsBase64, aDataBuffer, aMimeType);
+  auto pathWithoutRef = Substring(spec, scheme, hash != kNotFound ? hash : -1);
+  nsDependentCSubstring dataRange;
+  nsresult rv = ParsePathWithoutRef(pathWithoutRef, contentType, contentCharset,
+                                    isBase64, &dataRange);
+  if (NS_SUCCEEDED(rv) && dataBuffer) {
+    if (!dataBuffer->Assign(dataRange, mozilla::fallible)) {
+      rv = NS_ERROR_OUT_OF_MEMORY;
+    }
+  }
+
+  return rv;
 }

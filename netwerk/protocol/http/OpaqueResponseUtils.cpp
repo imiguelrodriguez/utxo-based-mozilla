@@ -9,6 +9,7 @@
 #include "mozilla/dom/Document.h"
 #include "mozilla/StaticPrefs_browser.h"
 #include "mozilla/dom/JSValidatorParent.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "ErrorList.h"
 #include "nsContentUtils.h"
 #include "nsHttpResponseHead.h"
@@ -464,7 +465,7 @@ OpaqueResponseBlocker::EnsureOpaqueResponseIsAllowedAfterJavaScriptValidation(
 
   return aChannel->BlockOrFilterOpaqueResponse(
       this, u"Javascript validation failed"_ns,
-      OpaqueResponseBlockedTelemetryReason::eJsValidationFailed,
+      OpaqueResponseBlockedTelemetryReason::JS_VALIDATION_FAILED,
       "Javascript validation failed");
 }
 
@@ -500,11 +501,12 @@ static void RecordTelemetry(const TimeStamp& aStartOfValidation,
       MarkerTiming::Interval(aStartOfJavaScriptValidation, now),
       nsPrintfCString("JS Validation (%s)", key.get()));
 
-  glean::orb::receive_data_for_validation.Get(key).AccumulateRawDuration(
-      aStartOfJavaScriptValidation - aStartOfValidation);
+  Telemetry::AccumulateTimeDelta(Telemetry::ORB_RECEIVE_DATA_FOR_VALIDATION_MS,
+                                 key, aStartOfValidation,
+                                 aStartOfJavaScriptValidation);
 
-  glean::orb::javascript_validation.Get(key).AccumulateRawDuration(
-      now - aStartOfJavaScriptValidation);
+  Telemetry::AccumulateTimeDelta(Telemetry::ORB_JAVASCRIPT_VALIDATION_MS, key,
+                                 aStartOfJavaScriptValidation, now);
 }
 
 // The specification for ORB is currently being written:
@@ -559,7 +561,8 @@ nsresult OpaqueResponseBlocker::ValidateJavaScript(HttpBaseChannel* aChannel,
             self->AllowResponse();
             break;
           case OpaqueResponse::Block:
-            self->BlockResponse(channel, NS_ERROR_FAILURE);
+            // We'll filter the data out later
+            self->AllowResponse();
             break;
           default:
             MOZ_ASSERT_UNREACHABLE(
@@ -619,11 +622,19 @@ void OpaqueResponseBlocker::FilterResponse() {
 
 void OpaqueResponseBlocker::ResolveAndProcessData(
     HttpBaseChannel* aChannel, bool aAllowed, Maybe<ipc::Shmem>& aSharedData) {
+  if (!aAllowed) {
+    // OpaqueResponseFilter allows us to filter the headers
+    mNext = new OpaqueResponseFilter(mNext);
+  }
+
   nsresult rv = OnStartRequest(aChannel);
 
   if (!aAllowed || NS_FAILED(rv)) {
-    MOZ_ASSERT_IF(!aAllowed, mState == State::Blocked);
-    // We decided to block, so nothing more to do.
+    MOZ_ASSERT_IF(!aAllowed, mState == State::Allowed);
+    // No need to call OnDataAvailable because
+    //   1. The input stream is consumed by
+    //     OpaqueResponseBlocker::OnDataAvailable already
+    //   2. We don't want to pass any data over
     MaybeRunOnStopRequest(aChannel);
     return;
   }

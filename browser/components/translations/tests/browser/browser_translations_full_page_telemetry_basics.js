@@ -10,6 +10,7 @@ add_task(async function test_translations_telemetry_basics() {
   const { cleanup } = await loadTestPage({
     page: SPANISH_PAGE_URL,
     languagePairs: LANGUAGE_PAIRS,
+    prefs: [["browser.translations.panelShown", false]],
   });
 
   await TestTranslationsTelemetry.assertEvent(Glean.translationsPanel.open, {
@@ -24,7 +25,7 @@ add_task(async function test_translations_telemetry_basics() {
   await FullPageTranslationsTestUtils.openPanel({
     expectedFromLanguage: "es",
     expectedToLanguage: "en",
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewFirstShow,
   });
 
   await FullPageTranslationsTestUtils.clickCancelButton();
@@ -56,7 +57,7 @@ add_task(async function test_translations_telemetry_basics() {
   await FullPageTranslationsTestUtils.openPanel({
     expectedFromLanguage: "es",
     expectedToLanguage: "en",
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewFirstShow,
   });
 
   await FullPageTranslationsTestUtils.clickCancelButton();
@@ -83,10 +84,6 @@ add_task(async function test_translations_telemetry_basics() {
   await TestTranslationsTelemetry.assertEvent(Glean.translationsPanel.close, {
     expectedEventCount: 2,
     expectNewFlowId: false,
-  });
-
-  await TestTranslationsTelemetry.assertTranslationsEnginePerformance({
-    expectedEventCount: 0,
   });
 
   await cleanup();

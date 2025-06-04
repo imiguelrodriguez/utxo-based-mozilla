@@ -43,7 +43,7 @@
 #include "mozilla/SHA1.h"
 #include "mozilla/Base64.h"
 #include "mozilla/ScopeExit.h"
-#include "mozilla/glean/NetwerkMetrics.h"
+#include "mozilla/Telemetry.h"
 #include "../LinkServiceCommon.h"
 #include <iptypes.h>
 #include <iphlpapi.h>
@@ -245,7 +245,7 @@ void nsNotifyAddrListener::calculateNetworkId(void) {
       mNetworkId.Truncate();
     }
     LOG(("calculateNetworkId: no network ID - no active networks"));
-    glean::network::id.AccumulateSingleSample(0);
+    Telemetry::Accumulate(Telemetry::NETWORK_ID2, 0);
     if (idChanged) {
       NotifyObservers(NS_NETWORK_ID_CHANGED_TOPIC, nullptr);
     }
@@ -264,7 +264,7 @@ void nsNotifyAddrListener::calculateNetworkId(void) {
       MutexAutoLock lock(mMutex);
       mNetworkId.Truncate();
     }
-    glean::network::id.AccumulateSingleSample(0);
+    Telemetry::Accumulate(Telemetry::NETWORK_ID2, 0);
     LOG(("calculateNetworkId: no network ID Base64Encode error %X",
          uint32_t(rv)));
     return;
@@ -273,11 +273,11 @@ void nsNotifyAddrListener::calculateNetworkId(void) {
   MutexAutoLock lock(mMutex);
   if (output != mNetworkId) {
     mNetworkId = output;
-    glean::network::id.AccumulateSingleSample(1);
+    Telemetry::Accumulate(Telemetry::NETWORK_ID2, 1);
     LOG(("calculateNetworkId: new NetworkID: %s", output.get()));
     NotifyObservers(NS_NETWORK_ID_CHANGED_TOPIC, nullptr);
   } else {
-    glean::network::id.AccumulateSingleSample(2);
+    Telemetry::Accumulate(Telemetry::NETWORK_ID2, 2);
     LOG(("calculateNetworkId: same NetworkID: %s", output.get()));
   }
 }
@@ -491,10 +491,7 @@ nsNotifyAddrListener::CheckAdaptersAddresses(void) {
          adapter = adapter->Next) {
       if (adapter->OperStatus != IfOperStatusUp ||
           !adapter->FirstUnicastAddress ||
-          adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK ||
-          nsDependentString(adapter->FriendlyName).Find(u"VMnet") !=
-              kNotFound ||
-          nsDependentString(adapter->Description).Find(u"VMnet") != kNotFound) {
+          adapter->IfType == IF_TYPE_SOFTWARE_LOOPBACK) {
         continue;
       }
 

@@ -6,23 +6,23 @@
 
 class PictureInPictureVideoWrapper {
   play(video) {
-    let playButton = document.querySelector("video-ui .phx-play-btn");
+    let playPauseButton = document.querySelector(".video-ui .play-button");
     if (video.paused) {
-      playButton?.click();
+      playPauseButton?.click();
     }
   }
 
   pause(video) {
-    let pauseButton = document.querySelector("video-ui .phx-pause-btn");
+    let playPauseButton = document.querySelector(".video-ui .pause-button");
     if (!video.paused) {
-      pauseButton?.click();
+      playPauseButton?.click();
     }
   }
 
   setMuted(video, shouldMute) {
-    let muteButton = document.querySelector("video-ui .phx-muted-btn");
-    if (video.muted !== shouldMute) {
-      muteButton?.click();
+    let muteButton = document.querySelector(".video-ui .muted-btn");
+    if (video.muted !== shouldMute && muteButton) {
+      muteButton.click();
     }
   }
 }

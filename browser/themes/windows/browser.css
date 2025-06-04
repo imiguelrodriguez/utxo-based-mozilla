@@ -15,7 +15,7 @@
   color: inherit;
 
   &[_moz-menuactive] {
-    background-color: light-dark(hsla(0, 0%, 0%, 0.12), hsla(0, 0%, 100%, 0.22));
+    background-color: light-dark(hsla(0,0%,0%,.12), hsla(0,0%,100%,.22));
     color: inherit;
 
     @media (prefers-contrast) {
@@ -25,43 +25,50 @@
   }
 }
 
-:root[customtitlebar]:not([lwtheme]) {
-  @media (-moz-windows-mica) {
-    background-color: transparent;
-    /* stylelint-disable-next-line media-query-no-invalid */
-    @media -moz-pref("widget.windows.mica.toplevel-backdrop", 2) {
-      /* For acrylic, do the same we do for popups to guarantee some contrast */
-      background-color: light-dark(rgba(255, 255, 255, 0.6), rgba(0, 0, 0, 0.6));
-    }
-  }
+@media (-moz-windows-accent-color-in-titlebar) or (-moz-windows-mica) {
+  :root[tabsintitlebar] {
+    @media (-moz-windows-mica) {
+      &:not([lwtheme]) {
+        background-color: transparent;
 
-  /* stylelint-disable-next-line media-query-no-invalid */
-  @media (-moz-windows-accent-color-in-titlebar) and ((-moz-windows-mica) or -moz-pref("browser.theme.windows.accent-color-in-tabs.enabled")) {
-    .browser-toolbox-background {
-      /* These colors match the Linux/HCM default button colors. We need to
-       * override these on the toolbox-like elements because the accent color
-       * is arbitrary, so the hardcoded brand colors from browser-colors.css
-       * might not provide sufficient contrast. */
-      --toolbarbutton-icon-fill: currentColor;
-      --toolbarbutton-hover-background: color-mix(in srgb, currentColor 17%, transparent);
-      --toolbarbutton-active-background: color-mix(in srgb, currentColor 30%, transparent);
-      --toolbar-field-color: currentColor;
-      --urlbar-box-bgcolor: var(--button-background-color-hover);
-      --urlbar-box-focus-bgcolor: var(--button-background-color);
-      --urlbar-box-hover-bgcolor: var(--button-background-color-hover);
-      --urlbar-box-active-bgcolor: var(--button-background-color-active);
+        /* Accent color in titlebar overrides Mica. */
+        @media not (-moz-windows-accent-color-in-titlebar) {
+          /* Hide the Firefox buttons since Windows draws their own.
+           * FIXME(emilio): Find a way of hiding the native buttons, or make them
+           * taller, this is very hacky. */
+          .titlebar-buttonbox {
+            opacity: 0;
+          }
+        }
+      }
+    }
+
+    /* stylelint-disable-next-line media-query-no-invalid */
+    @media (-moz-windows-mica) or (-moz-bool-pref: "browser.theme.windows.accent-color-in-tabs.enabled") {
+      &:not([lwtheme]) #TabsToolbar {
+        /* These colors match the Linux/HCM default button colors. We need to
+         * override these on the tabs toolbar because the accent color is
+         * arbitrary, so the hardcoded colors from browser-custom-colors might
+         * not provide sufficient contrast. */
+        --toolbarbutton-icon-fill: currentColor;
+        --toolbarbutton-hover-background: color-mix(in srgb, currentColor 17%, transparent);
+        --toolbarbutton-active-background: color-mix(in srgb, currentColor 30%, transparent);
+      }
+    }
+
+    &[sizemode="normal"] #navigator-toolbox {
+      border-top: .5px solid ActiveBorder;
+      &:-moz-window-inactive {
+        border-top-color: InactiveBorder;
+      }
     }
   }
 }
 
-/* This is needed for Windows 10, see bug 1961257 */
-@media (-moz-windows-accent-color-in-titlebar) {
-  :root[customtitlebar][sizemode="normal"] #navigator-toolbox {
-    border-top: 0.5px solid ActiveBorder;
-    &:-moz-window-inactive {
-      border-top-color: InactiveBorder;
-    }
-  }
+/* When temporarily showing the menu bar, make it at least as tall as the
+ * tab bar such that the window controls don't appear to move up. */
+:root[tabsintitlebar] #toolbar-menubar[autohide="true"] {
+  height: var(--tab-min-height);
 }
 
 /* Titlebar */
@@ -90,13 +97,7 @@
   -moz-context-properties: stroke;
   stroke: currentColor;
 
-  /* Win10's tablet mode is non-windowed -- windows can't be moved or resized
-     freely. In theory "minimize" might still make sense, but for simplicity we
-     just hide everything but "close".
-
-     (This is not called for in Win11's tablet mode, which _is_ windowed.)
-  */
-  :root[win10-tablet-mode] &:not(.titlebar-close) {
+  :root[tabletmode] & {
     display: none;
   }
 
@@ -158,19 +159,19 @@
 
 @media not (prefers-contrast) {
   .titlebar-button:hover {
-    background-color: light-dark(hsla(0, 0%, 0%, 0.12), hsla(0, 0%, 100%, 0.22));
+    background-color: light-dark(hsla(0,0%,0%,.12), hsla(0,0%,100%,.22));
 
     &:active {
-      background-color: light-dark(hsla(0, 0%, 0%, 0.22), hsla(0, 0%, 100%, 0.32));
+      background-color: light-dark(hsla(0,0%,0%,.22), hsla(0,0%,100%,.32));
     }
   }
 
   .titlebar-close:hover {
     stroke: white;
-    background-color: hsl(355, 86%, 49%);
+    background-color: hsl(355,86%,49%);
 
     &:active {
-      background-color: hsl(355, 82%, 69%);
+      background-color: hsl(355,82%,69%);
     }
   }
 }
@@ -255,8 +256,20 @@
     max-width: 32em;
   }
 
-  &:not(.subviewbutton) > .menu-icon {
+  &:not(.subviewbutton) > .menu-iconic-left {
     margin-block: 0;
+  }
+
+  &[cutting] {
+    > .toolbarbutton-icon,
+    > .menu-iconic-left > .menu-iconic-icon {
+      opacity: 0.5;
+    }
+
+    > .toolbarbutton-text,
+    > .menu-iconic-left > .menu-iconic-text {
+      opacity: 0.7;
+    }
   }
 
   &:is(toolbarbutton)[dragover="true"][open="true"] {
@@ -283,7 +296,7 @@
 }
 
 /* stylelint-disable-next-line media-query-no-invalid */
-@media -moz-pref("browser.urlbar.experimental.expandTextOnFocus") {
+@media (-moz-bool-pref: "browser.urlbar.experimental.expandTextOnFocus") {
   #urlbar[breakout-extend] {
     font-size: 1.25em;
   }
@@ -324,7 +337,7 @@
 @media (prefers-contrast) {
   /* For high contrast themes. XXX is this needed anymore? */
   #tabbrowser-tabpanels,
-  :root[privatebrowsingmode="temporary"] #tabbrowser-tabpanels {
+  :root[privatebrowsingmode=temporary] #tabbrowser-tabpanels {
     background-color: -moz-default-background-color;
   }
 }

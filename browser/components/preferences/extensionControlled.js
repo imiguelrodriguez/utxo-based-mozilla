@@ -59,12 +59,11 @@ let extensionControlledContentIds = {
 };
 
 const extensionControlledL10nKeys = {
-  webNotificationsDisabled: "extension-controlling-web-notifications",
-  "services.passwordSavingEnabled": "extension-controlling-password-saving",
-  "privacy.containers": "extension-controlling-privacy-containers",
-  "websites.trackingProtectionMode":
-    "extension-controlling-websites-content-blocking-all-trackers",
-  "proxy.settings": "extension-controlling-proxy-config",
+  webNotificationsDisabled: "web-notifications",
+  "services.passwordSavingEnabled": "password-saving",
+  "privacy.containers": "privacy-containers",
+  "websites.trackingProtectionMode": "websites-content-blocking-all-trackers",
+  "proxy.settings": "proxy-config",
 };
 
 let extensionControlledIds = {};
@@ -130,7 +129,7 @@ function settingNameToL10nID(settingName) {
       `Unknown extension controlled setting name: ${settingName}`
     );
   }
-  return extensionControlledL10nKeys[settingName];
+  return `extension-controlling-${extensionControlledL10nKeys[settingName]}`;
 }
 
 /**

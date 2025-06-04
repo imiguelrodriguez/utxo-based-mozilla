@@ -3,7 +3,7 @@
 
 "use strict";
 
-const { NimbusTestUtils } = ChromeUtils.importESModule(
+const { ExperimentFakes } = ChromeUtils.importESModule(
   "resource://testing-common/NimbusTestUtils.sys.mjs"
 );
 
@@ -93,7 +93,7 @@ add_task(async function test_default() {
  * impression.
  */
 add_task(async function test_control() {
-  let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig(
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig(
     {
       featureId: NimbusFeatures.fxaAvatarMenuItem.featureId,
       value: {
@@ -136,7 +136,7 @@ add_task(async function test_variants() {
     let expectedDescription = gSync.fluentStrings.formatValueSync(
       `fxa-menu-message-${variant}-secondary-text`
     );
-    let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig(
+    let doCleanup = await ExperimentFakes.enrollWithFeatureConfig(
       {
         featureId: NimbusFeatures.fxaAvatarMenuItem.featureId,
         value: {

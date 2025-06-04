@@ -2,12 +2,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { SuggestProvider } from "resource:///modules/urlbar/private/SuggestFeature.sys.mjs";
+import { BaseFeature } from "resource:///modules/urlbar/private/BaseFeature.sys.mjs";
 
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   QuickSuggest: "resource:///modules/QuickSuggest.sys.mjs",
+  SuggestionsMap: "resource:///modules/urlbar/private/SuggestBackendJs.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
   UrlbarResult: "resource:///modules/UrlbarResult.sys.mjs",
   UrlbarUtils: "resource:///modules/UrlbarUtils.sys.mjs",
@@ -22,7 +23,15 @@ const RESULT_MENU_COMMAND = {
 /**
  * A feature that supports MDN suggestions.
  */
-export class MDNSuggestions extends SuggestProvider {
+export class MDNSuggestions extends BaseFeature {
+  get shouldEnable() {
+    return (
+      lazy.UrlbarPrefs.get("mdn.featureGate") &&
+      lazy.UrlbarPrefs.get("suggest.mdn") &&
+      lazy.UrlbarPrefs.get("suggest.quicksuggest.nonsponsored")
+    );
+  }
+
   get enablingPreferences() {
     return [
       "mdn.featureGate",
@@ -31,16 +40,55 @@ export class MDNSuggestions extends SuggestProvider {
     ];
   }
 
-  get primaryUserControlledPreference() {
-    return "suggest.mdn";
-  }
-
   get merinoProvider() {
     return "mdn";
   }
 
-  get rustSuggestionType() {
-    return "Mdn";
+  get rustSuggestionTypes() {
+    return ["Mdn"];
+  }
+
+  enable(enabled) {
+    if (enabled) {
+      lazy.QuickSuggest.jsBackend.register(this);
+    } else {
+      lazy.QuickSuggest.jsBackend.unregister(this);
+      this.#suggestionsMap?.clear();
+    }
+  }
+
+  queryRemoteSettings(searchString) {
+    const suggestions = this.#suggestionsMap?.get(searchString);
+    return suggestions
+      ? suggestions.map(suggestion => ({ ...suggestion }))
+      : [];
+  }
+
+  async onRemoteSettingsSync(rs) {
+    const records = await rs.get({ filters: { type: "mdn-suggestions" } });
+    if (!this.isEnabled) {
+      return;
+    }
+
+    const suggestionsMap = new lazy.SuggestionsMap();
+
+    for (const record of records) {
+      const { buffer } = await rs.attachments.download(record);
+      if (!this.isEnabled) {
+        return;
+      }
+
+      const results = JSON.parse(new TextDecoder("utf-8").decode(buffer));
+      await suggestionsMap.add(results, {
+        mapKeyword:
+          lazy.SuggestionsMap.MAP_KEYWORD_PREFIXES_STARTING_AT_FIRST_WORD,
+      });
+      if (!this.isEnabled) {
+        return;
+      }
+    }
+
+    this.#suggestionsMap = suggestionsMap;
   }
 
   async makeResult(queryContext, suggestion) {
@@ -49,6 +97,10 @@ export class MDNSuggestions extends SuggestProvider {
       // mdn suggestions anyway, and we filter them out here.
       return null;
     }
+
+    // Set `is_top_pick` on the suggestion to tell the provider to set
+    // best-match related properties on the result.
+    suggestion.is_top_pick = true;
 
     const url = new URL(suggestion.url);
     url.searchParams.set("utm_medium", "firefox-desktop");
@@ -78,10 +130,7 @@ export class MDNSuggestions extends SuggestProvider {
           payload
         )
       ),
-      {
-        isBestMatch: true,
-        showFeedbackMenu: true,
-      }
+      { showFeedbackMenu: true }
     );
   }
 
@@ -116,28 +165,34 @@ export class MDNSuggestions extends SuggestProvider {
     ];
   }
 
-  onEngagement(queryContext, controller, details, _searchString) {
-    let { result } = details;
-    switch (details.selType) {
+  handleCommand(view, result, selType) {
+    switch (selType) {
       case RESULT_MENU_COMMAND.MANAGE:
         // "manage" is handled by UrlbarInput, no need to do anything here.
         break;
       // selType == "dismiss" when the user presses the dismiss key shortcut.
       case "dismiss":
       case RESULT_MENU_COMMAND.NOT_RELEVANT:
-        lazy.QuickSuggest.dismissResult(result);
+        // MDNSuggestions adds the UTM parameters to the original URL and
+        // returns it as payload.url in the result. However, as
+        // UrlbarProviderQuickSuggest filters suggestions with original URL of
+        // provided suggestions, need to use the original URL when adding to the
+        // block list.
+        lazy.QuickSuggest.blockedSuggestions.add(result.payload.originalUrl);
         result.acknowledgeDismissalL10n = {
           id: "firefox-suggest-dismissal-acknowledgment-one-mdn",
         };
-        controller.removeResult(result);
+        view.controller.removeResult(result);
         break;
       case RESULT_MENU_COMMAND.NOT_INTERESTED:
         lazy.UrlbarPrefs.set("suggest.mdn", false);
         result.acknowledgeDismissalL10n = {
           id: "firefox-suggest-dismissal-acknowledgment-all-mdn",
         };
-        controller.removeResult(result);
+        view.controller.removeResult(result);
         break;
     }
   }
+
+  #suggestionsMap = null;
 }

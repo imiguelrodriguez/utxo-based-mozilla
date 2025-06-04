@@ -61,7 +61,7 @@ class UnknownSignedEntryType(Exception):
         return 'Unknown SignedEntry type: "%s"' % str(self.signedEntry)
 
 
-class SignedEntry:
+class SignedEntry(object):
     """Base class for CT entries. Use PrecertEntry or
     X509Entry."""
 
@@ -81,7 +81,7 @@ class X509Entry(SignedEntry):
         self.certificate = certificate
 
 
-class SCT:
+class SCT(object):
     """SCT represents a Signed Certificate Timestamp."""
 
     def __init__(self, key, date, signedEntry):

@@ -5,6 +5,10 @@
 
 /* import-globals-from /toolkit/content/preferencesBindings.js */
 
+document
+  .querySelector("dialog")
+  .addEventListener("dialoghelp", window.top.openPrefsHelp);
+
 Preferences.addAll([
   { id: "privacy.clearOnShutdown.history", type: "bool" },
   { id: "privacy.clearOnShutdown.formdata", type: "bool" },

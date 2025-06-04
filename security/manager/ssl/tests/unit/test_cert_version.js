@@ -51,7 +51,7 @@ function checkEndEntity(cert, expectedResult) {
     certdb,
     cert,
     expectedResult,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
 }
 
@@ -60,7 +60,7 @@ function checkIntermediate(cert, expectedResult) {
     certdb,
     cert,
     expectedResult,
-    Ci.nsIX509CertDB.verifyUsageTLSServerCA
+    certificateUsageSSLCA
   );
 }
 

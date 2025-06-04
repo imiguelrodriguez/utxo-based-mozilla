@@ -195,10 +195,7 @@ NS_IMETHODIMP nsWifiMonitor::StartWatching(nsIWifiListener* aListener,
     return NS_ERROR_NULL_POINTER;
   }
 
-  if (!mListeners.InsertOrUpdate(aListener, WifiListenerData(aForcePolling),
-                                 mozilla::fallible)) {
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
+  mListeners.AppendElement(WifiListenerHolder(aListener, aForcePolling));
 
   // Run a new scan to update the new listener.  If we were polling then
   // stop that polling and start a new polling interval now.
@@ -221,16 +218,21 @@ NS_IMETHODIMP nsWifiMonitor::StopWatching(nsIWifiListener* aListener) {
     return NS_ERROR_NULL_POINTER;
   }
 
-  auto maybeData = mListeners.MaybeGet(aListener);
-  if (!maybeData) {
+  auto idx = mListeners.IndexOf(
+      WifiListenerHolder(aListener), 0,
+      [](const WifiListenerHolder& elt, const WifiListenerHolder& toRemove) {
+        return toRemove.mListener == elt.mListener ? 0 : 1;
+      });
+
+  if (idx == nsTArray<WifiListenerHolder>::NoIndex) {
     return NS_ERROR_INVALID_ARG;
   }
 
-  if (maybeData->mShouldPoll) {
+  if (mListeners[idx].mShouldPoll) {
     --mNumPollingListeners;
   }
 
-  mListeners.Remove(aListener);
+  mListeners.RemoveElementAt(idx);
 
   if (!ShouldPoll()) {
     // Stop polling (if we were).
@@ -374,41 +376,27 @@ nsresult nsWifiMonitor::DoScan() {
           mLastAccessPoints.Clone(), accessPointsChanged));
 }
 
-template <typename CallbackFn>
-nsresult nsWifiMonitor::NotifyListeners(CallbackFn&& aCallback) {
-  // Listeners may (un)register other listeners while we iterate,
-  // so we iterate over a copy and re-check membership as we go.
-  // Iteration order is not important.
-  auto listenersCopy(mListeners.Clone());
-  for (auto iter = listenersCopy.begin(); iter != listenersCopy.end(); ++iter) {
-    auto maybeIter = mListeners.MaybeGet(iter->GetKey());
-    if (maybeIter) {
-      aCallback(iter->GetKey(), *maybeIter);
-    }
-  }
-  return NS_OK;
-}
-
 nsresult nsWifiMonitor::CallWifiListeners(
     const nsTArray<RefPtr<nsIWifiAccessPoint>>& aAccessPoints,
     bool aAccessPointsChanged) {
   MOZ_ASSERT(NS_IsMainThread());
   LOG(("Sending wifi access points to the listeners"));
-  return NotifyListeners(
-      [&](nsIWifiListener* aListener, WifiListenerData& aListenerData) {
-        if (!aListenerData.mHasSentData || aAccessPointsChanged) {
-          aListenerData.mHasSentData = true;
-          aListener->OnChange(aAccessPoints);
-        }
-      });
+  for (auto& listener : mListeners) {
+    if (!listener.mHasSentData || aAccessPointsChanged) {
+      listener.mHasSentData = true;
+      listener.mListener->OnChange(aAccessPoints);
+    }
+  }
+  return NS_OK;
 }
 
 nsresult nsWifiMonitor::PassErrorToWifiListeners(nsresult rv) {
   MOZ_ASSERT(NS_IsMainThread());
   LOG(("About to send error to the wifi listeners"));
-  return NotifyListeners([&](nsIWifiListener* aListener, WifiListenerData&) {
-    aListener->OnError(rv);
-  });
+  for (const auto& listener : mListeners) {
+    listener.mListener->OnError(rv);
+  }
+  return NS_OK;
 }
 
 bool nsWifiMonitor::GetHasWifiAdapter() {

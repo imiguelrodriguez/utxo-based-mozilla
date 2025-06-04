@@ -15,25 +15,9 @@ ChromeUtils.defineESModuleGetters(lazy, {
 });
 
 // These prefs are relative to the `browser.urlbar` branch.
-const ENABLED_PREF = "suggest.quickactions";
+const ENABLED_PREF = "quickactions.enabled";
 const MATCH_IN_PHRASE_PREF = "quickactions.matchInPhrase";
 const MIN_SEARCH_PREF = "quickactions.minimumSearchString";
-
-/**
- * @typedef QuickActionsDefinition
- * @property {string[]} commands
- *   The possible typed entries that this command will be displayed for.
- * @property {string} icon
- *   The URI of the icon associated with this command.
- * @property {string} label
- *   The id of the label for the result element.
- * @property {() => boolean} [isVisible]
- *   A function to call to check if this action should be visible or not.
- * @property {() => null|{focusContent: boolean}} onPick
- *   The function to call when the quick action is picked. It may return an object
- *   with property focusContent to indicate if the content area should be focussed
- *   after the pick.
- */
 
 /**
  * A provider that matches the urlbar input to built in actions.
@@ -45,7 +29,7 @@ class ProviderQuickActions extends ActionsProvider {
 
   isActive(queryContext) {
     return (
-      lazy.UrlbarPrefs.get(ENABLED_PREF) &&
+      lazy.UrlbarPrefs.getScotchBonnetPref(ENABLED_PREF) &&
       !queryContext.searchMode &&
       queryContext.trimmedSearchString.length < 50 &&
       queryContext.trimmedSearchString.length >=
@@ -53,7 +37,7 @@ class ProviderQuickActions extends ActionsProvider {
     );
   }
 
-  async queryActions(queryContext) {
+  async queryAction(queryContext) {
     let input = queryContext.trimmedLowerCaseSearchString;
     let results = await this.getActions(input);
 
@@ -75,18 +59,15 @@ class ProviderQuickActions extends ActionsProvider {
       return null;
     }
 
-    return results.map(key => {
-      let action = this.#actions.get(key);
-      return new ActionsResult({
-        key,
-        l10nId: action.label,
-        icon: action.icon,
-        dataset: {
-          action: key,
-          inputLength: queryContext.trimmedSearchString.length,
-        },
-        onPick: action.onPick,
-      });
+    let action = this.#actions.get(results[0]);
+    return new ActionsResult({
+      key: results[0],
+      l10nId: action.label,
+      icon: action.icon,
+      dataset: {
+        action: results[0],
+        inputLength: queryContext.trimmedSearchString.length,
+      },
     });
   }
 
@@ -102,7 +83,11 @@ class ProviderQuickActions extends ActionsProvider {
   pickAction(_queryContext, _controller, element) {
     let action = element.dataset.action;
     let inputLength = Math.min(element.dataset.inputLength, 10);
-    Glean.urlbarQuickaction.picked[`${action}-${inputLength}`].add(1);
+    Services.telemetry.keyedScalarAdd(
+      `quickaction.picked`,
+      `${action}-${inputLength}`,
+      1
+    );
     let options = this.#actions.get(action).onPick();
     if (options?.focusContent) {
       element.ownerGlobal.gBrowser.selectedBrowser.focus();
@@ -113,7 +98,7 @@ class ProviderQuickActions extends ActionsProvider {
    * Adds a new QuickAction.
    *
    * @param {string} key A key to identify this action.
-   * @param {QuickActionsDefinition} definition An object that describes the action.
+   * @param {string} definition An object that describes the action.
    */
   addAction(key, definition) {
     this.#actions.set(key, definition);
@@ -149,25 +134,13 @@ class ProviderQuickActions extends ActionsProvider {
     });
   }
 
-  /**
-   * A map from keywords to an action.
-   *
-   * @type {Map<string, string>}
-   */
+  // A map from keywords to an action.
   #keywords = new Map();
 
-  /**
-   * A map of all prefixes to an array of actions.
-   *
-   * @type {Map<string, string[]>}
-   */
+  // A map of all prefixes to an array of actions.
   #prefixes = new Map();
 
-  /**
-   * The actions that have been added.
-   *
-   * @type {Map<string, QuickActionsDefinition>}
-   */
+  // The actions that have been added.
   #actions = new Map();
 
   #loopOverPrefixes(commands, fun) {

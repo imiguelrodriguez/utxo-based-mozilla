@@ -22,10 +22,7 @@ const l10n = new Localization(
 
 add_setup(async function setup() {
   await SpecialPowers.pushPrefEnv({
-    set: [
-      ["test.wait300msAfterTabSwitch", true],
-      ["extensions.originControls.grantByDefault", false],
-    ],
+    set: [["extensions.originControls.grantByDefault", false]],
   });
 });
 
@@ -175,9 +172,7 @@ async function testOriginControls(
   switch (contextMenuId) {
     case "toolbar-context-menu": {
       let target = `#${CSS.escape(makeWidgetId(extension.id))}-BAP`;
-      buttonOrWidget = document
-        .querySelector(target)
-        .closest("toolbaritem.unified-extensions-item");
+      buttonOrWidget = document.querySelector(target).parentElement;
       menu = await openChromeContextMenu(contextMenuId, target);
       nextMenuItemClassName = "customize-context-manageExtension";
       break;

@@ -51,6 +51,11 @@ TEST_P(TlsKeyExchangeTest, Tls12ClientMlkem768x25519NotSupported) {
 }
 
 TEST_P(TlsKeyExchangeTest13, Tls12ServerMlkem768x25519NotSupported) {
+  if (variant_ == ssl_variant_datagram) {
+    /* Bug 1874451 - reenable this test */
+    return;
+  }
+
   EnsureKeyShareSetup();
 
   client_->SetVersionRange(SSL_LIBRARY_VERSION_TLS_1_2,
@@ -132,6 +137,10 @@ static void CheckECDHShareReuse(
 }
 
 TEST_P(TlsKeyExchangeTest13, Mlkem768x25519ShareReuseFirst) {
+  if (variant_ == ssl_variant_datagram) {
+    /* Bug 1874451 - reenable this test */
+    return;
+  }
   EnsureKeyShareSetup();
   ConfigNamedGroups({ssl_grp_kem_mlkem768x25519, ssl_grp_ec_curve25519});
   EXPECT_EQ(SECSuccess, SSL_SendAdditionalKeyShares(client_->ssl_fd(), 1));
@@ -144,6 +153,10 @@ TEST_P(TlsKeyExchangeTest13, Mlkem768x25519ShareReuseFirst) {
 }
 
 TEST_P(TlsKeyExchangeTest13, Mlkem768x25519ShareReuseSecond) {
+  if (variant_ == ssl_variant_datagram) {
+    /* Bug 1874451 - reenable this test */
+    return;
+  }
   EnsureKeyShareSetup();
   ConfigNamedGroups({ssl_grp_ec_curve25519, ssl_grp_kem_mlkem768x25519});
   EXPECT_EQ(SECSuccess, SSL_SendAdditionalKeyShares(client_->ssl_fd(), 1));

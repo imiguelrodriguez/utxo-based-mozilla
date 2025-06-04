@@ -11,17 +11,14 @@ const { EnterprisePolicyTesting, PoliciesPrefTracker } =
   );
 
 ChromeUtils.defineESModuleGetters(this, {
-  DoHConfigController: "resource://gre/modules/DoHConfig.sys.mjs",
-  DoHController: "resource://gre/modules/DoHController.sys.mjs",
+  DoHConfigController: "resource:///modules/DoHConfig.sys.mjs",
+  DoHController: "resource:///modules/DoHController.sys.mjs",
   DoHTestUtils: "resource://testing-common/DoHTestUtils.sys.mjs",
 });
 
 const { MockRegistrar } = ChromeUtils.importESModule(
   "resource://testing-common/MockRegistrar.sys.mjs"
 );
-const gDNSOverride = Cc[
-  "@mozilla.org/network/native-dns-override;1"
-].getService(Ci.nsINativeDNSResolverOverride);
 
 const TRR_MODE_PREF = "network.trr.mode";
 const TRR_URI_PREF = "network.trr.uri";
@@ -43,7 +40,9 @@ const defaultPrefValues = Object.freeze({
 // is in progress, before we've actually disabled TRR, and would cause a crash
 // due to connecting to a non-local IP.
 // To prevent that we override the IP to a local address.
-gDNSOverride.addIPOverride("mozilla.cloudflare-dns.com", "127.0.0.1");
+Cc["@mozilla.org/network/native-dns-override;1"]
+  .getService(Ci.nsINativeDNSResolverOverride)
+  .addIPOverride("mozilla.cloudflare-dns.com", "127.0.0.1");
 
 async function clearEvents() {
   Services.telemetry.clearEvents();
@@ -68,17 +67,6 @@ async function getEvent(filter1, filter2) {
   return event;
 }
 
-// Mock parental controls service in order to enable it
-let parentalControlsService = {
-  parentalControlsEnabled: true,
-  QueryInterface: ChromeUtils.generateQI(["nsIParentalControlsService"]),
-};
-let mockParentalControlsServiceCid = undefined;
-
-async function setMockParentalControlEnabled(aEnabled) {
-  parentalControlsService.parentalControlsEnabled = aEnabled;
-}
-
 async function resetPrefs() {
   await DoHTestUtils.resetRemoteSettingsConfig();
   await DoHController._uninit();
@@ -98,30 +86,14 @@ Services.prefs.setStringPref("network.trr.confirmationNS", "skip");
 registerCleanupFunction(async () => {
   await resetPrefs();
   Services.prefs.clearUserPref("network.trr.confirmationNS");
-
-  if (mockParentalControlsServiceCid != undefined) {
-    MockRegistrar.unregister(mockParentalControlsServiceCid);
-    mockParentalControlsServiceCid = undefined;
-    Services.dns.reloadParentalControlEnabled();
-  }
 });
 
 add_setup(async function setup() {
-  mockParentalControlsServiceCid = MockRegistrar.register(
-    "@mozilla.org/parental-controls-service;1",
-    parentalControlsService
-  );
-  Services.dns.reloadParentalControlEnabled();
-
   await SpecialPowers.pushPrefEnv({
     set: [["toolkit.telemetry.testing.overrideProductsCheck", true]],
   });
 
   await DoHTestUtils.resetRemoteSettingsConfig();
-
-  gDNSOverride.addIPOverride("use-application-dns.net.", "4.1.1.1");
-
-  setMockParentalControlEnabled(false);
 });
 
 function waitForPrefObserver(name) {
@@ -136,6 +108,27 @@ function waitForPrefObserver(name) {
     };
     Services.prefs.addObserver(name, observer);
   });
+}
+
+// Mock parental controls service in order to enable it
+let parentalControlsService = {
+  parentalControlsEnabled: true,
+  QueryInterface: ChromeUtils.generateQI(["nsIParentalControlsService"]),
+};
+let mockParentalControlsServiceCid = undefined;
+
+async function setMockParentalControlEnabled(aEnabled) {
+  if (mockParentalControlsServiceCid != undefined) {
+    MockRegistrar.unregister(mockParentalControlsServiceCid);
+    mockParentalControlsServiceCid = undefined;
+  }
+  if (aEnabled) {
+    mockParentalControlsServiceCid = MockRegistrar.register(
+      "@mozilla.org/parental-controls-service;1",
+      parentalControlsService
+    );
+  }
+  Services.dns.reloadParentalControlEnabled();
 }
 
 add_task(async function testParentalControls() {
@@ -512,10 +505,6 @@ async function testWithProperties(props, startTime) {
     is(modeValue, props.expectedModeValue, "mode pref has expected value");
   }
 
-  if (props.hasOwnProperty(ROLLOUT_ENABLED_PREF)) {
-    Services.prefs.clearUserPref(ROLLOUT_ENABLED_PREF);
-  }
-
   gBrowser.removeCurrentTab();
   info(Date.now() - startTime + ": testWithProperties: fin");
 }
@@ -857,8 +846,7 @@ add_task(async function testRemoteSettingsEnable() {
 
   let status = doc.getElementById("dohStatus");
   await TestUtils.waitForCondition(
-    () => document.l10n.getAttributes(status).args.status == "Active",
-    "Waiting for remote settings to be processed"
+    () => document.l10n.getAttributes(status).args.status == "Active"
   );
   is(
     document.l10n.getAttributes(status).args.status,
@@ -875,8 +863,7 @@ add_task(async function testRemoteSettingsEnable() {
   await TestUtils.waitForCondition(
     () =>
       document.l10n.getAttributes(provider).args.name ==
-      DoHConfigController.currentConfig.providerList[0].UIName,
-    "waiting for correct UI name"
+      DoHConfigController.currentConfig.providerList[0].UIName
   );
   is(
     document.l10n.getAttributes(provider).args.name,
@@ -889,16 +876,14 @@ add_task(async function testRemoteSettingsEnable() {
   let win = doc.ownerGlobal;
   EventUtils.synthesizeMouseAtCenter(option, {}, win);
 
-  await TestUtils.waitForCondition(
-    () => Services.prefs.prefHasUserValue("doh-rollout.disable-heuristics"),
-    "Waiting for disable-heuristics"
+  await TestUtils.waitForCondition(() =>
+    Services.prefs.prefHasUserValue("doh-rollout.disable-heuristics")
   );
   is(provider.hidden, false);
   await TestUtils.waitForCondition(
     () =>
       document.l10n.getAttributes(provider).args.name ==
-      DoHConfigController.currentConfig.providerList[0].UIName,
-    "waiting for correct UI name"
+      DoHConfigController.currentConfig.providerList[0].UIName
   );
   is(
     document.l10n.getAttributes(provider).args.name,
@@ -914,10 +899,7 @@ add_task(async function testRemoteSettingsEnable() {
   option.scrollIntoView();
   win = doc.ownerGlobal;
   EventUtils.synthesizeMouseAtCenter(option, {}, win);
-  await TestUtils.waitForCondition(
-    () => status.innerHTML == "Status: Off",
-    "Waiting for Status OFF"
-  );
+  await TestUtils.waitForCondition(() => status.innerHTML == "Status: Off");
   is(
     Services.prefs.getIntPref("network.trr.mode"),
     Ci.nsIDNSService.MODE_TRROFF
@@ -925,16 +907,6 @@ add_task(async function testRemoteSettingsEnable() {
   is(provider.hidden, true, "Expecting provider to be hidden when DoH is off");
 
   gBrowser.removeCurrentTab();
-
-  await DoHTestUtils.loadRemoteSettingsConfig({
-    providers: "",
-    rolloutEnabled: false,
-    steeringEnabled: false,
-    steeringProviders: "",
-    autoDefaultEnabled: false,
-    autoDefaultProviders: "",
-    id: "global",
-  });
 });
 
 add_task(async function testEnterprisePolicy() {
@@ -959,8 +931,6 @@ add_task(async function testEnterprisePolicy() {
     });
 
     gBrowser.removeCurrentTab();
-    // Set an empty policy before stopping the policy tracker
-    await EnterprisePolicyTesting.setupPolicyEngineWithJson({});
     EnterprisePolicyTesting.resetRunOnceState();
     PoliciesPrefTracker.stop();
   }
@@ -1091,4 +1061,46 @@ add_task(async function testEnterprisePolicy() {
       });
     }
   );
+});
+
+add_task(async function clickWarnButton() {
+  Services.prefs.setBoolPref(
+    "network.trr_ui.show_fallback_warning_option",
+    true
+  );
+
+  await openPreferencesViaOpenPreferencesAPI("privacy", { leaveOpen: true });
+  let doc = gBrowser.selectedBrowser.contentDocument;
+
+  await clearEvents();
+  let checkbox = doc.getElementById("dohWarnCheckbox1");
+  checkbox.click();
+
+  let event = await getEvent("security.doh.settings", "warn_checkbox");
+  Assert.deepEqual(event, [
+    "security.doh.settings",
+    "warn_checkbox",
+    "checkbox",
+    "true",
+  ]);
+  Assert.equal(
+    Services.prefs.getBoolPref("network.trr.display_fallback_warning"),
+    true,
+    "Clicking the checkbox should change the pref"
+  );
+
+  checkbox.click();
+  event = await getEvent("security.doh.settings", "warn_checkbox");
+  Assert.deepEqual(event, [
+    "security.doh.settings",
+    "warn_checkbox",
+    "checkbox",
+    "false",
+  ]);
+  Assert.equal(
+    Services.prefs.getBoolPref("network.trr.display_fallback_warning"),
+    false,
+    "Clicking the checkbox should change the pref"
+  );
+  gBrowser.removeCurrentTab();
 });

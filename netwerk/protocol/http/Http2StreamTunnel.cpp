@@ -18,8 +18,6 @@
 #include "nsHttpConnectionInfo.h"
 #include "nsQueryObject.h"
 #include "nsProxyRelease.h"
-#include "mozilla/glean/NetwerkProtocolHttpMetrics.h"
-#include "Http2Session.h"
 
 namespace mozilla::net {
 
@@ -64,7 +62,7 @@ NS_INTERFACE_MAP_BEGIN(Http2StreamTunnel)
   NS_INTERFACE_MAP_ENTRY(nsITransport)
   NS_INTERFACE_MAP_ENTRY(nsISocketTransport)
   NS_INTERFACE_MAP_ENTRY(nsISupportsWeakReference)
-NS_INTERFACE_MAP_END
+NS_INTERFACE_MAP_END_INHERITING(Http2StreamTunnel)
 
 Http2StreamTunnel::Http2StreamTunnel(Http2Session* session, int32_t priority,
                                      uint64_t bcId,
@@ -83,7 +81,7 @@ void Http2StreamTunnel::ClearTransactionsBlockedOnTunnel() {
   if (NS_FAILED(rv)) {
     LOG3(
         ("Http2StreamTunnel::ClearTransactionsBlockedOnTunnel %p\n"
-         "  ProcessPendingQ failed: %" PRIX32,
+         "  ProcessPendingQ failed: %08x\n",
          this, static_cast<uint32_t>(rv)));
   }
 }
@@ -304,7 +302,7 @@ Http2StreamTunnel::GetStatus(nsresult* aStatus) {
 
 already_AddRefed<nsHttpConnection> Http2StreamTunnel::CreateHttpConnection(
     nsAHttpTransaction* httpTransaction, nsIInterfaceRequestor* aCallbacks,
-    PRIntervalTime aRtt, bool aIsExtendedCONNECT) {
+    PRIntervalTime aRtt, bool aIsWebSocket) {
   mInput = new InputStreamTunnel(this);
   mOutput = new OutputStreamTunnel(this);
   RefPtr<nsHttpConnection> conn = new nsHttpConnection();
@@ -313,7 +311,7 @@ already_AddRefed<nsHttpConnection> Http2StreamTunnel::CreateHttpConnection(
   nsresult rv =
       conn->Init(httpTransaction->ConnectionInfo(),
                  gHttpHandler->ConnMgr()->MaxRequestDelay(), this, mInput,
-                 mOutput, true, NS_OK, aCallbacks, aRtt, aIsExtendedCONNECT);
+                 mOutput, true, NS_OK, aCallbacks, aRtt, aIsWebSocket);
   MOZ_RELEASE_ASSERT(NS_SUCCEEDED(rv));
   mTransaction = httpTransaction;
   return conn.forget();
@@ -358,7 +356,7 @@ nsresult Http2StreamTunnel::GenerateHeaders(nsCString& aCompressedData,
       aCompressedData.Length() * 100 /
       (11 + authorityHeader.Length() + mFlatHttpRequestHeaders.Length());
 
-  glean::spdy::syn_ratio.AccumulateSingleSample(ratio);
+  Telemetry::Accumulate(Telemetry::SPDY_SYN_RATIO, ratio);
 
   return NS_OK;
 }
@@ -749,7 +747,7 @@ nsresult Http2StreamWebSocket::GenerateHeaders(nsCString& aCompressedData,
       aCompressedData.Length() * 100 /
       (11 + authorityHeader.Length() + mFlatHttpRequestHeaders.Length());
 
-  glean::spdy::syn_ratio.AccumulateSingleSample(ratio);
+  Telemetry::Accumulate(Telemetry::SPDY_SYN_RATIO, ratio);
   return NS_OK;
 }
 

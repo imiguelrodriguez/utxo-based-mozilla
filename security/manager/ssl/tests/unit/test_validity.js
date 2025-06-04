@@ -64,7 +64,7 @@ async function doEVTest(
   await checkEVStatus(
     certDB,
     certFromFile(`${endEntityCertFileName}.pem`),
-    Ci.nsIX509CertDB.verifyUsageTLSServer,
+    certificateUsageSSLServer,
     expectedResult
   );
 

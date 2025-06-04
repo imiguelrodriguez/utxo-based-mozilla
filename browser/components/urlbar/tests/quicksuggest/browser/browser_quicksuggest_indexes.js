@@ -42,21 +42,13 @@ add_setup(async function () {
   // suggestions so the suggested index of sponsored suggestions should be -1.
   await SearchTestUtils.installSearchExtension({}, { setAsDefault: true });
 
-  let isAmp = suggestion => suggestion.iab_category == "22 - Shopping";
   await QuickSuggestTestUtils.ensureQuickSuggestInit({
     remoteSettingsRecords: [
       {
-        collection: QuickSuggestTestUtils.RS_COLLECTION.AMP,
-        type: QuickSuggestTestUtils.RS_TYPE.AMP,
-        attachment: REMOTE_SETTINGS_RESULTS.filter(isAmp),
-      },
-      {
-        collection: QuickSuggestTestUtils.RS_COLLECTION.OTHER,
-        type: QuickSuggestTestUtils.RS_TYPE.WIKIPEDIA,
-        attachment: REMOTE_SETTINGS_RESULTS.filter(s => !isAmp(s)),
+        type: "data",
+        attachment: REMOTE_SETTINGS_RESULTS,
       },
     ],
-    prefs: [["quicksuggest.ampTopPickCharThreshold", 0]],
   });
 
   registerCleanupFunction(async () => {

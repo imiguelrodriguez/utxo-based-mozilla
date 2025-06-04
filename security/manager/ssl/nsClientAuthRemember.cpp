@@ -90,11 +90,6 @@ nsClientAuthRememberService::ForgetRememberedDecision(const nsACString& key) {
   if (NS_FAILED(rv)) {
     return rv;
   }
-  rv = mClientAuthRememberList->Remove(PromiseFlatCString(key),
-                                       nsIDataStorage::DataType::Temporary);
-  if (NS_FAILED(rv)) {
-    return rv;
-  }
   nsCOMPtr<nsINSSComponent> nssComponent(do_GetService(NS_NSSCOMPONENT_CID));
   if (!nssComponent) {
     return NS_ERROR_NOT_AVAILABLE;
@@ -117,8 +112,7 @@ nsClientAuthRememberService::GetDecisions(
     if (NS_FAILED(rv)) {
       return rv;
     }
-    if (type == nsIDataStorage::DataType::Persistent ||
-        type == nsIDataStorage::DataType::Temporary) {
+    if (type == nsIDataStorage::DataType::Persistent) {
       nsAutoCString key;
       rv = decision->GetKey(key);
       if (NS_FAILED(rv)) {
@@ -160,7 +154,7 @@ nsClientAuthRememberService::DeleteDecisionsByHost(
   if (!aOriginAttributes.isObject() || !attrs.Init(aCx, aOriginAttributes)) {
     return NS_ERROR_INVALID_ARG;
   }
-  bool isPrivateContext = attrs.IsPrivateBrowsing();
+  nsIDataStorage::DataType storageType = GetDataStorageType(attrs);
 
   nsTArray<RefPtr<nsIDataStorageItem>> decisions;
   nsresult rv = mClientAuthRememberList->GetAll(decisions);
@@ -174,8 +168,7 @@ nsClientAuthRememberService::DeleteDecisionsByHost(
     if (NS_FAILED(rv)) {
       return rv;
     }
-    bool isPrivateDecision = type == nsIDataStorage::DataType::Private;
-    if (isPrivateContext == isPrivateDecision) {
+    if (type == storageType) {
       nsAutoCString key;
       rv = decision->GetKey(key);
       if (NS_FAILED(rv)) {
@@ -208,26 +201,20 @@ nsClientAuthRememberService::DeleteDecisionsByHost(
 NS_IMETHODIMP
 nsClientAuthRememberService::RememberDecisionScriptable(
     const nsACString& aHostName, JS::Handle<JS::Value> aOriginAttributes,
-    nsIX509Cert* aClientCert, Duration aDuration, JSContext* aCx) {
+    nsIX509Cert* aClientCert, JSContext* aCx) {
   OriginAttributes attrs;
   if (!aOriginAttributes.isObject() || !attrs.Init(aCx, aOriginAttributes)) {
     return NS_ERROR_INVALID_ARG;
   }
-  return RememberDecision(aHostName, attrs, aClientCert, aDuration);
+  return RememberDecision(aHostName, attrs, aClientCert);
 }
 
 NS_IMETHODIMP
 nsClientAuthRememberService::RememberDecision(
     const nsACString& aHostName, const OriginAttributes& aOriginAttributes,
-    nsIX509Cert* aClientCert, Duration aDuration) {
+    nsIX509Cert* aClientCert) {
   if (aHostName.IsEmpty()) {
     return NS_ERROR_INVALID_ARG;
-  }
-
-  // If a decision is to only be used once, it doesn't need to be remembered in
-  // any way.
-  if (aDuration == nsIClientAuthRememberService::Duration::Once) {
-    return NS_OK;
   }
 
   // aClientCert == nullptr means: remember that user does not want to use a
@@ -238,10 +225,10 @@ nsClientAuthRememberService::RememberDecision(
     if (NS_FAILED(rv)) {
       return rv;
     }
-    return AddEntryToList(aHostName, aOriginAttributes, dbkey, aDuration);
+    return AddEntryToList(aHostName, aOriginAttributes, dbkey);
   }
   return AddEntryToList(aHostName, aOriginAttributes,
-                        nsClientAuthRemember::SentinelValue, aDuration);
+                        nsClientAuthRemember::SentinelValue);
 }
 
 #ifdef XP_MACOSX
@@ -361,28 +348,19 @@ nsClientAuthRememberService::HasRememberedDecision(
   if (NS_FAILED(rv)) {
     return rv;
   }
+  nsIDataStorage::DataType storageType = GetDataStorageType(aOriginAttributes);
 
-  nsTArray<nsIDataStorage::DataType> typesToTry;
-  if (aOriginAttributes.IsPrivateBrowsing()) {
-    typesToTry.AppendElement(nsIDataStorage::DataType::Private);
-  } else {
-    typesToTry.AppendElement(nsIDataStorage::DataType::Persistent);
-    typesToTry.AppendElement(nsIDataStorage::DataType::Temporary);
+  nsAutoCString listEntry;
+  rv = mClientAuthRememberList->Get(entryKey, storageType, listEntry);
+  if (NS_FAILED(rv) && rv != NS_ERROR_NOT_AVAILABLE) {
+    return rv;
   }
-
-  for (const auto& storageType : typesToTry) {
-    nsAutoCString listEntry;
-    rv = mClientAuthRememberList->Get(entryKey, storageType, listEntry);
-    if (NS_FAILED(rv) && rv != NS_ERROR_NOT_AVAILABLE) {
-      return rv;
+  if (NS_SUCCEEDED(rv) && !listEntry.IsEmpty()) {
+    if (!listEntry.Equals(nsClientAuthRemember::SentinelValue)) {
+      aCertDBKey = listEntry;
     }
-    if (NS_SUCCEEDED(rv) && !listEntry.IsEmpty()) {
-      if (!listEntry.Equals(nsClientAuthRemember::SentinelValue)) {
-        aCertDBKey = listEntry;
-      }
-      *aRetVal = true;
-      return NS_OK;
-    }
+    *aRetVal = true;
+    return NS_OK;
   }
 
 #ifdef XP_MACOSX
@@ -412,7 +390,7 @@ nsClientAuthRememberService::HasRememberedDecisionScriptable(
 
 nsresult nsClientAuthRememberService::AddEntryToList(
     const nsACString& aHostName, const OriginAttributes& aOriginAttributes,
-    const nsACString& aDBKey, Duration aDuration) {
+    const nsACString& aDBKey) {
   nsAutoCString entryKey;
   RefPtr<nsClientAuthRemember> entry(
       new nsClientAuthRemember(aHostName, aOriginAttributes));
@@ -420,17 +398,7 @@ nsresult nsClientAuthRememberService::AddEntryToList(
   if (NS_FAILED(rv)) {
     return rv;
   }
-
-  nsIDataStorage::DataType storageType;
-  if (aOriginAttributes.IsPrivateBrowsing()) {
-    storageType = nsIDataStorage::DataType::Private;
-  } else if (aDuration == nsIClientAuthRememberService::Duration::Permanent) {
-    storageType = nsIDataStorage::DataType::Persistent;
-  } else if (aDuration == nsIClientAuthRememberService::Duration::Session) {
-    storageType = nsIDataStorage::DataType::Temporary;
-  } else {
-    return NS_ERROR_INVALID_ARG;
-  }
+  nsIDataStorage::DataType storageType = GetDataStorageType(aOriginAttributes);
 
   nsCString tmpDbKey(aDBKey);
   rv = mClientAuthRememberList->Put(entryKey, tmpDbKey, storageType);
@@ -451,4 +419,12 @@ bool nsClientAuthRememberService::IsPrivateBrowsingKey(
     suffix = entryKey;
   }
   return OriginAttributes::IsPrivateBrowsing(suffix);
+}
+
+nsIDataStorage::DataType nsClientAuthRememberService::GetDataStorageType(
+    const OriginAttributes& aOriginAttributes) {
+  if (aOriginAttributes.IsPrivateBrowsing()) {
+    return nsIDataStorage::DataType::Private;
+  }
+  return nsIDataStorage::DataType::Persistent;
 }

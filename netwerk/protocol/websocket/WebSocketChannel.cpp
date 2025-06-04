@@ -20,10 +20,11 @@
 #include "mozilla/ScopeExit.h"
 #include "mozilla/StaticMutex.h"
 #include "mozilla/StaticPrefs_privacy.h"
-#include "mozilla/glean/NetwerkProtocolWebsocketMetrics.h"
+#include "mozilla/Telemetry.h"
 #include "mozilla/TimeStamp.h"
 #include "mozilla/Utf8.h"
 #include "mozilla/net/WebSocketEventService.h"
+#include "nsAlgorithm.h"
 #include "nsCRT.h"
 #include "nsCharSeparatedTokenizer.h"
 #include "nsComponentManagerUtils.h"
@@ -544,8 +545,10 @@ class nsWSAdmissionManager {
 
   int32_t IndexOf(nsCString& aAddress, nsCString& aOriginSuffix) {
     for (uint32_t i = 0; i < mQueue.Length(); i++) {
-      if (aAddress == mQueue[i]->mAddress &&
-          aOriginSuffix == mQueue[i]->mOriginSuffix) {
+      bool isPartitioned = StaticPrefs::privacy_partition_network_state() ||
+                           StaticPrefs::privacy_firstparty_isolate();
+      if (aAddress == (mQueue[i])->mAddress &&
+          (!isPartitioned || aOriginSuffix == (mQueue[i])->mOriginSuffix)) {
         return i;
       }
     }
@@ -554,9 +557,7 @@ class nsWSAdmissionManager {
 
   int32_t IndexOf(WebSocketChannel* aChannel) {
     for (uint32_t i = 0; i < mQueue.Length(); i++) {
-      if (aChannel == mQueue[i]->mChannel) {
-        return i;
-      }
+      if (aChannel == (mQueue[i])->mChannel) return i;
     }
     return -1;
   }
@@ -1436,21 +1437,15 @@ bool WebSocketChannel::UpdateReadBuffer(uint8_t* buffer, uint32_t count,
     mFramePtr = mBuffer + accumulatedFragments;
   } else {
     // existing buffer is not sufficient, extend it
-    uint32_t newBufferSize = mBufferSize;
-    newBufferSize += count + 8192 + mBufferSize / 3;
-    ptrdiff_t frameIndex = mFramePtr - mBuffer;
-    LOG(("WebSocketChannel: update read buffer extended to %u\n",
-         newBufferSize));
-    uint8_t* newBuffer = (uint8_t*)realloc(mBuffer, newBufferSize);
-    if (!newBuffer) {
-      // Reallocation failed.
+    mBufferSize += count + 8192 + mBufferSize / 3;
+    LOG(("WebSocketChannel: update read buffer extended to %u\n", mBufferSize));
+    uint8_t* old = mBuffer;
+    mBuffer = (uint8_t*)realloc(mBuffer, mBufferSize);
+    if (!mBuffer) {
+      mBuffer = old;
       return false;
     }
-    mBuffer = newBuffer;
-    mBufferSize = newBufferSize;
-
-    // mBuffer was reallocated, so we need to update mFramePtr
-    mFramePtr = mBuffer + frameIndex;
+    mFramePtr = mBuffer + (mFramePtr - old);
   }
 
   ::memcpy(mBuffer + mBuffered, buffer, count);
@@ -3058,7 +3053,7 @@ void WebSocketChannel::ReportConnectionTelemetry(nsresult aStatusCode) {
       (didProxy ? (1 << 0) : 0);
 
   LOG(("WebSocketChannel::ReportConnectionTelemetry() %p %d", this, value));
-  glean::websockets::handshake_type.AccumulateSingleSample(value);
+  Telemetry::Accumulate(Telemetry::WEBSOCKETS_HANDSHAKE_TYPE, value);
 }
 
 // nsIDNSListener
@@ -3448,29 +3443,29 @@ WebSocketChannel::AsyncOpenNative(nsIURI* aURI, const nsACString& aOrigin,
     rv =
         prefService->GetIntPref("network.websocket.max-message-size", &intpref);
     if (NS_SUCCEEDED(rv)) {
-      mMaxMessageSize = std::clamp(intpref, 1024, INT32_MAX);
+      mMaxMessageSize = clamped(intpref, 1024, INT32_MAX);
     }
     rv = prefService->GetIntPref("network.websocket.timeout.close", &intpref);
     if (NS_SUCCEEDED(rv)) {
-      mCloseTimeout = std::clamp(intpref, 1, 1800) * 1000;
+      mCloseTimeout = clamped(intpref, 1, 1800) * 1000;
     }
     rv = prefService->GetIntPref("network.websocket.timeout.open", &intpref);
     if (NS_SUCCEEDED(rv)) {
-      mOpenTimeout = std::clamp(intpref, 1, 1800) * 1000;
+      mOpenTimeout = clamped(intpref, 1, 1800) * 1000;
     }
     rv = prefService->GetIntPref("network.websocket.timeout.ping.request",
                                  &intpref);
     if (NS_SUCCEEDED(rv) && !mClientSetPingInterval) {
-      mPingInterval = std::clamp(intpref, 0, 86400) * 1000;
+      mPingInterval = clamped(intpref, 0, 86400) * 1000;
     }
     rv = prefService->GetIntPref("network.websocket.timeout.ping.response",
                                  &intpref);
     if (NS_SUCCEEDED(rv) && !mClientSetPingTimeout) {
-      mPingResponseTimeout = std::clamp(intpref, 1, 3600) * 1000;
+      mPingResponseTimeout = clamped(intpref, 1, 3600) * 1000;
     }
     rv = prefService->GetIntPref("network.websocket.max-connections", &intpref);
     if (NS_SUCCEEDED(rv)) {
-      mMaxConcurrentConnections = std::clamp(intpref, 1, 0xffff);
+      mMaxConcurrentConnections = clamped(intpref, 1, 0xffff);
     }
   }
 

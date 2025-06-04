@@ -51,21 +51,24 @@ async function openAboutWelcome() {
   );
   await setAboutWelcomePref(true);
 
-  sandbox.stub(AWScreenUtils, "evaluateScreenTargeting").callsFake(args => {
-    info(`evaluateScreenTargeting called with args: ${args}`);
+  sandbox
+    .stub(AWScreenUtils, "evaluateScreenTargeting")
+    .resolves(true)
     // Renders easy setup import screen as first screen to prevent pin/default dialog boxes breaking tests
-    const falseTargeting = [
-      "isRTAMO",
-      "doesAppNeedPin && (unhandledCampaignAction != 'SET_DEFAULT_BROWSER') && 'browser.shell.checkDefaultBrowser'|preferenceValue && !isDefaultBrowser",
-      "!doesAppNeedPin && (unhandledCampaignAction != 'SET_DEFAULT_BROWSER') && 'browser.shell.checkDefaultBrowser'|preferenceValue && !isDefaultBrowser",
-      "doesAppNeedPin && (!'browser.shell.checkDefaultBrowser'|preferenceValue || isDefaultBrowser || (unhandledCampaignAction == 'SET_DEFAULT_BROWSER'))",
-      "isDeviceMigration",
-    ];
-    if (falseTargeting.includes(args)) {
-      return Promise.resolve(false);
-    }
-    return Promise.resolve(true);
-  });
+    .withArgs(
+      "doesAppNeedPin && 'browser.shell.checkDefaultBrowser'|preferenceValue && !isDefaultBrowser"
+    )
+    .resolves(false)
+    .withArgs(
+      "!doesAppNeedPin && 'browser.shell.checkDefaultBrowser'|preferenceValue && !isDefaultBrowser"
+    )
+    .resolves(false)
+    .withArgs(
+      "doesAppNeedPin && (!'browser.shell.checkDefaultBrowser'|preferenceValue || isDefaultBrowser)"
+    )
+    .resolves(false)
+    .withArgs("isDeviceMigration")
+    .resolves(false);
 
   info("Opening about:welcome");
   let tab = await BrowserTestUtils.openNewForegroundTab(
@@ -74,21 +77,8 @@ async function openAboutWelcome() {
     true
   );
 
-  await ContentTask.spawn(tab.linkedBrowser, {}, async () => {
-    await ContentTaskUtils.waitForCondition(
-      () => content.document.querySelector(".AW_EASY_SETUP_ONLY_IMPORT"),
-      `Should render AW_EASY_SETUP_ONLY_IMPORT when opening about:welcome, current screen is: ${
-        content.document.querySelector(".screen")?.classList?.[1]
-      }`
-    );
-  });
-
-  registerCleanupFunction(() => {
+  registerCleanupFunction(async () => {
     BrowserTestUtils.removeTab(tab);
-    Services.prefs.clearUserPref("browser.aboutwelcome.transitions");
-    Services.prefs.clearUserPref(
-      "intl.multilingual.aboutWelcome.languageMismatchEnabled"
-    );
   });
 
   return {
@@ -145,9 +135,7 @@ async function testScreenContent(
       for (let selector of expected) {
         await ContentTaskUtils.waitForCondition(
           () => selectorIsVisible(selector),
-          `Should render ${selector} in ${experimentName}, current screen is: ${
-            content.document.querySelector(".screen")?.classList?.[1]
-          }`
+          `Should render ${selector} in ${experimentName}`
         );
       }
       for (let selector of unexpected) {
@@ -236,7 +224,7 @@ add_task(async function test_aboutwelcome_languageSwitcher_accept() {
   // Ignore the telemetry of the initial welcome screen.
   flushClickTelemetry();
 
-  await resolveLangPacks(["es-MX", "es-ES", "fr-FR"]);
+  resolveLangPacks(["es-MX", "es-ES", "fr-FR"]);
 
   await testScreenContent(
     browser,
@@ -355,8 +343,8 @@ add_task(async function test_aboutwelcome_languageSwitcher_decline() {
   // Ignore the telemetry of the initial welcome screen.
   flushClickTelemetry();
 
-  await resolveLangPacks(["es-MX", "es-ES", "fr-FR"]);
-  await resolveInstaller();
+  resolveLangPacks(["es-MX", "es-ES", "fr-FR"]);
+  resolveInstaller();
 
   await testScreenContent(
     browser,
@@ -423,7 +411,7 @@ add_task(async function test_aboutwelcome_languageSwitcher_asyncCalls() {
   );
   ok(mockable.installLangPack.notCalled);
 
-  await resolveLangPacks(["es-MX", "es-ES", "fr-FR"]);
+  resolveLangPacks(["es-MX", "es-ES", "fr-FR"]);
 
   await TestUtils.waitForCondition(
     () => mockable.installLangPack.called,
@@ -431,7 +419,7 @@ add_task(async function test_aboutwelcome_languageSwitcher_asyncCalls() {
   );
   ok(mockable.getAvailableLangpacks.called);
 
-  await resolveInstaller();
+  resolveInstaller();
 });
 
 /**
@@ -455,7 +443,7 @@ add_task(async function test_aboutwelcome_fallback_locale() {
   );
   ok(mockable.installLangPack.notCalled);
 
-  await resolveLangPacks(["en-US"]);
+  resolveLangPacks(["en-US"]);
 
   await TestUtils.waitForCondition(
     () => mockable.installLangPack.called,
@@ -463,7 +451,7 @@ add_task(async function test_aboutwelcome_fallback_locale() {
   );
   ok(mockable.getAvailableLangpacks.called);
 
-  await resolveInstaller();
+  resolveInstaller();
 });
 
 /**
@@ -482,7 +470,7 @@ add_task(async function test_aboutwelcome_languageSwitcher_noMatch() {
   await clickVisibleButton(browser, `button.primary[value="primary_button"]`);
 
   // Klingon is not supported.
-  await resolveLangPacks(["es-MX", "es-ES", "fr-FR"]);
+  resolveLangPacks(["es-MX", "es-ES", "fr-FR"]);
 
   await testScreenContent(
     browser,
@@ -528,7 +516,6 @@ add_task(async function test_aboutwelcome_languageSwitcher_bidiNotSupported() {
   );
 
   sinon.assert.notCalled(mockable.setRequestedAppLocales);
-  Services.prefs.clearUserPref("intl.multilingual.liveReloadBidirectional");
 });
 
 /**
@@ -543,7 +530,7 @@ add_task(
       systemLocale: "ar-EG", // Arabic (Egypt)
       appLocale: "en-US",
     });
-    await resolveLangPacks([]);
+    resolveLangPacks([]);
 
     const { browser } = await openAboutWelcome();
 
@@ -563,7 +550,6 @@ add_task(
     );
 
     sinon.assert.notCalled(mockable.setRequestedAppLocales);
-    Services.prefs.clearUserPref("intl.multilingual.liveReloadBidirectional");
   }
 );
 
@@ -584,7 +570,7 @@ add_task(async function test_aboutwelcome_languageSwitcher_bidiNotSupported() {
   info("Clicking the primary button to start installing the langpack.");
   await clickVisibleButton(browser, `button.primary[value="primary_button"]`);
 
-  await resolveLangPacks(["ar-EG", "es-ES", "fr-FR"]);
+  resolveLangPacks(["ar-EG", "es-ES", "fr-FR"]);
 
   await testScreenContent(
     browser,
@@ -596,7 +582,6 @@ add_task(async function test_aboutwelcome_languageSwitcher_bidiNotSupported() {
   );
 
   sinon.assert.notCalled(mockable.setRequestedAppLocales);
-  Services.prefs.clearUserPref("intl.multilingual.liveReloadBidirectional");
 });
 
 /**
@@ -614,7 +599,7 @@ add_task(async function test_aboutwelcome_languageSwitcher_cancelWaiting() {
 
   info("Clicking the primary button to start the onboarding process.");
   await clickVisibleButton(browser, `button.primary[value="primary_button"]`);
-  await resolveLangPacks(["es-MX", "es-ES", "fr-FR"]);
+  resolveLangPacks(["es-MX", "es-ES", "fr-FR"]);
 
   await testScreenContent(
     browser,
@@ -691,7 +676,7 @@ add_task(async function test_aboutwelcome_languageSwitcher_MR() {
   info("Clicking the primary button to view language switching screen.");
   await clickVisibleButton(browser, `button.primary[value="primary_button"]`);
 
-  await resolveLangPacks(["es-AR"]);
+  resolveLangPacks(["es-AR"]);
   await testScreenContent(
     browser,
     "Live language switching, asking for a language",

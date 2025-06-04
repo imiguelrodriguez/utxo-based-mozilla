@@ -16,30 +16,16 @@ add_setup(async function setup() {
   });
 });
 
-const LOAD_TYPE = {
-  CURRENT_TAB: 1,
-  NEW_TAB: 2,
-  PRE_LOADED: 3,
-};
-
 let COMMANDS_TESTS = [
-  {
-    cmd: "open view",
-    uri: "about:firefoxview",
-    loadType: LOAD_TYPE.PRE_LOADED,
-    testFun: async () => {
-      await BrowserTestUtils.waitForCondition(() => {
-        return (
-          window.gBrowser.selectedBrowser.currentURI.spec == "about:firefoxview"
-        );
-      });
-      return true;
-    },
-  },
   {
     cmd: "add-ons",
     uri: "about:addons",
     testFun: async () => isSelected("button[name=discover]"),
+  },
+  {
+    cmd: "plugins",
+    uri: "about:addons",
+    testFun: async () => isSelected("button[name=plugin]"),
   },
   {
     cmd: "extensions",
@@ -66,8 +52,26 @@ let COMMANDS_TESTS = [
       await onLoad;
     },
     uri: "about:addons",
-    loadType: LOAD_TYPE.NEW_TAB,
+    isNewTab: true,
     testFun: async () => isSelected("button[name=discover]"),
+  },
+  {
+    cmd: "plugins",
+    setup: async () => {
+      const onLoad = BrowserTestUtils.browserLoaded(
+        gBrowser.selectedBrowser,
+        false,
+        "https://example.com/"
+      );
+      BrowserTestUtils.startLoadingURIString(
+        gBrowser.selectedBrowser,
+        "https://example.com/"
+      );
+      await onLoad;
+    },
+    uri: "about:addons",
+    isNewTab: true,
+    testFun: async () => isSelected("button[name=plugin]"),
   },
   {
     cmd: "extensions",
@@ -84,7 +88,7 @@ let COMMANDS_TESTS = [
       await onLoad;
     },
     uri: "about:addons",
-    loadType: LOAD_TYPE.NEW_TAB,
+    isNewTab: true,
     testFun: async () => isSelected("button[name=extension]"),
   },
   {
@@ -102,7 +106,7 @@ let COMMANDS_TESTS = [
       await onLoad;
     },
     uri: "about:addons",
-    loadType: LOAD_TYPE.NEW_TAB,
+    isNewTab: true,
     testFun: async () => isSelected("button[name=theme]"),
   },
 ];
@@ -115,7 +119,7 @@ let isSelected = async selector =>
   });
 
 add_task(async function test_pages() {
-  for (const { cmd, uri, setup, loadType, testFun } of COMMANDS_TESTS) {
+  for (const { cmd, uri, setup, isNewTab, testFun } of COMMANDS_TESTS) {
     info(`Testing ${cmd} command is triggered`);
     let tab = await BrowserTestUtils.openNewForegroundTab(gBrowser);
 
@@ -124,10 +128,9 @@ add_task(async function test_pages() {
       await setup();
     }
 
-    let onLoad =
-      loadType == LOAD_TYPE.NEW_TAB
-        ? BrowserTestUtils.waitForNewTab(gBrowser, uri, true)
-        : BrowserTestUtils.browserLoaded(gBrowser.selectedBrowser, false, uri);
+    let onLoad = isNewTab
+      ? BrowserTestUtils.waitForNewTab(gBrowser, uri, true)
+      : BrowserTestUtils.browserLoaded(gBrowser.selectedBrowser, false, uri);
 
     await UrlbarTestUtils.promiseAutocompleteResultPopup({
       window,
@@ -136,15 +139,14 @@ add_task(async function test_pages() {
     EventUtils.synthesizeKey("KEY_Tab", {}, window);
     EventUtils.synthesizeKey("KEY_Enter", {}, window);
 
-    const newTab =
-      loadType == LOAD_TYPE.PRE_LOADED ? gBrowser.selectedTab : await onLoad;
+    const newTab = await onLoad;
 
     Assert.ok(
       await testFun(),
       `The command "${cmd}" passed completed its test`
     );
 
-    if ([LOAD_TYPE.NEW_TAB, LOAD_TYPE.PRE_LOADED].includes(loadType)) {
+    if (isNewTab) {
       await BrowserTestUtils.removeTab(newTab);
     }
     await BrowserTestUtils.removeTab(tab);

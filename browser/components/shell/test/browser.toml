@@ -3,11 +3,8 @@
 ["browser_1119088.js"]
 support-files = ["mac_desktop_image.py"]
 run-if = ["os == 'mac'"]
+skip-if = ["verify"]
 tags = "os_integration"
-skip-if = [
-  "verify",
-  "os == 'mac' && os_version == '14.70' && processor == 'x86_64'", # Bug 1869703
-]
 
 ["browser_420786.js"]
 run-if = ["os == 'linux'"]
@@ -90,9 +87,6 @@ skip-if = [
 ["browser_pinning.js"]
 run-if = ["os == 'win'"]
 tags = "os_integration"
-
-["browser_processAUMID.js"]
-run-if = ["os == 'win'"]
 
 ["browser_setDefaultBrowser.js"]
 tags = "os_integration"

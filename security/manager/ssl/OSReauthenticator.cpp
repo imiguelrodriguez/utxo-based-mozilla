@@ -47,8 +47,10 @@ using mozilla::dom::Promise;
 #  define SECURITY_WIN32
 #  include <security.h>
 #  include <shlwapi.h>
-#  include <lm.h>
-#  undef ACCESS_READ  // nsWindowsRegKey defines its own ACCESS_READ
+#  if !defined(__MINGW32__)
+#    include <Lm.h>
+#    undef ACCESS_READ  // nsWindowsRegKey defines its own ACCESS_READ
+#  endif                // !defined(__MINGW32__)
 struct HandleCloser {
   typedef HANDLE pointer;
   void operator()(HANDLE h) {
@@ -116,6 +118,10 @@ std::unique_ptr<char[]> GetUserTokenInfo() {
 }
 
 Maybe<int64_t> GetPasswordLastChanged(const WCHAR* username) {
+#  if defined(__MINGW32__)
+  // NetUserGetInfo requires Lm.h which is not provided in MinGW builds
+  return mozilla::Nothing();
+#  else
   LPUSER_INFO_1 user_info = NULL;
   DWORD passwordAgeInSeconds = 0;
 
@@ -133,6 +139,7 @@ Maybe<int64_t> GetPasswordLastChanged(const WCHAR* username) {
   // Return the time that the password was changed so we can use this
   // for future comparisons.
   return mozilla::Some(PR_Now() - passwordAgeInSeconds * PR_USEC_PER_SEC);
+#  endif
 }
 
 bool IsAutoAdminLogonEnabled() {

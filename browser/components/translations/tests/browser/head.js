@@ -9,43 +9,6 @@ Services.scriptloader.loadSubScript(
 );
 
 /**
- * Converts milliseconds to seconds.
- *
- * @param {number} ms - The duration in milliseconds.
- * @returns {number} The duration in seconds.
- */
-function millisecondsToSeconds(ms) {
-  return ms / 1000;
-}
-
-/**
- * Converts bytes to mebibytes.
- *
- * @param {number} bytes - The size in bytes.
- * @returns {number} The size in mebibytes.
- */
-function bytesToMebibytes(bytes) {
-  return bytes / (1024 * 1024);
-}
-
-/**
- * Calculates the median of a list of numbers.
- *
- * @param {number[]} numbers - An array of numbers to find the median of.
- * @returns {number} The median of the provided numbers.
- */
-function median(numbers) {
-  numbers = numbers.sort((lhs, rhs) => lhs - rhs);
-  const midIndex = Math.floor(numbers.length / 2);
-
-  if (numbers.length & 1) {
-    return numbers[midIndex];
-  }
-
-  return (numbers[midIndex - 1] + numbers[midIndex]) / 2;
-}
-
-/**
  * Opens a new tab in the foreground.
  *
  * @param {string} url
@@ -72,21 +35,26 @@ async function addTab(url, message, win = window) {
      * @returns {Promise<void>}
      */
     runInPage(callback, data = {}) {
+      // ContentTask.spawn runs the `Function.prototype.toString` on this function in
+      // order to send it into the content process. The following function is doing its
+      // own string manipulation in order to load in the TranslationsTest module.
+      const fn = new Function(/* js */ `
+        const TranslationsTest = ChromeUtils.importESModule(
+          "chrome://mochitests/content/browser/toolkit/components/translations/tests/browser/translations-test.mjs"
+        );
+
+        // Pass in the values that get injected by the task runner.
+        TranslationsTest.setup({Assert, ContentTaskUtils, content});
+
+        const data = ${JSON.stringify(data)};
+
+        return (${callback.toString()})(TranslationsTest, data);
+      `);
+
       return ContentTask.spawn(
         tab.linkedBrowser,
-        { contentData: data, callbackSource: callback.toString() }, // Data to inject.
-        function ({ contentData, callbackSource }) {
-          const TranslationsTest = ChromeUtils.importESModule(
-            "chrome://mochitests/content/browser/toolkit/components/translations/tests/browser/translations-test.mjs"
-          );
-
-          // Pass in the values that get injected by the task runner.
-          TranslationsTest.setup({ Assert, ContentTaskUtils, content });
-
-          // eslint-disable-next-line no-eval
-          let contentCallback = eval(`(${callbackSource})`);
-          return contentCallback(TranslationsTest, contentData);
-        }
+        {}, // Data to inject.
+        fn
       );
     },
   };
@@ -195,15 +163,16 @@ function getByL10nId(l10nId, doc = document) {
  * @param {string} langTag - A BCP-47 language tag.
  */
 const getIntlDisplayName = (() => {
-  let languageDisplayNames = null;
+  let displayNames = null;
 
   return langTag => {
-    if (!languageDisplayNames) {
-      languageDisplayNames = TranslationsParent.createLanguageDisplayNames({
+    if (!displayNames) {
+      displayNames = new Services.intl.DisplayNames(undefined, {
+        type: "language",
         fallback: "none",
       });
     }
-    return languageDisplayNames.of(langTag);
+    return displayNames.of(langTag);
   };
 })();
 
@@ -280,10 +249,11 @@ function logAction(...params) {
  */
 function isFullPageTranslationsActive() {
   try {
-    const { requestedLanguagePair } = TranslationsParent.getTranslationsActor(
-      gBrowser.selectedBrowser
-    ).languageState;
-    return !!requestedLanguagePair;
+    const { requestedTranslationPair } =
+      TranslationsParent.getTranslationsActor(
+        gBrowser.selectedBrowser
+      ).languageState;
+    return !!requestedTranslationPair;
   } catch {
     // Translations actor unavailable, continue on.
   }
@@ -304,7 +274,7 @@ async function navigate(
   // close it when we navigate to a new page.
   await closeAllOpenPanelsAndMenus();
 
-  info(message + " - " + url);
+  info(message);
 
   // Load a blank page first to ensure that tests don't hang.
   // I don't know why this is needed, but it appears to be necessary.
@@ -370,656 +340,6 @@ async function toggleReaderMode() {
 
   click(readerButton, "Clicking the reader-mode button");
   await readyPromise;
-}
-
-/**
- * Scrolls to the top of the content page.
- *
- * @param {Function} runInPage - Runs a closure within the content context of the content page.
- *
- * @returns {Promise<void>} Resolves once the scroll position has been updated and a paint has occurred.
- */
-async function scrollToTopOfPage(runInPage) {
-  logAction();
-  await runInPage(async ({ waitForCondition }) => {
-    content.scrollTo({ top: 0, behavior: "smooth" });
-
-    await waitForCondition(
-      () => content.scrollY <= 10,
-      "Waiting for scroll animation to complete."
-    );
-
-    // Wait for the new position to be painted.
-    await new Promise(resolve => {
-      content.requestAnimationFrame(() =>
-        content.requestAnimationFrame(resolve)
-      );
-    });
-  });
-}
-
-/**
- * Scrolls the content page to the very bottom.
- *
- * @param {Function} runInPage - Runs a closure within the content context of the content page.
- *
- * @returns {Promise<void>} Resolves once the scroll position has been updated and a paint has occurred.
- */
-async function scrollToBottomOfPage(runInPage) {
-  logAction();
-  await runInPage(async ({ waitForCondition }) => {
-    const scrollHeight = content.document.documentElement.scrollHeight;
-    content.scrollTo({ top: scrollHeight, behavior: "smooth" });
-
-    await waitForCondition(() => {
-      return content.scrollY >= scrollHeight - content.innerHeight - 10;
-    }, "Waiting for scroll animation to complete.");
-
-    // Wait for the new position to be painted.
-    await new Promise(resolve => {
-      content.requestAnimationFrame(() =>
-        content.requestAnimationFrame(resolve)
-      );
-    });
-  });
-}
-
-/**
- * A class for benchmarking translation performance and reporting
- * metrics to our perftest infrastructure.
- */
-class TranslationsBencher {
-  /**
-   * The metric base name for the engine initialization time.
-   *
-   * @type {string}
-   */
-  static METRIC_ENGINE_INIT_TIME = "engine-init-time";
-
-  /**
-   * The metric base name for words translated per second.
-   *
-   * @type {string}
-   */
-  static METRIC_WORDS_PER_SECOND = "words-per-second";
-
-  /**
-   * The metric base name for tokens translated per second.
-   *
-   * @type {string}
-   */
-  static METRIC_TOKENS_PER_SECOND = "tokens-per-second";
-
-  /**
-   * The metric base name for peak memory usage in the inference process.
-   *
-   * We often see a spike in memory usage when models initialize that eventually
-   * stabilizes as the inference process continues running. As such, it is important
-   * that we collect two memory metrics during our benchmarks.
-   *
-   * @see {TranslationsBencher.METRIC_STABILIZED_MEMORY_USAGE}
-   *
-   * @type {string}
-   */
-  static METRIC_PEAK_MEMORY_USAGE = "peak-memory-usage";
-
-  /**
-   * The metric base name for stabilized memory usage in the inference process.
-   *
-   * We often see a spike in memory usage when models initialize that eventually
-   * stabilizes as the inference process continues running. As such, it is important
-   * that we collect two memory metrics during our benchmarks.
-   *
-   * @see {TranslationsBencher.METRIC_PEAK_MEMORY_USAGE}
-   *
-   * @type {string}
-   */
-  static METRIC_STABILIZED_MEMORY_USAGE = "stabilized-memory-usage";
-
-  /**
-   * The metric base name for total translation time.
-   *
-   * @type {string}
-   */
-  static METRIC_TOTAL_TRANSLATION_TIME = "total-translation-time";
-
-  /**
-   * Data required to ensure that peftest metrics are validated and calculated correctly for the
-   * given test file. This data can be generated for a test file by running the script located at:
-   *
-   * toolkit/components/translations/tests/scripts/translations-perf-data.py
-   *
-   * @type {Record<string, {pageLanguage: string, tokenCount: number, wordCount: number}>}
-   */
-  static #PAGE_DATA = {
-    [SPANISH_BENCHMARK_PAGE_URL]: {
-      pageLanguage: "es",
-      tokenCount: 10966,
-      wordCount: 6944,
-    },
-  };
-
-  /**
-   * A class that gathers and reports metrics to perftest.
-   */
-  static Journal = class {
-    /**
-     * A map of collected metrics, where the key is the metric name
-     * and the value is an array of all recorded values.
-     *
-     * @type {Record<string, number[]>}
-     */
-    #metrics = {};
-
-    /**
-     * Pushes a metric value into the journal.
-     *
-     * @param {string} metricName - The metric name.
-     * @param {number} value - The metric value to record.
-     */
-    pushMetric(metricName, value) {
-      if (!this.#metrics[metricName]) {
-        this.#metrics[metricName] = [];
-      }
-
-      this.#metrics[metricName].push(Number(value.toFixed(3)));
-    }
-
-    /**
-     * Pushes multiple metric values into the journal.
-     *
-     * @param {Array<[string, number]>} metrics - An array of [metricName, value] pairs.
-     */
-    pushMetrics(metrics) {
-      for (const [metricName, value] of metrics) {
-        this.pushMetric(metricName, value);
-      }
-    }
-
-    /**
-     * Logs the median value along with the individual values from all
-     * test runs for each collected metric to the console.
-     * The log is then picked up by the perftest infrastructure.
-     * The logged data must match the schema defined in the test file.
-     */
-    reportMetrics() {
-      const reportedMetrics = [];
-      for (const [name, values] of Object.entries(this.#metrics)) {
-        reportedMetrics.push({
-          name,
-          values,
-          value: median(values),
-        });
-      }
-      info(`perfMetrics | ${JSON.stringify(reportedMetrics)}`);
-    }
-  };
-
-  /**
-   * A class to track peak memory usage during translation via sampled intervals.
-   */
-  static PeakMemorySampler = class {
-    /**
-     * The peak recorded memory in mebibytes (MiB).
-     *
-     * @type {number}
-     */
-    #peakMemoryMiB = 0;
-
-    /**
-     * The interval id for the memory sample timer.
-     *
-     * @type {number|null}
-     */
-    #intervalId = null;
-
-    /**
-     * The interval at which memory usage is sampled in milliseconds.
-     *
-     * @type {number}
-     */
-    #interval;
-
-    /**
-     * Constructs a PeakMemorySampler.
-     *
-     * @param {number} interval - The interval in milliseconds between memory samples.
-     */
-    constructor(interval) {
-      this.#interval = interval;
-    }
-
-    /**
-     * Collects the current inference process memory usage and updates
-     * the peak memory measurement if the current usage exceeds the previous peak.
-     *
-     * @returns {Promise<void>}
-     */
-    async #collectMemorySample() {
-      const currentMemoryMiB =
-        await TranslationsBencher.#getInferenceProcessTotalMemoryUsage();
-      if (currentMemoryMiB > this.#peakMemoryMiB) {
-        this.#peakMemoryMiB = currentMemoryMiB;
-      }
-    }
-
-    /**
-     * Starts the interval timer to begin sampling a new peak memory usage.
-     */
-    start() {
-      if (this.#intervalId !== null) {
-        throw new Error(
-          "Attempt to start a PeakMemorySampler that was already running."
-        );
-      }
-
-      this.#peakMemoryMiB = 0;
-      this.#intervalId = setInterval(() => {
-        this.#collectMemorySample().catch(console.error);
-      }, this.#interval);
-    }
-
-    /**
-     * Stops the interval timer from continuing to sample peak memory usage.
-     */
-    stop() {
-      if (this.#intervalId === null) {
-        throw new Error(
-          "Attempt to stop a PeakMemorySampler that was not running."
-        );
-      }
-
-      clearInterval(this.#intervalId);
-      this.#intervalId = null;
-      this.#collectMemorySample();
-    }
-
-    /**
-     * Returns the peak recorded memory usage in mebibytes (MiB).
-     *
-     * @returns {number}
-     */
-    getPeakRecordedMemoryUsage() {
-      if (this.#intervalId) {
-        throw new Error(
-          "Attempt to retrieve peak recorded memory usage while the memory sampler is running."
-        );
-      }
-
-      return this.#peakMemoryMiB;
-    }
-  };
-
-  /**
-   * Benchmarks the translation process (both memory usage and speed)
-   * and reports metrics to perftest. It runs one full translation for
-   * each memory sample, and then one full translation for each speed sample.
-   *
-   * @param {object} options - The benchmark options.
-   * @param {string} options.page - The URL of the page to test.
-   * @param {string} options.sourceLanguage - The BCP-47 language tag for the source language.
-   * @param {string} options.targetLanguage - The BCP-47 language tag for the target language.
-   * @param {number} options.speedBenchCount - The number of speed-sampling runs to perform.
-   * @param {number} options.memoryBenchCount - The number of memory-sampling runs to perform.
-   * @param {number} [options.memorySampleInterval] - The interval in milliseconds between memory usage samples.
-   *
-   * @returns {Promise<void>} Resolves when benchmarking is complete.
-   */
-  static async benchmarkTranslation({
-    page,
-    sourceLanguage,
-    targetLanguage,
-    speedBenchCount,
-    memoryBenchCount,
-    memorySampleInterval = 10,
-  }) {
-    const { wordCount, tokenCount, pageLanguage } =
-      TranslationsBencher.#PAGE_DATA[page] ?? {};
-
-    if (!wordCount || !tokenCount || !pageLanguage) {
-      const testPageName = page.match(/[^\\/]+$/)[0];
-      const testPagePath = page.substring(
-        "https://example.com/browser/".length
-      );
-      const sourceLangName = getIntlDisplayName(sourceLanguage);
-      throw new Error(`
-
-        🚨 Perf test data is not properly defined for ${testPageName} 🚨
-
-        To enable ${testPageName} for Translations perf tests, please follow these steps:
-
-          1) Ensure ${testPageName} has a proper HTML lang attribute in the markup:
-
-               <html lang="${sourceLanguage}">
-
-          2) Download the ${sourceLanguage}-${PIVOT_LANGUAGE}.vocab.spm model from a ${sourceLangName} row on the following site:
-
-               https://gregtatum.github.io/taskcluster-tools/src/models/
-
-          3) Run the following command to extract the perf metadata from ${testPageName}:
-
-               ❯ python3 toolkit/components/translations/tests/scripts/translations-perf-data.py \\
-                 --page_path="${testPagePath}" \\
-                 --model_path="..."
-
-          4) Include the resulting metadata for ${testPageName} in the TranslationsBencher.#PAGE_DATA object.
-      `);
-    }
-
-    if (sourceLanguage !== pageLanguage) {
-      throw new Error(
-        `Perf test source language '${sourceLanguage}' did not match the expected page language '${pageLanguage}'.`
-      );
-    }
-
-    const journal = new TranslationsBencher.Journal();
-
-    await TranslationsBencher.#benchmarkTranslationMemory({
-      page,
-      journal,
-      sourceLanguage,
-      targetLanguage,
-      memoryBenchCount,
-      memorySampleInterval,
-    });
-
-    await TranslationsBencher.#benchmarkTranslationSpeed({
-      page,
-      journal,
-      sourceLanguage,
-      targetLanguage,
-      wordCount,
-      tokenCount,
-      speedBenchCount,
-    });
-
-    journal.reportMetrics();
-  }
-
-  /**
-   * Benchmarks memory usage by measuring peak and stabilized memory usage
-   * across multiple runs of the translation process.
-   *
-   * @param {object} options - The benchmark options.
-   * @param {string} options.page - The URL of the page to test.
-   * @param {TranslationsBencher.Journal} options.journal - The shared metrics journal.
-   * @param {string} options.sourceLanguage - The BCP-47 language tag for the source language.
-   * @param {string} options.targetLanguage - The BCP-47 language tag for the target language.
-   * @param {number} options.memoryBenchCount - The number of runs to perform for memory sampling.
-   * @param {number} options.memorySampleInterval - The interval in milliseconds between memory samples.
-   *
-   * @returns {Promise<void>} Resolves when memory benchmarking is complete.
-   */
-  static async #benchmarkTranslationMemory({
-    page,
-    journal,
-    sourceLanguage,
-    targetLanguage,
-    memoryBenchCount,
-    memorySampleInterval,
-  }) {
-    for (let runNumber = 0; runNumber < memoryBenchCount; ++runNumber) {
-      const { cleanup, runInPage } = await loadTestPage({
-        page,
-        endToEndTest: true,
-        languagePairs: [
-          { fromLang: sourceLanguage, toLang: "en" },
-          { fromLang: "en", toLang: targetLanguage },
-        ],
-        prefs: [["browser.translations.logLevel", "Error"]],
-        contentEagerMode: true,
-      });
-
-      // Create a new PeakMemorySampler using the provided interval.
-      const peakMemorySampler = new TranslationsBencher.PeakMemorySampler(
-        memorySampleInterval
-      );
-
-      await TranslationsBencher.#injectFinalParagraphTranslatedObserver(
-        runInPage
-      );
-
-      await FullPageTranslationsTestUtils.assertTranslationsButton(
-        { button: true, circleArrows: false, locale: false, icon: true },
-        "The button is available."
-      );
-
-      await FullPageTranslationsTestUtils.openPanel({
-        onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
-      });
-
-      await FullPageTranslationsTestUtils.changeSelectedFromLanguage({
-        langTag: sourceLanguage,
-      });
-      await FullPageTranslationsTestUtils.changeSelectedToLanguage({
-        langTag: targetLanguage,
-      });
-
-      const translationCompleteTimestampPromise =
-        TranslationsBencher.#getTranslationCompleteTimestampPromise(runInPage);
-
-      peakMemorySampler.start();
-
-      await FullPageTranslationsTestUtils.clickTranslateButton();
-      await translationCompleteTimestampPromise;
-
-      peakMemorySampler.stop();
-
-      const peakMemoryMiB = peakMemorySampler.getPeakRecordedMemoryUsage();
-      const stabilizedMemoryMiB =
-        await TranslationsBencher.#getInferenceProcessTotalMemoryUsage();
-
-      journal.pushMetrics([
-        [TranslationsBencher.METRIC_PEAK_MEMORY_USAGE, peakMemoryMiB],
-        [
-          TranslationsBencher.METRIC_STABILIZED_MEMORY_USAGE,
-          stabilizedMemoryMiB,
-        ],
-      ]);
-
-      await cleanup();
-    }
-  }
-
-  /**
-   * Benchmarks speed by measuring engine init time, words per second, tokens per second,
-   * and total translation time across multiple runs.
-   *
-   * @param {object} options - The benchmark options.
-   * @param {string} options.page - The URL of the page to test.
-   * @param {TranslationsBencher.Journal} options.journal - The shared metrics journal.
-   * @param {string} options.sourceLanguage - The BCP-47 language tag for the source language.
-   * @param {string} options.targetLanguage - The BCP-47 language tag for the target language.
-   * @param {number} options.wordCount - The total word count of the page.
-   * @param {number} options.tokenCount - The total token count of the page.
-   * @param {number} options.speedBenchCount - The number of runs to perform for speed sampling.
-   *
-   * @returns {Promise<void>} Resolves when speed benchmarking is complete.
-   */
-  static async #benchmarkTranslationSpeed({
-    page,
-    journal,
-    sourceLanguage,
-    targetLanguage,
-    wordCount,
-    tokenCount,
-    speedBenchCount,
-  }) {
-    for (let runNumber = 0; runNumber < speedBenchCount; ++runNumber) {
-      const { tab, cleanup, runInPage } = await loadTestPage({
-        page,
-        endToEndTest: true,
-        languagePairs: [
-          { fromLang: sourceLanguage, toLang: "en" },
-          { fromLang: "en", toLang: targetLanguage },
-        ],
-        prefs: [["browser.translations.logLevel", "Error"]],
-        contentEagerMode: true,
-      });
-
-      await TranslationsBencher.#injectFinalParagraphTranslatedObserver(
-        runInPage
-      );
-
-      await FullPageTranslationsTestUtils.assertTranslationsButton(
-        { button: true, circleArrows: false, locale: false, icon: true },
-        "The button is available."
-      );
-
-      await FullPageTranslationsTestUtils.openPanel({
-        onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
-      });
-
-      await FullPageTranslationsTestUtils.changeSelectedFromLanguage({
-        langTag: sourceLanguage,
-      });
-      await FullPageTranslationsTestUtils.changeSelectedToLanguage({
-        langTag: targetLanguage,
-      });
-
-      const engineReadyTimestampPromise =
-        TranslationsBencher.#getEngineReadyTimestampPromise(tab.linkedBrowser);
-      const translationCompleteTimestampPromise =
-        TranslationsBencher.#getTranslationCompleteTimestampPromise(runInPage);
-
-      const translateButtonClickedTime = performance.now();
-      await FullPageTranslationsTestUtils.clickTranslateButton();
-
-      const [engineReadyTime, translationCompleteTime] = await Promise.all([
-        engineReadyTimestampPromise,
-        translationCompleteTimestampPromise,
-      ]);
-
-      const initTimeMilliseconds = engineReadyTime - translateButtonClickedTime;
-      const translationTimeSeconds = millisecondsToSeconds(
-        translationCompleteTime - engineReadyTime
-      );
-      const wordsPerSecond = wordCount / translationTimeSeconds;
-      const tokensPerSecond = tokenCount / translationTimeSeconds;
-
-      journal.pushMetrics([
-        [TranslationsBencher.METRIC_ENGINE_INIT_TIME, initTimeMilliseconds],
-        [TranslationsBencher.METRIC_WORDS_PER_SECOND, wordsPerSecond],
-        [TranslationsBencher.METRIC_TOKENS_PER_SECOND, tokensPerSecond],
-        [
-          TranslationsBencher.METRIC_TOTAL_TRANSLATION_TIME,
-          translationTimeSeconds,
-        ],
-      ]);
-
-      await cleanup();
-    }
-  }
-
-  /**
-   * Injects a mutation observer into the test page to detect when the final paragraph
-   * has been translated, and dispatch an event when that happens. This is a signal that
-   * we are nearing the end of translating, at which point we can wait for the pending
-   * request count to reduce to zero.
-   *
-   * @param {Function} runInPage - Runs a closure within the content context of the page.
-   * @returns {Promise<void>} Resolves when the observer is injected.
-   */
-  static async #injectFinalParagraphTranslatedObserver(runInPage) {
-    await runInPage(TranslationsTest => {
-      const { getFinalParagraph } = TranslationsTest.getSelectors();
-      const lastParagraph = getFinalParagraph();
-
-      if (!lastParagraph) {
-        throw new Error("Unable to find the final paragraph for observation.");
-      }
-
-      const observer = new content.MutationObserver(
-        (_mutationsList, _observer) => {
-          content.document.dispatchEvent(
-            new CustomEvent("FinalParagraphTranslated")
-          );
-        }
-      );
-
-      observer.observe(lastParagraph, {
-        childList: true,
-      });
-    });
-  }
-
-  /**
-   * Returns a Promise that resolves with the timestamp when the Translations engine becomes ready.
-   *
-   * @param {Browser} browser - The browser hosting the translation.
-   * @returns {Promise<number>} The timestamp when the engine is ready.
-   */
-  static async #getEngineReadyTimestampPromise(browser) {
-    const { promise, resolve } = Promise.withResolvers();
-
-    function maybeGetTranslationStartTime(event) {
-      if (
-        event.detail.reason === "isEngineReady" &&
-        event.detail.actor.languageState.isEngineReady
-      ) {
-        browser.removeEventListener(
-          "TranslationsParent:LanguageState",
-          maybeGetTranslationStartTime
-        );
-        resolve(performance.now());
-      }
-    }
-
-    browser.addEventListener(
-      "TranslationsParent:LanguageState",
-      maybeGetTranslationStartTime
-    );
-
-    return promise;
-  }
-
-  /**
-   * Returns a Promise that resolves with the timestamp after the translation is complete.
-   *
-   * @param {Function} runInPage - A helper to run code on the test page.
-   * @returns {Promise<number>} The timestamp when the translation is complete.
-   */
-  static async #getTranslationCompleteTimestampPromise(runInPage) {
-    await runInPage(async ({ waitForCondition }) => {
-      // First, wait for the final paragraph to be translated.
-      await new Promise(resolve => {
-        content.document.addEventListener("FinalParagraphTranslated", resolve, {
-          once: true,
-        });
-      });
-
-      const translationsChild =
-        content.windowGlobalChild.getActor("Translations");
-
-      if (
-        translationsChild.translatedDoc?.hasPendingCallbackOnEventLoop() ||
-        translationsChild.translatedDoc?.hasPendingTranslationRequests() ||
-        translationsChild.translatedDoc?.isObservingAnyElementForContentIntersection()
-      ) {
-        // The final paragraph was translated, but it wasn't the final request,
-        // so we must still wait for every translation request to complete.
-        await waitForCondition(
-          () =>
-            !translationsChild.translatedDoc?.hasPendingCallbackOnEventLoop() &&
-            !translationsChild.translatedDoc?.hasPendingTranslationRequests() &&
-            !translationsChild.translatedDoc?.isObservingAnyElementForContentIntersection(),
-          "Waiting for all pending translation requests to complete."
-        );
-      }
-    });
-
-    return performance.now();
-  }
-
-  /**
-   * Returns the total memory used by the inference process in mebibytes (MiB).
-   *
-   * @returns {Promise<number>} The total memory usage in mebibytes.
-   */
-  static async #getInferenceProcessTotalMemoryUsage() {
-    const inferenceProcessInfo = await fetchInferenceProcessInfo();
-    return bytesToMebibytes(inferenceProcessInfo.memory);
-  }
 }
 
 /**
@@ -1362,7 +682,7 @@ class FullPageTranslationsTestUtils {
       );
     is(
       locale.innerText,
-      toLanguage.split("-")[0],
+      toLanguage,
       `The expected language tag "${toLanguage}" is shown.`
     );
     is(
@@ -1378,131 +698,8 @@ class FullPageTranslationsTestUtils {
   }
 
   /**
-   * Waits for all pending translation requests in the TranslationsDocument to complete.
-   *
-   * @param {Function} runInPage - A function run a closure in the content page.
-   */
-  static async waitForAllPendingTranslationsToComplete(runInPage) {
-    await runInPage(async ({ waitForCondition }) => {
-      const translationsChild =
-        content.windowGlobalChild.getActor("Translations");
-
-      while (
-        translationsChild.translatedDoc?.hasPendingTranslationRequests() ||
-        translationsChild.translatedDoc?.hasPendingCallbackOnEventLoop()
-      ) {
-        await waitForCondition(
-          () =>
-            !translationsChild.translatedDoc?.hasPendingTranslationRequests(),
-          "Waiting for all pending translation requests to complete."
-        );
-
-        await waitForCondition(
-          () =>
-            !translationsChild.translatedDoc?.hasPendingCallbackOnEventLoop(),
-          "Waiting for pending event-loop callbacks to resolve in the TranslationsDocument."
-        );
-      }
-    });
-  }
-
-  /**
-   * Waits until no elements are being observed for content intersection,
-   * indicating that every content-translation request has completed
-   * (barring future DOM mutations).
-   *
-   * @param {Function} runInPage – Executes an async closure in the content page.
-   */
-  static async assertNoElementsAreObservedForContentIntersection(runInPage) {
-    await runInPage(async ({ waitForCondition }) => {
-      const translationsChild =
-        content.windowGlobalChild.getActor("Translations");
-
-      await waitForCondition(
-        () =>
-          !translationsChild.translatedDoc?.isObservingAnyElementForContentIntersection(),
-        "Waiting until no elements are observed for content intersection."
-      );
-    });
-  }
-
-  /**
-   * Waits until no elements are being observed for attribute intersection,
-   * indicating that every attribute-translation request has completed
-   * (barring future DOM mutations).
-   *
-   * @param {Function} runInPage – Executes an async closure in the content page.
-   */
-  static async assertNoElementsAreObservedForAttributeIntersection(runInPage) {
-    await runInPage(async ({ waitForCondition }) => {
-      const translationsChild =
-        content.windowGlobalChild.getActor("Translations");
-
-      await waitForCondition(
-        () =>
-          !translationsChild.translatedDoc?.isObservingAnyElementForAttributeIntersection(),
-        "Waiting until no elements are observed for attribute intersection."
-      );
-    });
-  }
-
-  /**
-   * Waits until at least one element is being observed for content
-   * intersection.
-   *
-   * @param {Function} runInPage – Executes an async closure in the content page.
-   */
-  static async assertAnyElementIsObservedForContentIntersection(runInPage) {
-    await runInPage(async ({ waitForCondition }) => {
-      const translationsChild =
-        content.windowGlobalChild.getActor("Translations");
-
-      await waitForCondition(
-        () =>
-          translationsChild.translatedDoc?.isObservingAnyElementForContentIntersection(),
-        "Waiting until an element is observed for content intersection."
-      );
-    });
-  }
-
-  /**
-   * Waits until at least one element is being observed for attribute
-   * intersection.
-   *
-   * @param {Function} runInPage – Executes an async closure in the content page.
-   */
-  static async assertAnyElementIsObservedForAttributeIntersection(runInPage) {
-    await runInPage(async ({ waitForCondition }) => {
-      const translationsChild =
-        content.windowGlobalChild.getActor("Translations");
-
-      await waitForCondition(
-        () =>
-          translationsChild.translatedDoc?.isObservingAnyElementForAttributeIntersection(),
-        "Waiting until an element is observed for attribute intersection."
-      );
-    });
-  }
-
-  /**
-   * Waits for any translation request to initialize and become pending within the TranslationsDocument.
-   *
-   * @param {Function} runInPage - A function run a closure in the content page.
-   */
-  static async waitForAnyRequestToInitialize(runInPage) {
-    await runInPage(async ({ waitForCondition }) => {
-      const translationsChild =
-        content.windowGlobalChild.getActor("Translations");
-
-      await waitForCondition(
-        () => translationsChild.translatedDoc?.hasPendingTranslationRequests(),
-        "Waiting for any translation request to initialize."
-      );
-    });
-  }
-
-  /**
-   * Asserts that the Spanish test page H1 element's content has been translated into the target language.
+   * Asserts that the Spanish test page has been translated by checking
+   * that the H1 element has been modified from its original form.
    *
    * @param {object} options - The options for the assertion.
    *
@@ -1511,18 +708,20 @@ class FullPageTranslationsTestUtils {
    * @param {Function} options.runInPage - Allows running a closure in the content page.
    * @param {boolean} [options.endToEndTest=false] - Whether this assertion is for an end-to-end test.
    * @param {string} [options.message] - An optional message to log to info.
+   * @param {ChromeWindow} [options.win=window] - The window in which to perform the check (defaults to the current window).
    */
-  static async assertPageH1ContentIsTranslated({
+  static async assertPageIsTranslated({
     fromLanguage,
     toLanguage,
     runInPage,
     endToEndTest = false,
     message = null,
+    win = window,
   }) {
     if (message) {
       info(message);
     }
-    info("Checking that the page header is translated");
+    info("Checking that the page is translated");
     let callback;
     if (endToEndTest) {
       callback = async TranslationsTest => {
@@ -1539,388 +738,39 @@ class FullPageTranslationsTestUtils {
         await TranslationsTest.assertTranslationResult(
           "The page's H1 is translated.",
           getH1,
-          `DON QUIJOTE DE LA MANCHA [${fromLang} to ${toLang}]`
+          `DON QUIJOTE DE LA MANCHA [${fromLang} to ${toLang}, html]`
         );
       };
     }
 
     await runInPage(callback, { fromLang: fromLanguage, toLang: toLanguage });
-  }
-
-  /**
-   * Asserts that the Spanish test page H1 element's content is not translated into the target language.
-   *
-   * @param {object} options - The options for the assertion.
-   *
-   * @param {Function} options.runInPage - Allows running a closure in the content page.
-   * @param {string} [options.message] - An optional message to log to info.
-   */
-  static async assertPageH1ContentIsNotTranslated({
-    runInPage,
-    message = null,
-  }) {
-    if (message) {
-      info(message);
-    }
-
-    info("Checking that the page header is not translated");
-    await runInPage(async TranslationsTest => {
-      const { getH1 } = TranslationsTest.getSelectors();
-      await TranslationsTest.assertTranslationResult(
-        "The page's H1 is not translated and is in the original Spanish.",
-        getH1,
-        "Don Quijote de La Mancha"
-      );
-    });
-  }
-
-  /**
-   * Asserts that the Spanish test page H1 element's title has been translated into the target language.
-   *
-   * @param {object} options - The options for the assertion.
-   *
-   * @param {string} options.fromLanguage - The BCP-47 language tag being translated from.
-   * @param {string} options.toLanguage - The BCP-47 language tag being translated into.
-   * @param {Function} options.runInPage - Allows running a closure in the content page.
-   * @param {boolean} [options.endToEndTest=false] - Whether this assertion is for an end-to-end test.
-   * @param {string} [options.message] - An optional message to log to info.
-   */
-  static async assertPageH1TitleIsTranslated({
-    fromLanguage,
-    toLanguage,
-    runInPage,
-    endToEndTest = false,
-    message = null,
-  }) {
-    if (message) {
-      info(message);
-    }
-    info("Checking that the page header's title attribute is translated");
-    let callback;
-    if (endToEndTest) {
-      callback = async TranslationsTest => {
-        const { getH1Title } = TranslationsTest.getSelectors();
-        await TranslationsTest.assertTranslationResult(
-          "The page's H1's title attribute is translated.",
-          getH1Title,
-          "This is the title of the page header"
-        );
-      };
-    } else {
-      callback = async (TranslationsTest, { fromLang, toLang }) => {
-        const { getH1Title } = TranslationsTest.getSelectors();
-        await TranslationsTest.assertTranslationResult(
-          "The page's H1's title attribute is translated.",
-          getH1Title,
-          `ESTE ES EL TÍTULO DEL ENCABEZADO DE PÁGINA [${fromLang} to ${toLang}]`
-        );
-      };
-    }
-
-    await runInPage(callback, { fromLang: fromLanguage, toLang: toLanguage });
-  }
-
-  /**
-   * Asserts that the Spanish test page H1 element's title attribute is not translated into the target language.
-   *
-   * @param {object} options - The options for the assertion.
-   *
-   * @param {Function} options.runInPage - Allows running a closure in the content page.
-   * @param {string} [options.message] - An optional message to log to info.
-   */
-  static async assertPageH1TitleIsNotTranslated({ runInPage, message = null }) {
-    if (message) {
-      info(message);
-    }
-
-    info("Checking that the page header's title is not translated");
-    await runInPage(async TranslationsTest => {
-      const { getH1Title } = TranslationsTest.getSelectors();
-      await TranslationsTest.assertTranslationResult(
-        "The page's H1's title is not translated and is in the original Spanish.",
-        getH1Title,
-        "Este es el título del encabezado de página"
-      );
-    });
-  }
-
-  /**
-   * Asserts that the Spanish test page final <p> element has been translated into the target language.
-   *
-   * @param {object} options - The options for the assertion.
-   *
-   * @param {string} options.fromLanguage - The BCP-47 language tag being translated from.
-   * @param {string} options.toLanguage - The BCP-47 language tag being translated into.
-   * @param {Function} options.runInPage - Allows running a closure in the content page.
-   * @param {boolean} [options.endToEndTest=false] - Whether this assertion is for an end-to-end test.
-   * @param {string} [options.message] - An optional message to log to info.
-   */
-  static async assertPageFinalParagraphContentIsTranslated({
-    fromLanguage,
-    toLanguage,
-    runInPage,
-    endToEndTest = false,
-    message = null,
-  }) {
-    if (message) {
-      info(message);
-    }
-    info("Checking that the page's final paragraph is translated");
-    let callback;
-    if (endToEndTest) {
-      callback = async TranslationsTest => {
-        const { getFinalParagraph } = TranslationsTest.getSelectors();
-        await TranslationsTest.assertTranslationResult(
-          "The page's final paragraph is translated.",
-          getFinalParagraph,
-          [
-            // TODO (Bug 1967764) We need to investigate why some machines may produce
-            // a different translated output, given the same models and the same WASM binary.
-            "Well, even if you're more arms than those of the giant Briareo, you'll pay me.",
-            "For, though you're more arms than those of the giant Briareo, you'll pay me.",
-          ]
-        );
-      };
-    } else {
-      callback = async (TranslationsTest, { fromLang, toLang }) => {
-        const { getFinalParagraph } = TranslationsTest.getSelectors();
-        await TranslationsTest.assertTranslationResult(
-          "The page's final paragraph is translated.",
-          getFinalParagraph,
-          `— PUES, AUNQUE MOVÁIS MÁS BRAZOS QUE LOS DEL GIGANTE BRIAREO, ME LO HABÉIS DE PAGAR. [${fromLang} to ${toLang}]`
-        );
-      };
-    }
-
-    await runInPage(callback, { fromLang: fromLanguage, toLang: toLanguage });
-  }
-
-  /**
-   * Asserts that the Spanish test page final <p> element is still in its original form.
-   *
-   * @param {object} options - The options for the assertion.
-   *
-   * @param {Function} options.runInPage - Allows running a closure in the content page.
-   * @param {string} [options.message] - An optional message to log to info.
-   */
-  static async assertPageFinalParagraphContentIsNotTranslated({
-    runInPage,
-    message = null,
-  }) {
-    if (message) {
-      info(message);
-    }
-
-    info("Checking that the page's final paragraph is not translated");
-    await runInPage(async TranslationsTest => {
-      const { getFinalParagraph } = TranslationsTest.getSelectors();
-      await TranslationsTest.assertTranslationResult(
-        "The page's final paragraph is not translated and is in the original Spanish.",
-        getFinalParagraph,
-        "— Pues, aunque mováis más brazos que los del gigante Briareo, me lo habéis de pagar."
-      );
-    });
-  }
-
-  /**
-   * Asserts that the Spanish test page final <p> element's title attribute has been translated into the target language.
-   *
-   * @param {object} options - The options for the assertion.
-   *
-   * @param {string} options.fromLanguage - The BCP-47 language tag being translated from.
-   * @param {string} options.toLanguage - The BCP-47 language tag being translated into.
-   * @param {Function} options.runInPage - Allows running a closure in the content page.
-   * @param {boolean} [options.endToEndTest=false] - Whether this assertion is for an end-to-end test.
-   * @param {string} [options.message] - An optional message to log to info.
-   */
-  static async assertPageFinalParagraphTitleIsTranslated({
-    fromLanguage,
-    toLanguage,
-    runInPage,
-    endToEndTest = false,
-    message = null,
-  }) {
-    if (message) {
-      info(message);
-    }
-    info("Checking that the final paragraph's title attribute is translated");
-    let callback;
-    if (endToEndTest) {
-      callback = async TranslationsTest => {
-        const { getFinalParagraphTitle } = TranslationsTest.getSelectors();
-        await TranslationsTest.assertTranslationResult(
-          "The final paragraph's title attribute is translated.",
-          getFinalParagraphTitle,
-          "This is the title of the final paragraph"
-        );
-      };
-    } else {
-      callback = async (TranslationsTest, { fromLang, toLang }) => {
-        const { getFinalParagraphTitle } = TranslationsTest.getSelectors();
-        await TranslationsTest.assertTranslationResult(
-          "The final paragraph's title attribute is translated.",
-          getFinalParagraphTitle,
-          `ESTE ES EL TÍTULO DEL ÚLTIMO PÁRRAFO [${fromLang} to ${toLang}]`
-        );
-      };
-    }
-
-    await runInPage(callback, { fromLang: fromLanguage, toLang: toLanguage });
-  }
-
-  /**
-   * Asserts that the Spanish test page final <p> element's title attribute is not translated into the target language.
-   *
-   * @param {object} options - The options for the assertion.
-   *
-   * @param {Function} options.runInPage - Allows running a closure in the content page.
-   * @param {string} [options.message] - An optional message to log to info.
-   */
-  static async assertPageFinalParagraphTitleIsNotTranslated({
-    runInPage,
-    message = null,
-  }) {
-    if (message) {
-      info(message);
-    }
-
-    info(
-      "Checking that the final paragraph's title attribute is not translated"
-    );
-    await runInPage(async TranslationsTest => {
-      const { getFinalParagraphTitle } = TranslationsTest.getSelectors();
-      await TranslationsTest.assertTranslationResult(
-        "The final paragraph's title attribute is not translated and is in the original Spanish.",
-        getFinalParagraphTitle,
-        "Este es el título del último párrafo"
-      );
-    });
-  }
-
-  /**
-   *
-   * @param {object} options - The options for the assertion.
-   *
-   * @param {string} options.fromLanguage - The BCP-47 language tag being translated from.
-   * @param {string} options.toLanguage - The BCP-47 language tag being translated into.
-   * @param {Function} options.runInPage - Allows running a closure in the content page.
-   * @param {boolean} [options.endToEndTest=false] - Whether this assertion is for an end-to-end test.
-   * @param {string} [options.message] - An optional message to log to info.
-   * @param {ChromeWindow} [options.win=window] - The window in which to perform the check (defaults to the current window).
-   */
-  static async assertAllPageContentIsTranslated(options) {
-    await FullPageTranslationsTestUtils.assertPageH1ContentIsTranslated(
-      options
-    );
-    await FullPageTranslationsTestUtils.assertPageFinalParagraphContentIsTranslated(
-      options
-    );
-
-    const { win, fromLanguage, toLanguage, runInPage } = options;
-
     await FullPageTranslationsTestUtils.assertLangTagIsShownOnTranslationsButton(
       fromLanguage,
       toLanguage,
       win
     );
-
-    await FullPageTranslationsTestUtils.waitForAllPendingTranslationsToComplete(
-      runInPage
-    );
-
-    await FullPageTranslationsTestUtils.assertNoElementsAreObservedForContentIntersection(
-      runInPage
-    );
   }
 
   /**
-   *
-   * @param {object} options - The options for the assertion.
-   *
-   * @param {string} options.fromLanguage - The BCP-47 language tag being translated from.
-   * @param {string} options.toLanguage - The BCP-47 language tag being translated into.
-   * @param {Function} options.runInPage - Allows running a closure in the content page.
-   * @param {boolean} [options.endToEndTest=false] - Whether this assertion is for an end-to-end test.
-   * @param {string} [options.message] - An optional message to log to info.
-   * @param {ChromeWindow} [options.win=window] - The window in which to perform the check (defaults to the current window).
-   */
-  static async assertOnlyIntersectingNodesAreTranslated(options) {
-    await FullPageTranslationsTestUtils.assertPageH1ContentIsTranslated(
-      options
-    );
-    await FullPageTranslationsTestUtils.assertPageH1TitleIsTranslated(options);
-
-    const { win, fromLanguage, toLanguage, runInPage } = options;
-
-    await FullPageTranslationsTestUtils.assertLangTagIsShownOnTranslationsButton(
-      fromLanguage,
-      toLanguage,
-      win
-    );
-
-    await FullPageTranslationsTestUtils.waitForAllPendingTranslationsToComplete(
-      runInPage
-    );
-
-    await FullPageTranslationsTestUtils.assertPageFinalParagraphContentIsNotTranslated(
-      options
-    );
-
-    await FullPageTranslationsTestUtils.assertPageFinalParagraphTitleIsNotTranslated(
-      options
-    );
-
-    await FullPageTranslationsTestUtils.assertAnyElementIsObservedForContentIntersection(
-      runInPage
-    );
-
-    await FullPageTranslationsTestUtils.assertAnyElementIsObservedForAttributeIntersection(
-      runInPage
-    );
-  }
-
-  /**
-   * Asserts that the Spanish test page is not translated by checking
+   * Asserts that the Spanish test page is untranslated by checking
    * that the H1 element is still in its original Spanish form.
    *
    * @param {Function} runInPage - Allows running a closure in the content page.
    * @param {string} message - An optional message to log to info.
    */
-  static async assertPageIsNotTranslated(runInPage, message = null) {
+  static async assertPageIsUntranslated(runInPage, message = null) {
     if (message) {
       info(message);
     }
-
-    info("Ensuring that no translation requests are pending.");
-    await FullPageTranslationsTestUtils.waitForAllPendingTranslationsToComplete(
-      runInPage
-    );
-
-    info("Checking that the page is not translated");
-
-    await FullPageTranslationsTestUtils.assertPageH1ContentIsNotTranslated({
-      runInPage,
-      message,
+    info("Checking that the page is untranslated");
+    await runInPage(async TranslationsTest => {
+      const { getH1 } = TranslationsTest.getSelectors();
+      await TranslationsTest.assertTranslationResult(
+        "The page's H1 is untranslated and in the original Spanish.",
+        getH1,
+        "Don Quijote de La Mancha"
+      );
     });
-
-    await FullPageTranslationsTestUtils.assertPageH1TitleIsNotTranslated({
-      runInPage,
-      message,
-    });
-
-    await FullPageTranslationsTestUtils.assertPageFinalParagraphContentIsNotTranslated(
-      {
-        runInPage,
-        message,
-      }
-    );
-
-    await FullPageTranslationsTestUtils.assertPageFinalParagraphTitleIsNotTranslated(
-      {
-        runInPage,
-        message,
-      }
-    );
   }
 
   /**
@@ -2080,10 +930,10 @@ class FullPageTranslationsTestUtils {
   }
 
   /**
-   * Asserts that panel element visibility matches the panel intro view.
+   * Asserts that panel element visibility matches the panel first-show view.
    */
-  static assertPanelViewIntro() {
-    info("Checking that the panel shows the intro view");
+  static assertPanelViewFirstShow() {
+    info("Checking that the panel shows the first-show view");
     FullPageTranslationsTestUtils.#assertPanelMainViewId(
       "full-page-translations-panel-view-default"
     );
@@ -2098,10 +948,10 @@ class FullPageTranslationsTestUtils {
   }
 
   /**
-   * Asserts that panel element visibility matches the panel intro error view.
+   * Asserts that panel element visibility matches the panel first-show error view.
    */
-  static assertPanelViewIntroError() {
-    info("Checking that the panel shows the intro error view");
+  static assertPanelViewFirstShowError() {
+    info("Checking that the panel shows the first-show error view");
     FullPageTranslationsTestUtils.#assertPanelMainViewId(
       "full-page-translations-panel-view-default"
     );
@@ -2291,11 +1141,11 @@ class FullPageTranslationsTestUtils {
    * Simulates clicking the change-source-language button.
    *
    * @param {object} config
-   * @param {boolean} config.intro
-   *  - True if the intro view should be expected
+   * @param {boolean} config.firstShow
+   *  - True if the first-show view should be expected
    *    False if the default view should be expected
    */
-  static async clickChangeSourceLanguageButton({ intro = false } = {}) {
+  static async clickChangeSourceLanguageButton({ firstShow = false } = {}) {
     logAction();
     const { changeSourceLanguageButton } = FullPageTranslationsPanel.elements;
     assertVisibility({ visible: { changeSourceLanguageButton } });
@@ -2307,8 +1157,8 @@ class FullPageTranslationsTestUtils {
           "Click the change-source-language button"
         );
       },
-      intro
-        ? FullPageTranslationsTestUtils.assertPanelViewIntro
+      firstShow
+        ? FullPageTranslationsTestUtils.assertPanelViewFirstShow
         : FullPageTranslationsTestUtils.assertPanelViewDefault
     );
   }
@@ -2852,10 +1702,7 @@ class SelectTranslationsTestUtils {
 
         await waitForCondition(
           () =>
-            TranslationsUtils.langTagsMatch(
-              menuItem.getAttribute("target-language"),
-              expectedTargetLanguage
-            ),
+            menuItem.getAttribute("target-language") === expectedTargetLanguage,
           `Waiting for translate-selection context menu item to match the expected target language ${expectedTargetLanguage}`
         );
         await waitForCondition(
@@ -4104,8 +2951,6 @@ class TranslationsSettingsTestUtils {
   static async openAboutPreferencesTranslationsSettingsPane(settingsButton) {
     const document = gBrowser.selectedBrowser.contentDocument;
 
-    const translationsPane =
-      content.window.gCategoryModules.get("paneTranslations");
     const promise = BrowserTestUtils.waitForEvent(
       document,
       "paneshown",
@@ -4116,7 +2961,42 @@ class TranslationsSettingsTestUtils {
     click(settingsButton, "Click settings button");
     await promise;
 
-    return translationsPane.elements;
+    const elements = {
+      backButton: document.getElementById("translations-settings-back-button"),
+      header: document.getElementById("translations-settings-header"),
+      translationsSettingsDescription: document.getElementById(
+        "translations-settings-description"
+      ),
+      translateAlwaysHeader: document.getElementById(
+        "translations-settings-always-translate"
+      ),
+      translateNeverHeader: document.getElementById(
+        "translations-settings-never-translate"
+      ),
+      translateAlwaysMenuList: document.getElementById(
+        "translations-settings-always-translate-list"
+      ),
+      translateNeverMenuList: document.getElementById(
+        "translations-settings-never-translate-list"
+      ),
+      translateNeverSiteHeader: document.getElementById(
+        "translations-settings-never-sites-header"
+      ),
+      translateNeverSiteDesc: document.getElementById(
+        "translations-settings-never-sites"
+      ),
+      translateDownloadLanguagesHeader: document
+        .getElementById("translations-settings-download-section")
+        .querySelector("h2"),
+      translateDownloadLanguagesLearnMore: document.getElementById(
+        "download-languages-learn-more"
+      ),
+      translateDownloadLanguagesList: document.getElementById(
+        "translations-settings-download-section"
+      ),
+    };
+
+    return elements;
   }
 
   /**

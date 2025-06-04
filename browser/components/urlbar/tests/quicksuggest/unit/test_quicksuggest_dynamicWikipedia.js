@@ -91,6 +91,9 @@ function makeExpectedResult() {
       source: "merino",
       provider: "wikipedia",
       isBlockable: true,
+      blockL10n: {
+        id: "urlbar-result-menu-dismiss-firefox-suggest",
+      },
       isManageable: true,
     },
   };

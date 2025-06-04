@@ -45,12 +45,11 @@
 /* eslint-env mozilla/browser-window */
 
 ChromeUtils.defineESModuleGetters(this, {
-  EnrollmentType: "resource://nimbus/ExperimentAPI.sys.mjs",
-  NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
+  ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
   pktApi: "chrome://pocket/content/pktApi.sys.mjs",
   pktTelemetry: "chrome://pocket/content/pktTelemetry.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
-  ReaderMode: "moz-src:///toolkit/components/reader/ReaderMode.sys.mjs",
+  ReaderMode: "resource://gre/modules/ReaderMode.sys.mjs",
   SaveToPocket: "chrome://pocket/content/SaveToPocket.sys.mjs",
 });
 
@@ -179,24 +178,34 @@ var pktUI = (function () {
       height: options.height,
     });
 
+    const saveToPocketExperiment = ExperimentAPI.getExperimentMetaData({
+      featureId: "saveToPocket",
+    });
+
+    const saveToPocketRollout = ExperimentAPI.getRolloutMetaData({
+      featureId: "saveToPocket",
+    });
+
+    const pocketNewtabExperiment = ExperimentAPI.getExperimentMetaData({
+      featureId: "pocketNewtab",
+    });
+
+    const pocketNewtabRollout = ExperimentAPI.getRolloutMetaData({
+      featureId: "pocketNewtab",
+    });
+
     // We want to know if the user is in a Pocket related experiment or rollout,
     // but we have 2 Pocket related features, so we prioritize the saveToPocket feature,
     // and experiments over rollouts.
-    const experimentMetadata =
-      NimbusFeatures.saveToPocket.getEnrollmentMetadata(
-        EnrollmentType.EXPERIMENT
-      ) ??
-      NimbusFeatures.pocketNewtab.getEnrollmentMetadata(
-        EnrollmentType.EXPERIMENT
-      ) ??
-      NimbusFeatures.saveToPocket.getEnrollmentMetadata(
-        EnrollmentType.ROLLOUT
-      ) ??
-      NimbusFeatures.pocketNewtab.getEnrollmentMetadata(EnrollmentType.ROLLOUT);
+    const experimentMetaData =
+      saveToPocketExperiment ||
+      pocketNewtabExperiment ||
+      saveToPocketRollout ||
+      pocketNewtabRollout;
 
     let utmSource = "firefox_pocket_save_button";
-    let utmCampaign = experimentMetadata?.slug;
-    let utmContent = experimentMetadata?.branch;
+    let utmCampaign = experimentMetaData?.slug;
+    let utmContent = experimentMetaData?.branch?.slug;
 
     const url = new URL(urlString);
     // A set of params shared across all panels.

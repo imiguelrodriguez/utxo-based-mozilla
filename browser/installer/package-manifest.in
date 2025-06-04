@@ -57,9 +57,12 @@
 #ifdef HAVE_MAKENSISU
 @BINPATH@/uninstall/helper.exe
 #endif
-@RESPATH@/default.locale
 #ifdef MOZ_UPDATER
+@RESPATH@/update.locale
 @RESPATH@/updater.ini
+#endif
+#if defined(MOZ_UPDATE_AGENT)
+@RESPATH@/locale.ini
 #endif
 
 [xpcom]
@@ -168,7 +171,7 @@
 #endif
 
 ; JavaScript components
-@RESPATH@/browser/components/*.manifest
+@RESPATH@/browser/components/BrowserComponents.manifest
 @RESPATH@/components/extensions.manifest
 #ifdef MOZ_UPDATER
 @RESPATH@/components/nsUpdateService.manifest
@@ -185,6 +188,7 @@
 @RESPATH@/components/antitracking.manifest
 
 @RESPATH@/components/l10n-registry.manifest
+@RESPATH@/browser/components/l10n-registry.manifest
 
 ; WebDriver (Marionette, Remote Agent) remote protocols
 #ifdef ENABLE_WEBDRIVER
@@ -194,11 +198,11 @@
 
 ; [Extensions]
 @RESPATH@/components/extensions-toolkit.manifest
+@RESPATH@/browser/components/extensions-browser.manifest
 
 ; Modules
 @RESPATH@/browser/modules/*
 @RESPATH@/modules/*
-@RESPATH@/moz-src/*
 @RESPATH@/browser/actors/*
 @RESPATH@/actors/*
 
@@ -207,10 +211,6 @@
 @BINPATH@/libEGL.dll
 @BINPATH@/libGLESv2.dll
 #endif # MOZ_ANGLE_RENDERER
-
-#ifdef MOZ_DXCOMPILER
-@BINPATH@/@MOZ_DXC_DLL_NAME@
-#endif
 
 ; [Browser Chrome Files]
 @RESPATH@/browser/chrome.manifest
@@ -225,6 +225,7 @@
 @RESPATH@/browser/chrome/icons/default/default64.png
 @RESPATH@/browser/chrome/icons/default/default128.png
 #endif
+@RESPATH@/browser/features/*
 
 ; [DevTools Startup Files]
 @RESPATH@/browser/chrome/devtools-startup@JAREXT@
@@ -311,7 +312,6 @@
 @RESPATH@/res/locale/layout/MediaDocument.properties
 @RESPATH@/res/locale/layout/xmlparser.properties
 @RESPATH@/res/locale/dom/dom.properties
-@RESPATH@/res/locale/necko/necko.properties
 #ifdef XP_MACOSX
 @RESPATH@/res/MainMenu.nib/
 #endif
@@ -343,6 +343,7 @@ bin/libfreebl_64int_3.so
 @BINPATH@/@DLL_PREFIX@freebl3@DLL_SUFFIX@
 #endif
 @BINPATH@/@DLL_PREFIX@nss3@DLL_SUFFIX@
+@BINPATH@/@DLL_PREFIX@nssckbi@DLL_SUFFIX@
 #ifndef MOZ_FOLD_LIBS
 @BINPATH@/@DLL_PREFIX@nssutil3@DLL_SUFFIX@
 @BINPATH@/@DLL_PREFIX@smime3@DLL_SUFFIX@
@@ -352,6 +353,16 @@ bin/libfreebl_64int_3.so
 #endif
 @RESPATH@/chrome/pippki@JAREXT@
 @RESPATH@/chrome/pippki.manifest
+
+; preprocessor.py doesn't handle parentheses, so while the following could be
+; expressed in a single line, it's more clear to break them up.
+#if defined(XP_WIN) || defined(XP_MACOSX)
+#if !defined(_ARM64_)
+@BINPATH@/@DLL_PREFIX@osclientcerts@DLL_SUFFIX@
+#endif
+#endif
+
+@BINPATH@/@DLL_PREFIX@ipcclientcerts@DLL_SUFFIX@
 
 ; For process sandboxing
 #if defined(MOZ_SANDBOX)
@@ -390,10 +401,10 @@ bin/libfreebl_64int_3.so
 #endif
 #endif
 
-; [ crashhelper ]
+; [ minidump-analyzer ]
 ;
 #ifdef MOZ_CRASHREPORTER
-@BINPATH@/crashhelper@BIN_SUFFIX@
+@BINPATH@/minidump-analyzer@BIN_SUFFIX@
 #endif
 
 ; [ Ping Sender ]

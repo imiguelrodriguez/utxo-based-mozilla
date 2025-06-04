@@ -12,25 +12,22 @@ const SCALAR_NAME = "browser.ui.customized_widgets";
 const bookmarksInfo = [
   {
     title: "firefox",
-    url: "https://example.com",
+    url: "http://example.com",
   },
   {
     title: "rules",
-    url: "https://example.com/2",
+    url: "http://example.com/2",
   },
   {
     title: "yo",
-    url: "https://example.com/2",
+    url: "http://example.com/2",
   },
 ];
 
 // Setup.
 add_task(async function test_bookmarks_toolbar_telemetry() {
   await SpecialPowers.pushPrefEnv({
-    set: [
-      ["test.wait300msAfterTabSwitch", true],
-      ["browser.toolbars.bookmarks.visibility", "newtab"],
-    ],
+    set: [["browser.toolbars.bookmarks.visibility", "newtab"]],
   });
 
   // This is added during startup

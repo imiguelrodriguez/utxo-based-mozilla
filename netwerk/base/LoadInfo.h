@@ -8,7 +8,6 @@
 #define mozilla_LoadInfo_h
 
 #include "mozilla/dom/FeaturePolicy.h"
-#include "mozilla/dom/UserNavigationInvolvement.h"
 #include "nsIInterceptionInfo.h"
 #include "nsILoadInfo.h"
 #include "nsIPrincipal.h"
@@ -19,7 +18,6 @@
 #include "nsTArray.h"
 
 #include "mozilla/BasePrincipal.h"
-#include "mozilla/Result.h"
 #include "mozilla/dom/ClientInfo.h"
 #include "mozilla/dom/ServiceWorkerDescriptor.h"
 
@@ -49,7 +47,6 @@ nsresult LoadInfoArgsToLoadInfo(const mozilla::net::LoadInfoArgs& aLoadInfoArgs,
                                 const nsACString& aOriginRemoteType,
                                 nsINode* aCspToInheritLoadingContext,
                                 net::LoadInfo** outLoadInfo);
-
 }  // namespace ipc
 
 namespace net {
@@ -66,18 +63,6 @@ class LoadInfo final : public nsILoadInfo {
  public:
   NS_DECL_ISUPPORTS
   NS_DECL_NSILOADINFO
-
-  // Currently used for most load types, but prefer the specialized factories
-  // below when possible. aLoadingPrincipal MUST NOT BE NULL.
-  static mozilla::Result<already_AddRefed<LoadInfo>, nsresult> Create(
-      nsIPrincipal* aLoadingPrincipal, nsIPrincipal* aTriggeringPrincipal,
-      nsINode* aLoadingContext, nsSecurityFlags aSecurityFlags,
-      nsContentPolicyType aContentPolicyType,
-      const Maybe<mozilla::dom::ClientInfo>& aLoadingClientInfo =
-          Maybe<mozilla::dom::ClientInfo>(),
-      const Maybe<mozilla::dom::ServiceWorkerDescriptor>& aController =
-          Maybe<mozilla::dom::ServiceWorkerDescriptor>(),
-      uint32_t aSandboxFlags = 0);
 
   // Used for TYPE_DOCUMENT load.
   static already_AddRefed<LoadInfo> CreateForDocument(
@@ -100,6 +85,17 @@ class LoadInfo final : public nsILoadInfo {
       nsContentPolicyType aContentPolicyType, nsSecurityFlags aSecurityFlags,
       uint32_t aSandboxFlags);
 
+  // aLoadingPrincipal MUST NOT BE NULL.
+  LoadInfo(nsIPrincipal* aLoadingPrincipal, nsIPrincipal* aTriggeringPrincipal,
+           nsINode* aLoadingContext, nsSecurityFlags aSecurityFlags,
+           nsContentPolicyType aContentPolicyType,
+           const Maybe<mozilla::dom::ClientInfo>& aLoadingClientInfo =
+               Maybe<mozilla::dom::ClientInfo>(),
+           const Maybe<mozilla::dom::ServiceWorkerDescriptor>& aController =
+               Maybe<mozilla::dom::ServiceWorkerDescriptor>(),
+           uint32_t aSandboxFlags = 0,
+           bool aSkipCheckForBrokenURLOrZeroSized = 0);
+
   // Constructor used for TYPE_DOCUMENT loads which have a different
   // loadingContext than other loads. This ContextForTopLevelLoad is
   // only used for content policy checks.
@@ -109,15 +105,6 @@ class LoadInfo final : public nsILoadInfo {
            uint32_t aSandboxFlags);
 
  private:
-  // Use factory function Create.
-  // aLoadingPrincipal MUST NOT BE NULL.
-  LoadInfo(nsIPrincipal* aLoadingPrincipal, nsIPrincipal* aTriggeringPrincipal,
-           nsINode* aLoadingContext, nsSecurityFlags aSecurityFlags,
-           nsContentPolicyType aContentPolicyType,
-           const Maybe<mozilla::dom::ClientInfo>& aLoadingClientInfo,
-           const Maybe<mozilla::dom::ServiceWorkerDescriptor>& aController,
-           uint32_t aSandboxFlags);
-
   // Use factory function CreateForDocument
   // Used for TYPE_DOCUMENT load.
   LoadInfo(dom::CanonicalBrowsingContext* aBrowsingContext, nsIURI* aURI,
@@ -248,8 +235,8 @@ class LoadInfo final : public nsILoadInfo {
       uint64_t aBrowsingContextID, uint64_t aFrameBrowsingContextID,
       bool aInitialSecurityCheckDone, bool aIsThirdPartyContext,
       const Maybe<bool>& aIsThirdPartyContextToTopWindow,
-      bool aIsOn3PCBExceptionList, bool aIsFormSubmission, bool aIsGETRequest,
-      bool aSendCSPViolationEvents, const OriginAttributes& aOriginAttributes,
+      bool aIsFormSubmission, bool aIsGETRequest, bool aSendCSPViolationEvents,
+      const OriginAttributes& aOriginAttributes,
       RedirectHistoryArray&& aRedirectChainIncludingInternalRedirects,
       RedirectHistoryArray&& aRedirectChain,
       nsTArray<nsCOMPtr<nsIPrincipal>>&& aAncestorPrincipals,
@@ -265,19 +252,15 @@ class LoadInfo final : public nsILoadInfo {
       bool aIsSameDocumentNavigation, bool aAllowDeprecatedSystemRequests,
       bool aIsInDevToolsContext, bool aParserCreatedScript,
       nsILoadInfo::StoragePermissionState aStoragePermission,
-      nsILoadInfo::IPAddressSpace aParentIPAddressSpace,
-      nsILoadInfo::IPAddressSpace aIPAddressSpace,
-      const Maybe<RFPTargetSet>& aOverriddenFingerprintingSettings,
+      const Maybe<RFPTarget>& aOverriddenFingerprintingSettings,
       bool aIsMetaRefresh, uint32_t aRequestBlockingReason,
       nsINode* aLoadingContext,
       nsILoadInfo::CrossOriginEmbedderPolicy aLoadingEmbedderPolicy,
       bool aIsOriginTrialCoepCredentiallessEnabledForTopLevel,
       nsIURI* aUnstrippedURI, nsIInterceptionInfo* aInterceptionInfo,
-      bool aHasInjectedCookieForCookieBannerHandling,
-      nsILoadInfo::SchemelessInputType aSchemelessInput,
+      bool aHasInjectedCookieForCookieBannerHandling, bool aWasSchemelessInput,
       nsILoadInfo::HTTPSUpgradeTelemetryType aHttpsUpgradeTelemetry,
-      bool aIsNewWindowTarget,
-      dom::UserNavigationInvolvement aUserNavigationInvolvement);
+      bool aIsNewWindowTarget);
 
   LoadInfo(const LoadInfo& rhs);
 
@@ -295,8 +278,6 @@ class LoadInfo final : public nsILoadInfo {
   void ComputeIsThirdPartyContext(nsPIDOMWindowOuter* aOuterWindow);
   void ComputeIsThirdPartyContext(dom::WindowGlobalParent* aGlobal);
 
-  bool IsDocumentMissingClientInfo();
-
   // This function is the *only* function which can change the securityflags
   // of a loadinfo. It only exists because of the XHR code. Don't call it
   // from anywhere else!
@@ -313,8 +294,6 @@ class LoadInfo final : public nsILoadInfo {
   void UpdateFrameBrowsingContextID(uint64_t aFrameBrowsingContextID) {
     mFrameBrowsingContextID = aFrameBrowsingContextID;
   }
-
-  void UpdateParentAddressSpaceInfo();
   MOZ_NEVER_INLINE void ReleaseMembers();
 
   // if you add a member, please also update the copy constructor and consider
@@ -367,7 +346,6 @@ class LoadInfo final : public nsILoadInfo {
   // NB: TYPE_DOCUMENT implies !third-party.
   bool mIsThirdPartyContext = false;
   Maybe<bool> mIsThirdPartyContextToTopWindow;
-  bool mIsOn3PCBExceptionList = false;
   bool mIsFormSubmission = false;
   bool mIsGETRequest = true;
   bool mSendCSPViolationEvents = true;
@@ -399,11 +377,7 @@ class LoadInfo final : public nsILoadInfo {
   bool mParserCreatedScript = false;
   nsILoadInfo::StoragePermissionState mStoragePermission =
       nsILoadInfo::NoStoragePermission;
-  // IP Address space of the parent browsing context.
-  nsILoadInfo::IPAddressSpace mParentIPAddressSpace = nsILoadInfo::Public;
-  nsILoadInfo::IPAddressSpace mIPAddressSpace = nsILoadInfo::Public;
-
-  Maybe<RFPTargetSet> mOverriddenFingerprintingSettings;
+  Maybe<RFPTarget> mOverriddenFingerprintingSettings;
 #ifdef DEBUG
   // A boolean used to ensure the mOverriddenFingerprintingSettings is set
   // before use it.
@@ -423,6 +397,8 @@ class LoadInfo final : public nsILoadInfo {
   // See nsILoadInfo.isFromObjectOrEmbed
   bool mIsFromObjectOrEmbed = false;
 
+  bool mSkipCheckForBrokenURLOrZeroSized = false;
+
   // The cross origin embedder policy that the loading need to respect.
   // If the value is nsILoadInfo::EMBEDDER_POLICY_REQUIRE_CORP, CORP checking
   // must be performed for the loading.
@@ -437,24 +413,20 @@ class LoadInfo final : public nsILoadInfo {
   nsCOMPtr<nsIInterceptionInfo> mInterceptionInfo;
 
   bool mHasInjectedCookieForCookieBannerHandling = false;
-  nsILoadInfo::SchemelessInputType mSchemelessInput =
-      nsILoadInfo::SchemelessInputTypeUnset;
+  bool mWasSchemelessInput = false;
 
   nsILoadInfo::HTTPSUpgradeTelemetryType mHttpsUpgradeTelemetry =
       nsILoadInfo::NOT_INITIALIZED;
 
-  dom::UserNavigationInvolvement mUserNavigationInvolvement =
-      dom::UserNavigationInvolvement::None;
-
   bool mIsNewWindowTarget = false;
   bool mSkipHTTPSUpgrade = false;
 };
+
 // This is exposed solely for testing purposes and should not be used outside of
 // LoadInfo
 already_AddRefed<nsIPrincipal> CreateTruncatedPrincipal(nsIPrincipal*);
 
 }  // namespace net
-
 }  // namespace mozilla
 
 #endif  // mozilla_LoadInfo_h

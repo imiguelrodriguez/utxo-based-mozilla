@@ -5,7 +5,7 @@
 
 /**
  * Tests the effect of toggling the never-translate-language menuitem.
- * Checking the box on an not translated page should immediately hide the button.
+ * Checking the box on an untranslated page should immediately hide the button.
  * The button should not appear again for sites in the disabled language.
  */
 add_task(async function test_toggle_never_translate_language_menuitem() {
@@ -19,12 +19,12 @@ add_task(async function test_toggle_never_translate_language_menuitem() {
     "The translations button is visible."
   );
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await FullPageTranslationsTestUtils.openPanel({
     expectedFromLanguage: "es",
     expectedToLanguage: "en",
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
   });
   await FullPageTranslationsTestUtils.openTranslationsSettingsMenu();
 
@@ -36,17 +36,17 @@ add_task(async function test_toggle_never_translate_language_menuitem() {
     checked: true,
   });
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await navigate("Reload the page", { url: SPANISH_PAGE_URL });
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await navigate("Navigate to a different Spanish page", {
     url: SPANISH_PAGE_URL_DOT_ORG,
   });
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await cleanup();
 });
@@ -69,25 +69,23 @@ add_task(
       "The button is available."
     );
 
-    await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
     await FullPageTranslationsTestUtils.openPanel({
       expectedFromLanguage: "es",
       expectedToLanguage: "en",
-      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
     });
 
     await FullPageTranslationsTestUtils.clickTranslateButton({
       downloadHandler: resolveDownloads,
     });
 
-    await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated(
-      {
-        fromLanguage: "es",
-        toLanguage: "en",
-        runInPage,
-      }
-    );
+    await FullPageTranslationsTestUtils.assertPageIsTranslated({
+      fromLanguage: "es",
+      toLanguage: "en",
+      runInPage,
+    });
 
     await FullPageTranslationsTestUtils.openPanel({
       expectedToLanguage: "en",
@@ -103,11 +101,11 @@ add_task(
       checked: true,
     });
 
-    await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
     await navigate("Reload the page", { url: SPANISH_PAGE_URL });
 
-    await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
     await cleanup();
   }
@@ -135,7 +133,7 @@ add_task(
     await FullPageTranslationsTestUtils.openPanel({
       expectedFromLanguage: "es",
       expectedToLanguage: "en",
-      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
     });
     await FullPageTranslationsTestUtils.openTranslationsSettingsMenu();
 
@@ -157,13 +155,11 @@ add_task(
       checked: false,
     });
 
-    await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated(
-      {
-        fromLanguage: "es",
-        toLanguage: "en",
-        runInPage,
-      }
-    );
+    await FullPageTranslationsTestUtils.assertPageIsTranslated({
+      fromLanguage: "es",
+      toLanguage: "en",
+      runInPage,
+    });
 
     await FullPageTranslationsTestUtils.openPanel({
       expectedToLanguage: "en",
@@ -187,11 +183,11 @@ add_task(
       checked: true,
     });
 
-    await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
     await navigate("Reload the page", { url: SPANISH_PAGE_URL });
 
-    await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
     await cleanup();
   }

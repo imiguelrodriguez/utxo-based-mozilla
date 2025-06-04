@@ -31,7 +31,6 @@ export class ASRouterParentProcessMessageHandler {
       case msg.DOORHANGER_TELEMETRY:
       case msg.SPOTLIGHT_TELEMETRY:
       case msg.MENU_MESSAGE_TELEMETRY:
-      case msg.NEWTAB_MESSAGE_TELEMETRY:
       case msg.TOAST_NOTIFICATION_TELEMETRY: {
         return this.handleTelemetry({ type, data });
       }
@@ -41,7 +40,7 @@ export class ASRouterParentProcessMessageHandler {
     }
   }
 
-  handleMessage(name, data, { browser } = { browser: null }) {
+  handleMessage(name, data, { id: tabId, browser } = { browser: null }) {
     switch (name) {
       case msg.AS_ROUTER_TELEMETRY_USER_EVENT:
         return this.handleTelemetry({
@@ -70,12 +69,14 @@ export class ASRouterParentProcessMessageHandler {
       case msg.TRIGGER: {
         return this._router.sendTriggerMessage({
           ...(data && data.trigger),
+          tabId,
           browser,
         });
       }
       case msg.PBNEWTAB_MESSAGE_REQUEST: {
         return this._router.sendPBNewTabMessage({
           ...data,
+          tabId,
           browser,
         });
       }

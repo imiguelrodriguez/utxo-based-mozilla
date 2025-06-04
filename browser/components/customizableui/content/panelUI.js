@@ -8,7 +8,6 @@ ChromeUtils.defineESModuleGetters(this, {
   MenuMessage: "resource:///modules/asrouter/MenuMessage.sys.mjs",
   NewTabUtils: "resource://gre/modules/NewTabUtils.sys.mjs",
   PanelMultiView: "resource:///modules/PanelMultiView.sys.mjs",
-  updateZoomUI: "resource:///modules/ZoomUI.sys.mjs",
 });
 
 /**
@@ -20,12 +19,6 @@ const PanelUI = {
   get kEvents() {
     return ["popupshowing", "popupshown", "popuphiding", "popuphidden"];
   },
-
-  /// Notification events used for overwriting notification actions
-  get kNotificationEvents() {
-    return ["buttoncommand", "secondarybuttoncommand", "learnmoreclick"];
-  },
-
   /**
    * Used for lazily getting and memoizing elements from the document. Lazy
    * getters are set in init, and memoizing happens after the first retrieval.
@@ -170,9 +163,6 @@ const PanelUI = {
 
     if (this._notificationPanel) {
       for (let event of this.kEvents) {
-        this.notificationPanel.removeEventListener(event, this);
-      }
-      for (let event of this.kNotificationEvents) {
         this.notificationPanel.removeEventListener(event, this);
       }
     }
@@ -332,16 +322,6 @@ const PanelUI = {
         break;
       case "command":
         this.onCommand(aEvent);
-        break;
-      case "buttoncommand":
-        this._onNotificationButtonEvent(aEvent, "buttoncommand");
-        break;
-      case "secondarybuttoncommand":
-        this._onNotificationButtonEvent(aEvent, "secondarybuttoncommand");
-        break;
-      case "learnmoreclick":
-        // Don't fall back to PopupNotifications.
-        aEvent.preventDefault();
         break;
     }
   },
@@ -662,7 +642,6 @@ const PanelUI = {
       let message = ASRouter.getMessageById(messageId);
       ASRouter.addImpression(message);
     }
-    updateZoomUI(gBrowser.selectedBrowser);
   },
 
   _onHelpViewShow() {
@@ -747,6 +726,9 @@ const PanelUI = {
       case "appMenu_troubleShooting":
         openTroubleshootingPage();
         break;
+      case "appMenu_help_reportSiteIssue":
+        ReportSiteIssue();
+        break;
       case "appMenu_menu_HelpPopup_reportPhishingtoolmenu":
         openUILink(gSafeBrowsing.getReportURL("Phish"), aEvent, {
           triggeringPrincipal:
@@ -754,7 +736,7 @@ const PanelUI = {
         });
         break;
       case "appMenu_menu_HelpPopup_reportPhishingErrortoolmenu":
-        gSafeBrowsing.reportFalseDeceptiveSite();
+        ReportFalseDeceptiveSite();
         break;
       case "appMenu_helpSwitchDevice":
         openSwitchingDevicesPage();
@@ -986,9 +968,6 @@ const PanelUI = {
       for (let event of this.kEvents) {
         this._notificationPanel.addEventListener(event, this);
       }
-      for (let event of this.kNotificationEvents) {
-        this._notificationPanel.addEventListener(event, this);
-      }
     }
     return this._notificationPanel;
   },
@@ -1027,6 +1006,14 @@ const PanelUI = {
     let popupnotification = document.getElementById(popupnotificationID);
 
     popupnotification.setAttribute("id", popupnotificationID);
+    popupnotification.setAttribute(
+      "buttoncommand",
+      "PanelUI._onNotificationButtonEvent(event, 'buttoncommand');"
+    );
+    popupnotification.setAttribute(
+      "secondarybuttoncommand",
+      "PanelUI._onNotificationButtonEvent(event, 'secondarybuttoncommand');"
+    );
 
     if (notification.options.message) {
       let desc = this._formatDescriptionMessage(notification);
@@ -1075,18 +1062,8 @@ const PanelUI = {
       this._panelBannerItem = this.mainView.querySelector(".panel-banner-item");
     }
 
-    const messageIDs = {
-      "update-downloading": "appmenuitem-banner-update-downloading",
-      "update-available": "appmenuitem-banner-update-available",
-      "update-manual": "appmenuitem-banner-update-manual",
-      "update-unsupported": "appmenuitem-banner-update-unsupported",
-      "update-restart": "appmenuitem-banner-update-restart",
-    };
-
-    document.l10n.setAttributes(
-      this._panelBannerItem,
-      messageIDs[notification.id]
-    );
+    let l10nId = "appmenuitem-banner-" + notification.id;
+    document.l10n.setAttributes(this._panelBannerItem, l10nId);
 
     this._panelBannerItem.setAttribute("notificationid", notification.id);
     this._panelBannerItem.hidden = false;
@@ -1105,8 +1082,6 @@ const PanelUI = {
   },
 
   _onNotificationButtonEvent(event, type) {
-    event.preventDefault();
-
     let notificationEl = getNotificationFromElement(event.originalTarget);
 
     if (!notificationEl) {

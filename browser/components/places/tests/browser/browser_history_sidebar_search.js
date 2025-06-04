@@ -3,10 +3,10 @@ add_task(async function test() {
 
   // Visited pages listed by descending visit date.
   let pages = [
-    "https://sidebar.mozilla.org/a",
-    "https://sidebar.mozilla.org/b",
-    "https://sidebar.mozilla.org/c",
-    "https://www.mozilla.org/d",
+    "http://sidebar.mozilla.org/a",
+    "http://sidebar.mozilla.org/b",
+    "http://sidebar.mozilla.org/c",
+    "http://www.mozilla.org/d",
   ];
 
   // Number of pages that will be filtered out by the search.
@@ -26,7 +26,7 @@ add_task(async function test() {
   }
   await PlacesTestUtils.addVisits(places);
 
-  await withSidebarTree("history", async function () {
+  await withSidebarTree("history", function () {
     info("Set 'by last visited' view");
     sidebar.contentDocument.getElementById("bylastvisited").doCommand();
     let tree = sidebar.contentDocument.getElementById("historyTree");
@@ -35,11 +35,13 @@ add_task(async function test() {
     // Set a search value.
     let searchBox = sidebar.contentDocument.getElementById("search-box");
     ok(searchBox, "search box is in context");
-    await setSearch(searchBox, "sidebar.mozilla");
+    searchBox.value = "sidebar.mozilla";
+    searchBox.doCommand();
     check_tree_order(tree, pages, -FILTERED_COUNT);
 
     info("Reset the search");
-    searchBox.clear();
+    searchBox.value = "";
+    searchBox.doCommand();
     check_tree_order(tree, pages);
   });
 

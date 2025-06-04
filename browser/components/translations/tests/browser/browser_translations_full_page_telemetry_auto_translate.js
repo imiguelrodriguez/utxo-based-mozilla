@@ -11,6 +11,7 @@ add_task(async function test_translations_telemetry_auto_translate() {
   const { cleanup, resolveDownloads, runInPage } = await loadTestPage({
     page: SPANISH_PAGE_URL,
     languagePairs: LANGUAGE_PAIRS,
+    prefs: [["browser.translations.panelShown", false]],
   });
 
   await FullPageTranslationsTestUtils.assertTranslationsButton(
@@ -18,19 +19,19 @@ add_task(async function test_translations_telemetry_auto_translate() {
     "The button is available."
   );
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await FullPageTranslationsTestUtils.openPanel({
     expectedFromLanguage: "es",
     expectedToLanguage: "en",
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewFirstShow,
   });
   await FullPageTranslationsTestUtils.openTranslationsSettingsMenu();
   await FullPageTranslationsTestUtils.clickAlwaysTranslateLanguage({
     downloadHandler: resolveDownloads,
   });
 
-  await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated({
+  await FullPageTranslationsTestUtils.assertPageIsTranslated({
     fromLanguage: "es",
     toLanguage: "en",
     runInPage,
@@ -117,11 +118,7 @@ add_task(async function test_translations_telemetry_auto_translate() {
     { button: true },
     "The button is available."
   );
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
-
-  await TestTranslationsTelemetry.assertTranslationsEnginePerformance({
-    expectedEventCount: 1,
-  });
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await cleanup();
 });

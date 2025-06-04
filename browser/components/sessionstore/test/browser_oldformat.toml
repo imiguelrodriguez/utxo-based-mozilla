@@ -135,10 +135,7 @@ skip-if = ["true"]
 ["browser_467409-backslashplosion.js"]
 
 ["browser_477657.js"]
-skip-if = [
-  "os == 'linux' && os_version == '18.04'", # bug 1610668 for ubuntu 18.04
-  "os == 'linux' && os_version == '24.04' && processor == 'x86_64' && display == 'x11'", # Bug 1610668
-]
+skip-if = ["os == 'linux' && os_version == '18.04'"] # bug 1610668 for ubuntu 18.04
 
 ["browser_480893.js"]
 
@@ -207,7 +204,6 @@ https_first_disabled = true
 ["browser_590268.js"]
 
 ["browser_590563.js"]
-skip-if = ["os == 'mac' && os_version == '15.30' && arch == 'aarch64'"]
 
 ["browser_595601-restore_hidden.js"]
 

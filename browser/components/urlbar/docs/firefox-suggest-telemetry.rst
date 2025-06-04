@@ -32,11 +32,7 @@ Changelog
   Firefox 93.0
     Introduced. [Bug 1727799_]
 
-  Firefox 137.0
-    Removed. [Bug 1946922_]
-
 .. _1727799: https://bugzilla.mozilla.org/show_bug.cgi?id=1727799
-.. _1946922: https://bugzilla.mozilla.org/show_bug.cgi?id=1946922
 
 FX_URLBAR_MERINO_LATENCY_WEATHER_MS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -50,11 +46,7 @@ Changelog
   Firefox 110.0
     Introduced. [Bug 1804536_]
 
-  Firefox 137.0
-    Removed. [Bug 1946922_]
-
 .. _1804536: https://bugzilla.mozilla.org/show_bug.cgi?id=1804536
-.. _1946922: https://bugzilla.mozilla.org/show_bug.cgi?id=1946922
 
 FX_URLBAR_MERINO_RESPONSE
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -89,12 +81,8 @@ Changelog
     timeout elapsed" to "The fetch completed without any error before the
     timeout elapsed and it included at least one suggestion." [Bug 1804536_]
 
-  Firefox 137.0
-    Removed. [Bug 1946922_]
-
 .. _1737923: https://bugzilla.mozilla.org/show_bug.cgi?id=1737923
 .. _1804536: https://bugzilla.mozilla.org/show_bug.cgi?id=1804536
-.. _1946922: https://bugzilla.mozilla.org/show_bug.cgi?id=1946922
 
 FX_URLBAR_MERINO_RESPONSE_WEATHER
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -122,11 +110,7 @@ Changelog
   Firefox 110.0
     Introduced. [Bug 1804536_]
 
-  Firefox 137.0
-    Removed. [Bug 1946922_]
-
 .. _1804536: https://bugzilla.mozilla.org/show_bug.cgi?id=1804536
-.. _1946922: https://bugzilla.mozilla.org/show_bug.cgi?id=1946922
 
 FX_URLBAR_QUICK_SUGGEST_REMOTE_SETTINGS_LATENCY_MS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -145,11 +129,7 @@ Changelog
   Firefox 94.0.2
     Introduced. [Bug 1737651_]
 
-  Firefox 135.0
-    Removed. [Bug 1932502_]
-
 .. _1737651: https://bugzilla.mozilla.org/show_bug.cgi?id=1737651
-.. _1932502: https://bugzilla.mozilla.org/show_bug.cgi?id=1932502
 
 Scalars
 -------
@@ -158,16 +138,11 @@ The following scalars are recorded for Firefox Suggest. For general information
 on scalar telemetry in Firefox, see the
 :doc:`/toolkit/components/telemetry/collection/scalars` document.
 
-browser.ui.interaction.preferences_paneSearch
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+browser.ui.interaction.preferences_panePrivacy
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This keyed scalar is incremented each time the user clicks a Firefox Suggest
-checkbox or toggle switch in the preferences UI.
-
-Note: These are also recorded in different forms under the
-``contextual.services.quicksuggest.*`` telemetry described below.
-
-Keys are the following:
+checkbox or toggle switch in the preferences UI. Keys are the following:
 
 :firefoxSuggestBestMatch:
   This key is incremented when the "Top pick" checkbox is clicked. In 120 this
@@ -178,10 +153,10 @@ Keys are the following:
 :firefoxSuggestDataCollectionToggle:
   This key is incremented when the toggle switch for data collection
   is clicked.
-:firefoxSuggestNonsponsored:
+:firefoxSuggestNonsponsoredToggle:
   This key is incremented when the toggle switch for non-sponsored suggestions
   is clicked.
-:firefoxSuggestSponsored:
+:firefoxSuggestSponsoredToggle:
   This key is incremented when the toggle switch for sponsored suggestions
   is clicked.
 
@@ -199,18 +174,10 @@ Changelog
     Removed ``firefoxSuggestBestMatch`` and
     ``firefoxSuggestBestMatchLearnMore``. [Bug 1857391_]
 
-  Firefox 123.0
-    Recording moved from ``browser.ui.interaction.preferences_panePrivacy`` to
-    ``browser.ui.interaction.preferences_paneSearch``. [Bug 1852048_]
-    ``firefoxSuggestNonsponsoredToggle`` was renamed to ``firefoxSuggestNonsponsored``
-    ``firefoxSuggestSponsoredToggle`` was renamed to ``firefoxSuggestSponsored``
-    ``
-
 .. _1735976: https://bugzilla.mozilla.org/show_bug.cgi?id=1735976
 .. _1755100: https://bugzilla.mozilla.org/show_bug.cgi?id=1755100
 .. _1756917: https://bugzilla.mozilla.org/show_bug.cgi?id=1756917
 .. _1857391: https://bugzilla.mozilla.org/show_bug.cgi?id=1857391
-.. _1852048: https://bugzilla.mozilla.org/show_bug.cgi?id=1852048
 
 contextual.services.quicksuggest.block_dynamic_wikipedia
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1308,13 +1275,9 @@ Changelog
   Firefox 100.0
     Added ``learn_more_1``. [Bug 1761171_]
 
-  Firefox 137.0
-    Removed. [Bug 1936455_]
-
 .. _1734447: https://bugzilla.mozilla.org/show_bug.cgi?id=1734447
 .. _1745026: https://bugzilla.mozilla.org/show_bug.cgi?id=1745026
 .. _1761171: https://bugzilla.mozilla.org/show_bug.cgi?id=1761171
-.. _1936455: https://bugzilla.mozilla.org/show_bug.cgi?id=1936455
 
 browser.urlbar.quicksuggest.dataCollection.enabled
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1414,13 +1377,7 @@ Changelog
 Nimbus Exposure Event
 ---------------------
 
-.. note::
-
-  This section is historical and describes how older versions of Firefox
-  recorded Nimbus exposure events for Firefox Suggest. Recent Firefox versions
-  no longer record Nimbus exposure events for Firefox Suggest.
-
-A Nimbus exposure event is recorded once per app session when the user first
+A `Nimbus exposure event`_ is recorded once per app session when the user first
 encounters the UI of an experiment in which they're enrolled. The timing of the
 event depends on the experiment and branch.
 
@@ -1471,15 +1428,12 @@ Changelog
   Firefox 124.0
     The ``experimentType = "modal"`` case is removed.
 
-  Firefox 135.0
-    The ``experimentType`` Nimbus variable is removed. By this time it already
-    not been referenced in Firefox code for quite a while. [Bug 1932502_]
+.. _Nimbus exposure event: https://experimenter.info/jetstream/jetstream/#enrollment-vs-exposure
 
 .. _1724076: https://bugzilla.mozilla.org/show_bug.cgi?id=1724076
 .. _1727392: https://bugzilla.mozilla.org/show_bug.cgi?id=1727392
 .. _1752953: https://bugzilla.mozilla.org/show_bug.cgi?id=1752953
 .. _1760596: https://bugzilla.mozilla.org/show_bug.cgi?id=1760596
-.. _1932502: https://bugzilla.mozilla.org/show_bug.cgi?id=1932502
 
 Merino Search Queries
 ---------------------

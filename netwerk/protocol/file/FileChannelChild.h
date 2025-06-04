@@ -25,9 +25,6 @@ class FileChannelChild : public nsFileChannel,
   NS_DECL_ISUPPORTS_INHERITED
   NS_DECL_NSICHILDCHANNEL
 
- protected:
-  virtual nsresult NotifyListeners() override;
-
  private:
   ~FileChannelChild() = default;
 };

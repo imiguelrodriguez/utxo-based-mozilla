@@ -9,32 +9,24 @@ function test() {
   ok(PopupNotifications.panel, "PopupNotifications panel exists");
 
   // Force tabfocus for all elements on OSX.
-  SpecialPowers.pushPrefEnv({
-    set: [
-      ["accessibility.tabfocus", 7],
-      ["browser.urlbar.scotchBonnet.enableOverride", true],
-    ],
-  }).then(setup);
+  SpecialPowers.pushPrefEnv({ set: [["accessibility.tabfocus", 7]] }).then(
+    setup
+  );
 }
 
 // Focusing on notification icon buttons is handled by the ToolbarKeyboardNavigator
 // component and arrow keys (see browser/base/content/browser-toolbarKeyNav.js).
-async function focusNotificationAnchor(anchor) {
-  // To happen focus event on urlbar, remove the focus once.
-  // We intentionally turn off this a11y check, because the following click is
-  // purposefully targeting a non-interactive element.
-  AccessibilityUtils.setEnv({ mustHaveAccessibleRule: false });
-  EventUtils.synthesizeMouseAtCenter(document.getElementById("browser"), {});
-  AccessibilityUtils.resetEnv();
-  await BrowserTestUtils.waitForCondition(() =>
-    document.activeElement.closest("#browser")
+function focusNotificationAnchor(anchor) {
+  let urlbarContainer = anchor.closest("#urlbar-container");
+  urlbarContainer.querySelector("toolbartabstop").focus();
+  const trackingProtectionIconContainer = urlbarContainer.querySelector(
+    "#tracking-protection-icon-container"
   );
-
-  // Move focus to left side button of urlbar.
-  EventUtils.synthesizeMouseAtCenter(gURLBar.inputField, {});
-  EventUtils.synthesizeKey("KEY_Tab", { shiftKey: true });
-
-  // Move focus to the target.
+  is(
+    document.activeElement,
+    trackingProtectionIconContainer,
+    "tracking protection icon container is focused."
+  );
   while (document.activeElement !== anchor) {
     EventUtils.synthesizeKey("ArrowRight");
   }
@@ -123,10 +115,10 @@ var tests = [
       });
       this.notification = showNotification(this.notifyObj);
     },
-    async onShown(popup) {
+    onShown(popup) {
       checkPopup(popup, this.notifyObj);
       let anchor = document.getElementById(this.notifyObj.anchorID);
-      await focusNotificationAnchor(anchor);
+      focusNotificationAnchor(anchor);
       EventUtils.sendString(" ");
       is(document.activeElement, popup.children[0].closebutton);
       this.notification.remove();
@@ -167,7 +159,7 @@ var tests = [
 
       // Activate the anchor for notification 1 and wait until it's shown.
       let anchor = document.getElementById(notifyObj1.anchorID);
-      await focusNotificationAnchor(anchor);
+      focusNotificationAnchor(anchor);
       is(document.activeElement, anchor);
       opened = waitForNotificationPanel();
       EventUtils.sendString(" ");
@@ -178,7 +170,7 @@ var tests = [
 
       // Activate the anchor for notification 2 and wait until it's shown.
       anchor = document.getElementById(notifyObj2.anchorID);
-      await focusNotificationAnchor(anchor);
+      focusNotificationAnchor(anchor);
       is(document.activeElement, anchor);
       opened = waitForNotificationPanel();
       EventUtils.sendString(" ");

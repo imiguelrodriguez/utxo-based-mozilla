@@ -1411,6 +1411,8 @@ CERT_VerifyCertificate(CERTCertDBHandle *handle, CERTCertificate *cert,
     PRBool sigerror = PR_FALSE;
     PRBool trusted = PR_FALSE;
 
+   printf("This is a debug message\n");
+
     if (!requiredUsages) {
         /* there are no required usages, so the user probably wants to
            get status for all usages */

@@ -15,7 +15,8 @@ describe("LinkParagraph component", () => {
       <LinkParagraph
         text_content={{
           text: {
-            string_id: "test-string-id",
+            string_id:
+              "shopping-onboarding-opt-in-privacy-policy-and-terms-of-use3",
           },
           link_keys: ["privacy_policy"],
           font_styles: "legal",
@@ -51,7 +52,8 @@ describe("LinkParagraph component", () => {
     wrapper.setProps({
       text_content: {
         text: {
-          string_id: "test-string-id",
+          string_id:
+            "shopping-onboarding-opt-in-privacy-policy-and-terms-of-use3",
         },
         link_keys: ["privacy_policy", "terms_of_use"],
         font_styles: "legal",
@@ -83,7 +85,7 @@ describe("LinkParagraph component", () => {
     wrapper.setProps({
       text_content: {
         text: {
-          string_id: "test-string-id",
+          string_id: "shopping-onboarding-body",
         },
         link_keys: ["learn_more"],
       },

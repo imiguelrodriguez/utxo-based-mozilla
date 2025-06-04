@@ -178,8 +178,7 @@ bool HttpChannelParent::Init(const HttpChannelCreationArgs& aArgs) {
           a.handleFetchEventStart(), a.handleFetchEventEnd(),
           a.forceMainDocumentChannel(), a.navigationStartTimeStamp(),
           a.earlyHintPreloaderId(), a.classicScriptHintCharset(),
-          a.documentCharacterSet(), a.isUserAgentHeaderModified(),
-          a.initiatorType());
+          a.documentCharacterSet(), a.isUserAgentHeaderModified());
     }
     case HttpChannelCreationArgs::THttpChannelConnectArgs: {
       const HttpChannelConnectArgs& cArgs = aArgs.get_HttpChannelConnectArgs();
@@ -447,7 +446,7 @@ bool HttpChannelParent::DoAsyncOpen(
     const uint64_t& aEarlyHintPreloaderId,
     const nsAString& aClassicScriptHintCharset,
     const nsAString& aDocumentCharacterSet,
-    const bool& aIsUserAgentHeaderModified, const nsString& aInitiatorType) {
+    const bool& aIsUserAgentHeaderModified) {
   MOZ_ASSERT(aURI, "aURI should not be NULL");
 
   if (aEarlyHintPreloaderId) {
@@ -530,6 +529,7 @@ bool HttpChannelParent::DoAsyncOpen(
   if (httpChannelImpl) {
     httpChannelImpl->SetWarningReporter(this);
   }
+  httpChannel->SetTimingEnabled(true);
   if (mPBOverride != kPBOverride_Unset) {
     httpChannel->SetPrivate(mPBOverride == kPBOverride_Private);
   }
@@ -581,8 +581,6 @@ bool HttpChannelParent::DoAsyncOpen(
   }
 
   httpChannel->SetIsUserAgentHeaderModified(aIsUserAgentHeaderModified);
-
-  httpChannel->SetInitiatorType(aInitiatorType);
 
   RefPtr<ParentChannelListener> parentListener = new ParentChannelListener(
       this, mBrowserParent ? mBrowserParent->GetBrowsingContext() : nullptr);
@@ -1297,7 +1295,9 @@ HttpChannelParent::OnStartRequest(nsIRequest* aRequest) {
   if (mOverrideReferrerInfo) {
     args.overrideReferrerInfo() = ToRefPtr(std::move(mOverrideReferrerInfo));
   }
-  args.cookieHeaders().SwapElements(mCookieHeaders);
+  if (!mCookie.IsEmpty()) {
+    args.cookie() = std::move(mCookie);
+  }
 
   nsHttpRequestHead* requestHead = chan->GetRequestHead();
   // !!! We need to lock headers and please don't forget to unlock them !!!
@@ -1336,18 +1336,13 @@ HttpChannelParent::OnStartRequest(nsIRequest* aRequest) {
   mChannel->GetTrrSkipReason(&reason);
   args.trrSkipReason() = reason;
 
-  if (mIPCClosed) {
+  if (mIPCClosed ||
+      !mBgParent->OnStartRequest(
+          *responseHead, useResponseHead,
+          cleanedUpRequest ? cleanedUpRequestHeaders : requestHead->Headers(),
+          args, altDataSource, chan->GetOnStartRequestStartTime())) {
     rv = NS_ERROR_UNEXPECTED;
-  } else {
-    nsHttpResponseHead newResponseHead = *responseHead;
-    if (!mBgParent->OnStartRequest(
-            std::move(newResponseHead), useResponseHead,
-            cleanedUpRequest ? cleanedUpRequestHeaders : requestHead->Headers(),
-            args, altDataSource, chan->GetOnStartRequestStartTime())) {
-      rv = NS_ERROR_UNEXPECTED;
-    }
   }
-
   requestHead->Exit();
 
   // Need to wait for the cookies/permissions to content process, which is sent
@@ -1369,8 +1364,9 @@ HttpChannelParent::OnStartRequest(nsIRequest* aRequest) {
     ClassOfService::ToString(classOfServiceFlags, cosString);
     nsAutoCString key(
         nsPrintfCString("%s_%s", protocolVersion.get(), cosString.get()));
-    glean::network::dns_end_to_connect_start_exp.Get(key).AccumulateRawDuration(
-        args.timing().connectStart() - args.timing().domainLookupEnd());
+    Telemetry::AccumulateTimeDelta(
+        Telemetry::NETWORK_DNS_END_TO_CONNECT_START_EXP_MS, key,
+        args.timing().domainLookupEnd(), args.timing().connectStart());
   }
 
   return rv;
@@ -1434,32 +1430,29 @@ HttpChannelParent::OnStopRequest(nsIRequest* aRequest, nsresult aStatusCode) {
 
     if (!isLocal) {
       if (!mHasSuspendedByBackPressure) {
-        glean::network::back_pressure_suspension_rate
-            .EnumGet(
-                glean::network::BackPressureSuspensionRateLabel::eNotsuspended)
-            .Add();
+        AccumulateCategorical(
+            Telemetry::LABELS_NETWORK_BACK_PRESSURE_SUSPENSION_RATE_V2::
+                NotSuspended);
       } else {
-        glean::network::back_pressure_suspension_rate
-            .EnumGet(
-                glean::network::BackPressureSuspensionRateLabel::eSuspended)
-            .Add();
+        AccumulateCategorical(
+            Telemetry::LABELS_NETWORK_BACK_PRESSURE_SUSPENSION_RATE_V2::
+                Suspended);
 
         // Only analyze non-local suspended cases, which we are interested in.
         nsCOMPtr<nsILoadInfo> loadInfo = mChannel->LoadInfo();
-        glean::network::back_pressure_suspension_cp_type.AccumulateSingleSample(
+        Telemetry::Accumulate(
+            Telemetry::NETWORK_BACK_PRESSURE_SUSPENSION_CP_TYPE,
             loadInfo->InternalContentPolicyType());
       }
     } else {
       if (!mHasSuspendedByBackPressure) {
-        glean::network::back_pressure_suspension_rate
-            .EnumGet(glean::network::BackPressureSuspensionRateLabel::
-                         eNotsuspendedlocal)
-            .Add();
+        AccumulateCategorical(
+            Telemetry::LABELS_NETWORK_BACK_PRESSURE_SUSPENSION_RATE_V2::
+                NotSuspendedLocal);
       } else {
-        glean::network::back_pressure_suspension_rate
-            .EnumGet(glean::network::BackPressureSuspensionRateLabel::
-                         eSuspendedlocal)
-            .Add();
+        AccumulateCategorical(
+            Telemetry::LABELS_NETWORK_BACK_PRESSURE_SUSPENSION_RATE_V2::
+                SuspendedLocal);
       }
     }
   }
@@ -1550,8 +1543,9 @@ HttpChannelParent::OnDataAvailable(nsIRequest* aRequest,
       mHasSuspendedByBackPressure = true;
     } else if (!mResumedTimestamp.IsNull()) {
       // Calculate the delay when the first packet arrived after resume
-      glean::network::back_pressure_suspension_delay_time.AccumulateRawDuration(
-          TimeStamp::Now() - mResumedTimestamp);
+      Telemetry::AccumulateTimeDelta(
+          Telemetry::NETWORK_BACK_PRESSURE_SUSPENSION_DELAY_TIME_MS,
+          mResumedTimestamp);
       mResumedTimestamp = TimeStamp();
     }
     mSendWindowSize -= count;
@@ -1915,11 +1909,9 @@ HttpChannelParent::StartRedirect(nsIChannel* newChannel, uint32_t redirectFlags,
   }
 
   if (!mIPCClosed) {
-    cleanedUpResponseHead = *responseHead;
     if (!SendRedirect1Begin(mRedirectChannelId, newOriginalURI, newLoadFlags,
-                            redirectFlags, loadInfoForwarderArg,
-                            std::move(cleanedUpResponseHead), securityInfo,
-                            channelId, mChannel->GetPeerAddr(),
+                            redirectFlags, loadInfoForwarderArg, *responseHead,
+                            securityInfo, channelId, mChannel->GetPeerAddr(),
                             GetTimingAttributes(mChannel))) {
       return NS_BINDING_ABORTED;
     }
@@ -2192,11 +2184,10 @@ void HttpChannelParent::SetHttpChannelFromEarlyHintPreloader(
   mChannel = aChannel;
 }
 
-void HttpChannelParent::SetCookieHeaders(
-    const nsTArray<nsCString>& aCookieHeaders) {
+void HttpChannelParent::SetCookie(nsCString&& aCookie) {
   LOG(("HttpChannelParent::SetCookie [this=%p]", this));
   MOZ_ASSERT(!mAfterOnStartRequestBegun);
-  MOZ_ASSERT(mCookieHeaders.IsEmpty());
+  MOZ_ASSERT(mCookie.IsEmpty());
 
   // The loadGroup of the channel in the parent process could be null in the
   // XPCShell content process test, see test_cookiejars_wrap.js. In this case,
@@ -2208,7 +2199,7 @@ void HttpChannelParent::SetCookieHeaders(
       mChannel->IsBrowsingContextDiscarded()) {
     return;
   }
-  mCookieHeaders.AppendElements(aCookieHeaders);
+  mCookie = std::move(aCookie);
 }
 
 }  // namespace mozilla::net

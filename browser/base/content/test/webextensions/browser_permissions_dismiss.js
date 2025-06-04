@@ -3,16 +3,27 @@
 const INSTALL_PAGE = `${BASE}/file_install_extensions.html`;
 const INSTALL_XPI = `${BASE}/browser_webext_permissions.xpi`;
 
-// With the new dialog design both wildcards and non-wildcards host
-// permissions are expected to be shown as a single permission entry
-const expectedPermsCount = 4;
+// - with the old dialog design (enabled when ExtensionsUI.SHOW_FULL_DOMAINS_LIST returns false),
+//   wildcard and non-wildcard host permissions are expected to be shown as two separate
+//   permissions entries
+// - with the new dialog design (enabled when ExtensionsUI.SHOW_FULL_DOMAINS_LIST returns true)
+//   both wildcards and non-wildcards host permissions are expected to be shown as a single
+//   permission entry
+const expectedPermsCount = !ExtensionsUI.SHOW_FULL_DOMAINS_LIST ? 5 : 4;
 
 function assertPermissionsListCount({ grantedPermissionsCount }) {
-  let permsUL = document.getElementById("addon-webext-perm-list-required");
+  let permsUL = document.getElementById("addon-webext-perm-list");
+  // When the private browsing checkbox is expected to be shown in the post install
+  // dialog we expect only one entry for each of the expected granted permissions,
+  // otherwise we expect one more perms list entry for the private browsing checkbox
+  // in addition to the entries for the granted permissions.
+  const count = ExtensionsUI.POSTINSTALL_PRIVATEBROWSING_CHECKBOX
+    ? grantedPermissionsCount
+    : grantedPermissionsCount + 1;
   is(
     permsUL.childElementCount,
-    grantedPermissionsCount,
-    `Permissions list should have ${grantedPermissionsCount} entries`
+    count,
+    `Permissions list should have ${count} entries`
   );
 }
 

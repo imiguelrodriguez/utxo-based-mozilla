@@ -28,12 +28,8 @@ let shareUrlSpy = sinon.spy();
 let openSharingPreferencesSpy = sinon.spy();
 let getSharingProvidersSpy = sinon.spy();
 
-let { MockRegistrar } = ChromeUtils.importESModule(
-  "resource://testing-common/MockRegistrar.sys.mjs"
-);
-let mockMacSharingService = MockRegistrar.register(
-  "@mozilla.org/widget/macsharingservice;1",
-  {
+let stub = sinon.stub(gBrowser, "MacSharingService").get(() => {
+  return {
     getSharingProviders(url) {
       getSharingProvidersSpy(url);
       return mockShareData;
@@ -44,12 +40,11 @@ let mockMacSharingService = MockRegistrar.register(
     openSharingPreferences() {
       openSharingPreferencesSpy();
     },
-    QueryInterface: ChromeUtils.generateQI([Ci.nsIMacSharingService]),
-  }
-);
+  };
+});
 
-registerCleanupFunction(function () {
-  MockRegistrar.unregister(mockMacSharingService);
+registerCleanupFunction(async function () {
+  stub.restore();
 });
 
 /**
@@ -69,26 +64,25 @@ add_task(async function test_contextmenu_share_macosx() {
     ok(getSharingProvidersSpy.calledOnce, "getSharingProviders called");
 
     info(
-      "Check we have copy link, a service and one extra menu item for the More... button"
+      "Check we have a service and one extra menu item for the More... button"
     );
     let popup = contextMenu.querySelector(".share-tab-url-item").menupopup;
-    let items = Array.from(popup.querySelectorAll("menuitem"));
-    is(items.length, 3, "There should be 3 sharing services.");
+    let items = popup.querySelectorAll("menuitem");
+    is(items.length, 2, "There should be 2 sharing services.");
 
     info("Click on the sharing service");
     let menuPopupClosedPromised = BrowserTestUtils.waitForPopupEvent(
       contextMenu,
       "hidden"
     );
-    let shareButton = items.find(
-      t => t.label == mockShareData[0].menuItemTitle
-    );
-    ok(
-      shareButton,
+    let shareButton = items[0];
+    is(
+      shareButton.label,
+      mockShareData[0].menuItemTitle,
       "Share button's label should match the service's menu item title. "
     );
     is(
-      shareButton?.getAttribute("share-name"),
+      shareButton.getAttribute("share-name"),
       mockShareData[0].name,
       "Share button's share-name value should match the service's name. "
     );
@@ -104,45 +98,23 @@ add_task(async function test_contextmenu_share_macosx() {
     is(url, TEST_URL, "Shared correct URL");
     is(title, "Sharing URL", "Shared the correct title.");
 
-    info("Test the copy link button");
+    info("Test the More... button");
     contextMenu = await openTabContextMenu(gBrowser.selectedTab);
     await openMenuPopup(contextMenu);
     // Since the tab context menu was collapsed previously, the popup needs to get the
     // providers again.
     ok(getSharingProvidersSpy.calledTwice, "getSharingProviders called again");
     popup = contextMenu.querySelector(".share-tab-url-item").menupopup;
-    items = Array.from(popup.querySelectorAll("menuitem"));
-    is(items.length, 3, "There should be 3 sharing services.");
-    info("Click on the Copy Link item");
-    let copyLinkItem = items.find(
-      item => item.dataset.l10nId == "menu-share-copy-link"
-    );
-    menuPopupClosedPromised = BrowserTestUtils.waitForPopupEvent(
-      contextMenu,
-      "hidden"
-    );
-    await SimpleTest.promiseClipboardChange(TEST_URL, () =>
-      popup.activateItem(copyLinkItem)
-    );
-    await menuPopupClosedPromised;
-
-    info("Test the More... item");
-    contextMenu = await openTabContextMenu(gBrowser.selectedTab);
-    await openMenuPopup(contextMenu);
-    // Since the tab context menu was collapsed previously, the popup needs to get the
-    // providers again.
-    is(getSharingProvidersSpy.callCount, 3, "getSharingProviders called again");
-    popup = contextMenu.querySelector(".share-tab-url-item").menupopup;
     items = popup.querySelectorAll("menuitem");
-    is(items.length, 3, "There should be 3 sharing services.");
+    is(items.length, 2, "There should be 2 sharing services.");
 
-    info("Click on the More item");
-    let moreMenuitem = items[2];
+    info("Click on the More Button");
+    let moreButton = items[1];
     menuPopupClosedPromised = BrowserTestUtils.waitForPopupEvent(
       contextMenu,
       "hidden"
     );
-    popup.activateItem(moreMenuitem);
+    popup.activateItem(moreButton);
     await menuPopupClosedPromised;
     ok(openSharingPreferencesSpy.calledOnce, "openSharingPreferences called");
   });

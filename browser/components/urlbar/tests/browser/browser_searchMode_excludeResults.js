@@ -15,13 +15,11 @@ ChromeUtils.defineESModuleGetters(this, {
 add_setup(async function () {
   await SpecialPowers.pushPrefEnv({
     set: [
-      ["browser.urlbar.scotchBonnet.enableOverride", true],
-      ["browser.urlbar.secondaryActions.featureGate", false],
-      ["browser.urlbar.suggest.quickactions", false],
-      ["browser.urlbar.autoFill", false],
       ["browser.urlbar.suggest.searches", false],
+      ["browser.urlbar.autoFill", false],
       // Special prefs for remote tabs.
       ["services.sync.username", "fake"],
+      ["browser.urlbar.scotchBonnet.enableOverride", false],
     ],
   });
 
@@ -131,8 +129,7 @@ add_task(async function basic() {
     "The third result is a remote tab."
   );
 
-  info("Choose Example search engine");
-  await enterSearchMode("Example");
+  await UrlbarTestUtils.enterSearchMode(window);
 
   Assert.equal(
     UrlbarTestUtils.getResultCount(window),
@@ -198,7 +195,9 @@ add_task(async function malformedEngine() {
     "The fourth result is a remote tab."
   );
 
-  await enterSearchMode(badEngine.name);
+  await UrlbarTestUtils.enterSearchMode(window, {
+    engineName: badEngine.name,
+  });
 
   Assert.equal(
     UrlbarTestUtils.getResultCount(window),
@@ -216,12 +215,3 @@ add_task(async function malformedEngine() {
   await UrlbarTestUtils.exitSearchMode(window);
   await UrlbarTestUtils.promisePopupClose(window);
 });
-
-async function enterSearchMode(engineName) {
-  let popup = UrlbarTestUtils.searchModeSwitcherPopup(window);
-  await UrlbarTestUtils.openSearchModeSwitcher(window);
-  let popupHidden = UrlbarTestUtils.searchModeSwitcherPopupClosed(window);
-  popup.querySelector(`menuitem[label=${engineName}]`).click();
-  await popupHidden;
-  await UrlbarTestUtils.promiseSearchComplete(window);
-}

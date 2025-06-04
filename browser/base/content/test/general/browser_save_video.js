@@ -2,13 +2,13 @@
    http://creativecommons.org/publicdomain/zero/1.0/ */
 
 var MockFilePicker = SpecialPowers.MockFilePicker;
+MockFilePicker.init(window.browsingContext);
 
 /**
  * TestCase for bug 564387
  * <https://bugzilla.mozilla.org/show_bug.cgi?id=564387>
  */
-async function testSaveVideo(isUsingHeader = true) {
-  MockFilePicker.init(window.browsingContext);
+add_task(async function () {
   var fileName;
 
   let loadPromise = BrowserTestUtils.browserLoaded(gBrowser.selectedBrowser);
@@ -50,13 +50,11 @@ async function testSaveVideo(isUsingHeader = true) {
         "Video file should have been downloaded successfully"
       );
 
-      if (isUsingHeader) {
-        is(
-          fileName,
-          "web-video1-expectedName.webm",
-          "Video file name is correctly retrieved from Content-Disposition http header"
-        );
-      }
+      is(
+        fileName,
+        "web-video1-expectedName.webm",
+        "Video file name is correctly retrieved from Content-Disposition http header"
+      );
       resolve();
     }
 
@@ -64,30 +62,27 @@ async function testSaveVideo(isUsingHeader = true) {
     mockTransferRegisterer.register();
   });
 
-  // Wrap in try...finally to ensure we clean up mocks and temp files.
-  // We can't use registerCleanupFunction easily because we need to clean up
-  // inside each task as well.
-  try {
-    // Select "Save Video As" option from context menu
-    var saveVideoCommand = document.getElementById("context-savevideo");
-    saveVideoCommand.doCommand();
-    info("context-savevideo command executed");
-
-    let contextMenu = document.getElementById("contentAreaContextMenu");
-    let popupHiddenPromise = BrowserTestUtils.waitForEvent(
-      contextMenu,
-      "popuphidden"
-    );
-    contextMenu.hidePopup();
-    await popupHiddenPromise;
-
-    await transferCompletePromise;
-  } finally {
+  registerCleanupFunction(function () {
     mockTransferRegisterer.unregister();
     MockFilePicker.cleanup();
     destDir.remove(true);
-  }
-}
+  });
+
+  // Select "Save Video As" option from context menu
+  var saveVideoCommand = document.getElementById("context-savevideo");
+  saveVideoCommand.doCommand();
+  info("context-savevideo command executed");
+
+  let contextMenu = document.getElementById("contentAreaContextMenu");
+  let popupHiddenPromise = BrowserTestUtils.waitForEvent(
+    contextMenu,
+    "popuphidden"
+  );
+  contextMenu.hidePopup();
+  await popupHiddenPromise;
+
+  await transferCompletePromise;
+});
 
 Services.scriptloader.loadSubScript(
   "chrome://mochitests/content/browser/toolkit/content/tests/browser/common/mockTransfer.js",
@@ -102,27 +97,3 @@ function createTemporarySaveDirectory() {
   }
   return saveDir;
 }
-
-add_task(async function test_save_video_normal() {
-  return testSaveVideo();
-});
-
-/**
- * Check that saving the file also works if the initial request times out.
- */
-add_task(async function test_save_video_timed_out_request() {
-  await SpecialPowers.pushPrefEnv({
-    set: [["browser.download.saveLinkAsFilenameTimeout", 0]],
-  });
-  /*
-   * Note that this cannot rely on the header (we're deliberately trying to
-   * test the case where we don't get the headers), but also cannot
-   * assume that it is never present. That is, if network bits are very very
-   * fast and/or our cancellation timeout fires late, we might be testing
-   * the same thing as the previous test. So we just don't bother asserting
-   * anything about the filename coming from the header - we just want to
-   * make sure that the file is still saved in this case.
-   */
-  await testSaveVideo(/* isUsingHeader */ false);
-  await SpecialPowers.popPrefEnv();
-});

@@ -116,16 +116,23 @@ const MOZILLA_PKIX_ERROR_INSUFFICIENT_CERTIFICATE_TRANSPARENCY =
 const MOZILLA_PKIX_ERROR_ISSUER_NO_LONGER_TRUSTED =
   MOZILLA_PKIX_ERROR_BASE + 17;
 
+// Supported Certificate Usages
+const certificateUsageSSLClient = 0x0001;
+const certificateUsageSSLServer = 0x0002;
+const certificateUsageSSLCA = 0x0008;
+const certificateUsageEmailSigner = 0x0010;
+const certificateUsageEmailRecipient = 0x0020;
+
 // A map from the name of a certificate usage to the value of the usage.
 // Useful for printing debugging information and for enumerating all supported
 // usages.
-const verifyUsages = new Map([
-  ["verifyUsageTLSClient", Ci.nsIX509CertDB.verifyUsageTLSClient],
-  ["verifyUsageTLSServer", Ci.nsIX509CertDB.verifyUsageTLSServer],
-  ["verifyUsageTLSServerCA", Ci.nsIX509CertDB.verifyUsageTLSServerCA],
-  ["verifyUsageEmailSigner", Ci.nsIX509CertDB.verifyUsageEmailSigner],
-  ["verifyUsageEmailRecipient", Ci.nsIX509CertDB.verifyUsageEmailRecipient],
-]);
+const allCertificateUsages = {
+  certificateUsageSSLClient,
+  certificateUsageSSLServer,
+  certificateUsageSSLCA,
+  certificateUsageEmailSigner,
+  certificateUsageEmailRecipient,
+};
 
 const NO_FLAGS = 0;
 
@@ -328,55 +335,6 @@ function checkCertErrorGeneric(
     isEVExpected,
     hostname
   );
-}
-
-// Helper for checkRootOfBuiltChain
-class CertVerificationExpectedRootResult {
-  constructor(certName, rootSha256SpkiDigest, resolve) {
-    this.certName = certName;
-    this.rootSha256SpkiDigest = rootSha256SpkiDigest;
-    this.resolve = resolve;
-  }
-
-  verifyCertFinished(aPRErrorCode, aVerifiedChain, _aHasEVPolicy) {
-    equal(
-      aPRErrorCode,
-      PRErrorCodeSuccess,
-      `verifying ${this.certName}: should succeed`
-    );
-    equal(
-      aVerifiedChain[aVerifiedChain.length - 1]
-        .sha256SubjectPublicKeyInfoDigest,
-      this.rootSha256SpkiDigest,
-      `verifying ${this.certName}: should build chain to ${this.rootSha256SpkiDigest}`
-    );
-    this.resolve();
-  }
-}
-
-function checkRootOfBuiltChain(
-  certdb,
-  cert,
-  rootSha256SpkiDigest,
-  time,
-  /* optional */ hostname,
-  /* optional */ flags = NO_FLAGS
-) {
-  return new Promise(resolve => {
-    let result = new CertVerificationExpectedRootResult(
-      cert.commonName,
-      rootSha256SpkiDigest,
-      resolve
-    );
-    certdb.asyncVerifyCertAtTime(
-      cert,
-      Ci.nsIX509CertDB.verifyUsageTLSServer,
-      flags,
-      hostname,
-      time,
-      result
-    );
-  });
 }
 
 function checkEVStatus(certDB, cert, usage, isEVExpected) {
@@ -864,15 +822,15 @@ function startOCSPResponder(
   expectedResponseTypes,
   responseHeaderPairs = []
 ) {
-  let ocspResponseGenerationArgs = expectedCertNames.map(
-    function (expectedNick) {
-      let responseType = "good";
-      if (expectedResponseTypes && expectedResponseTypes.length >= 1) {
-        responseType = expectedResponseTypes.shift();
-      }
-      return [responseType, expectedNick, "unused", 0];
+  let ocspResponseGenerationArgs = expectedCertNames.map(function (
+    expectedNick
+  ) {
+    let responseType = "good";
+    if (expectedResponseTypes && expectedResponseTypes.length >= 1) {
+      responseType = expectedResponseTypes.shift();
     }
-  );
+    return [responseType, expectedNick, "unused", 0];
+  });
   let ocspResponses = generateOCSPResponses(
     ocspResponseGenerationArgs,
     nssDBLocation
@@ -1062,9 +1020,9 @@ class CertVerificationResult {
 function asyncTestCertificateUsages(certdb, cert, expectedUsages) {
   let now = new Date().getTime() / 1000;
   let promises = [];
-  verifyUsages.keys().forEach(usageString => {
+  Object.keys(allCertificateUsages).forEach(usageString => {
     let promise = new Promise(resolve => {
-      let usage = verifyUsages.get(usageString);
+      let usage = allCertificateUsages[usageString];
       let successExpected = expectedUsages.includes(usage);
       let result = new CertVerificationResult(
         cert.commonName,
@@ -1150,7 +1108,7 @@ function writeLinesAndClose(lines, outputStream) {
  *        A unique substring of name of the dynamic library file of the module
  *        that should not be loaded.
  */
-function checkPKCS11ModuleNotPresent(moduleName, libraryName = "undefined") {
+function checkPKCS11ModuleNotPresent(moduleName, libraryName) {
   let moduleDB = Cc["@mozilla.org/security/pkcs11moduledb;1"].getService(
     Ci.nsIPKCS11ModuleDB
   );
@@ -1165,12 +1123,10 @@ function checkPKCS11ModuleNotPresent(moduleName, libraryName = "undefined") {
       moduleName,
       `Non-test module name shouldn't equal '${moduleName}'`
     );
-    if (libraryName != "undefined") {
-      ok(
-        !(module.libName && module.libName.includes(libraryName)),
-        `Non-test module lib name should not include '${libraryName}'`
-      );
-    }
+    ok(
+      !(module.libName && module.libName.includes(libraryName)),
+      `Non-test module lib name should not include '${libraryName}'`
+    );
   }
 }
 
@@ -1186,7 +1142,7 @@ function checkPKCS11ModuleNotPresent(moduleName, libraryName = "undefined") {
  * @returns {nsIPKCS11Module}
  *          The test module.
  */
-function checkPKCS11ModuleExists(moduleName, libraryName = "undefined") {
+function checkPKCS11ModuleExists(moduleName, libraryName) {
   let moduleDB = Cc["@mozilla.org/security/pkcs11moduledb;1"].getService(
     Ci.nsIPKCS11ModuleDB
   );
@@ -1203,17 +1159,11 @@ function checkPKCS11ModuleExists(moduleName, libraryName = "undefined") {
     }
   }
   notEqual(testModule, null, "Test module should have been found");
-  if (libraryName != "undefined") {
-    notEqual(
-      testModule.libName,
-      null,
-      "Test module lib name should not be null"
-    );
-    ok(
-      testModule.libName.includes(ctypes.libraryName(libraryName)),
-      `Test module lib name should include lib name of '${libraryName}'`
-    );
-  }
+  notEqual(testModule.libName, null, "Test module lib name should not be null");
+  ok(
+    testModule.libName.includes(ctypes.libraryName(libraryName)),
+    `Test module lib name should include lib name of '${libraryName}'`
+  );
 
   return testModule;
 }

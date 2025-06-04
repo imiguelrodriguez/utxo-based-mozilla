@@ -341,8 +341,7 @@ nsresult nsJARInputStream::ReadDirectory(char* aBuffer, uint32_t aCount,
 
       const char* entryName = mArray[mArrPos].get();
       uint32_t entryNameLen = mArray[mArrPos].Length();
-      nsZipItem* ze = mJar->mZip->GetItem(
-          nsDependentCString(mArray[mArrPos].get(), mArray[mArrPos].Length()));
+      nsZipItem* ze = mJar->mZip->GetItem(entryName);
       NS_ENSURE_TRUE(ze, NS_ERROR_FILE_NOT_FOUND);
 
       // Last Modified Time

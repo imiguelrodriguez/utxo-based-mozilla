@@ -4,8 +4,8 @@
 ChromeUtils.defineESModuleGetters(this, {
   ASRouter: "resource:///modules/asrouter/ASRouter.sys.mjs",
   ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
+  ExperimentFakes: "resource://testing-common/NimbusTestUtils.sys.mjs",
   NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
-  NimbusTestUtils: "resource://testing-common/NimbusTestUtils.sys.mjs",
   sinon: "resource://testing-common/Sinon.sys.mjs",
 });
 
@@ -33,6 +33,8 @@ const sendTriggerStub = sinon.stub(ASRouter, "sendTriggerMessage");
 
 registerCleanupFunction(() => {
   sinon.restore();
+
+  ExperimentAPI._store._deleteForTests("shellService");
 });
 
 let defaultUserChoice;
@@ -59,7 +61,7 @@ add_task(async function remote_disable() {
 
   userChoiceStub.resetHistory();
   setDefaultStub.resetHistory();
-  let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig(
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig(
     {
       featureId: NimbusFeatures.shellService.featureId,
       value: {
@@ -78,7 +80,7 @@ add_task(async function remote_disable() {
   );
   Assert.ok(setDefaultStub.called, "Used plain set default instead");
 
-  await doCleanup();
+  doCleanup();
 });
 
 add_task(async function restore_default() {
@@ -89,6 +91,7 @@ add_task(async function restore_default() {
 
   userChoiceStub.resetHistory();
   setDefaultStub.resetHistory();
+  ExperimentAPI._store._deleteForTests("shellService");
 
   await ShellService.setDefaultBrowser();
 
@@ -116,7 +119,7 @@ add_task(async function ensure_fallback() {
   });
   userChoiceStub.resetHistory();
   setDefaultStub.resetHistory();
-  let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig(
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig(
     {
       featureId: NimbusFeatures.shellService.featureId,
       value: {
@@ -141,12 +144,12 @@ add_task(async function ensure_fallback() {
   );
   Assert.ok(setDefaultStub.called, "Fallbacked to plain set default");
 
-  await doCleanup();
+  doCleanup();
 });
 
 async function setUpNotificationTests(guidanceEnabled, oneClick) {
   sinon.reset();
-  const experimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig(
+  const experimentCleanup = await ExperimentFakes.enrollWithFeatureConfig(
     {
       featureId: NimbusFeatures.shellService.featureId,
       value: {

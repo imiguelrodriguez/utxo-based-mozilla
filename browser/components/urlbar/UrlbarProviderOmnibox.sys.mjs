@@ -43,7 +43,9 @@ class ProviderOmnibox extends UrlbarProvider {
   }
 
   /**
-   * @returns {Values<typeof UrlbarUtils.PROVIDER_TYPE>}
+   * Returns the type of this provider.
+   *
+   * @returns {integer} one of the types from UrlbarUtils.PROVIDER_TYPE.*
    */
   get type() {
     return UrlbarUtils.PROVIDER_TYPE.HEURISTIC;
@@ -56,8 +58,10 @@ class ProviderOmnibox extends UrlbarProvider {
    *
    * @param {UrlbarQueryContext} queryContext
    *   The query context object.
+   * @returns {boolean}
+   *   Whether this provider should be invoked for the search.
    */
-  async isActive(queryContext) {
+  isActive(queryContext) {
     if (
       queryContext.tokens[0] &&
       queryContext.tokens[0].value.length &&
@@ -151,6 +155,7 @@ class ProviderOmnibox extends UrlbarProvider {
                   queryContext.tokens[0].value,
                   UrlbarUtils.HIGHLIGHT.TYPED,
                 ],
+                blockL10n: { id: "urlbar-result-menu-dismiss-firefox-suggest" },
                 isBlockable: suggestion.deletable,
                 icon: UrlbarUtils.ICON.EXTENSION,
               }

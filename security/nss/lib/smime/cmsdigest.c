@@ -260,7 +260,7 @@ NSS_CMSDigestContext_FinishSingle(NSSCMSDigestContext *cmsdigcx,
 
     /* get the digests into arena, then copy the first digest into poolp */
     rv = NSS_CMSDigestContext_FinishMultiple(cmsdigcx, arena, &dp);
-    if (rv == SECSuccess && dp && dp[0]) {
+    if (rv == SECSuccess && dp) {
         /* now copy it into poolp */
         rv = SECITEM_CopyItem(poolp, digest, dp[0]);
     }

@@ -305,9 +305,7 @@ add_task(
         await checkUserAgent(CUSTOM_USER_AGENT);
 
         info("Check that the user agent persists after a reload");
-        await BrowserTestUtils.reloadTab(tab, {
-          includeSubFrames: true,
-        });
+        await BrowserTestUtils.reloadTab(tab, /* includeSubFrames */ true);
         await checkUserAgent(CUSTOM_USER_AGENT);
 
         info(
@@ -346,9 +344,7 @@ add_task(
           "The flag on the browsing context was reset"
         );
         await checkUserAgent(CUSTOM_USER_AGENT);
-        await BrowserTestUtils.reloadTab(tab, {
-          includeSubFrames: true,
-        });
+        await BrowserTestUtils.reloadTab(tab, /* includeSubFrames */ true);
         await checkUserAgent(initialUserAgent);
       },
     });

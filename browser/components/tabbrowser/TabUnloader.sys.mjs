@@ -196,8 +196,9 @@ export var TabUnloader = {
     }
 
     this._isUnloading = true;
-    const isTabUnloaded =
-      await this.unloadLeastRecentlyUsedTab(minInactiveDuration);
+    const isTabUnloaded = await this.unloadLeastRecentlyUsedTab(
+      minInactiveDuration
+    );
     this._isUnloading = false;
 
     watcher.onUnloadAttemptCompleted(

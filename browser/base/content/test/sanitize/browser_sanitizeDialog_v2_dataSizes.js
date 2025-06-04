@@ -108,7 +108,7 @@ async function clearAndValidateDataSizes({
     await validateDataSizes(this);
     this.checkPrefCheckbox("cache", clearCache);
     this.checkPrefCheckbox("cookiesAndStorage", clearCookies);
-    this.checkPrefCheckbox("browsingHistoryAndDownloads", clearDownloads);
+    this.checkPrefCheckbox("historyFormDataAndDownloads", clearDownloads);
     this.selectDuration(timespan);
     this.acceptDialog();
   };

@@ -3,7 +3,9 @@
  * required for canvas data extraction.
  * This tests whether the site permission prompt for canvas data extraction
  * works properly.
- * Canvas data extraction should result in random data.
+ * When "privacy.resistFingerprinting.randomDataOnCanvasExtract" is true,
+ * canvas data extraction results in random data, and when it is false, canvas
+ * data extraction results in all-white data.
  */
 "use strict";
 
@@ -46,6 +48,8 @@ function initTab() {
     return canvas;
   };
 
+  let placeholder = drawCanvas("white");
+  contentWindow.kPlaceholderData = placeholder.toDataURL();
   let canvas = drawCanvas("cyan", "canvas-id-canvas");
   contentWindow.kPlacedData = canvas.toDataURL();
   is(
@@ -53,9 +57,17 @@ function initTab() {
     contentWindow.kPlacedData,
     "privacy.resistFingerprinting = false, canvas data == placed data"
   );
+  isnot(
+    canvas.toDataURL(),
+    contentWindow.kPlaceholderData,
+    "privacy.resistFingerprinting = false, canvas data != placeholder data"
+  );
 }
 
-function enableResistFingerprinting(autoDeclineNoInput) {
+function enableResistFingerprinting(
+  randomDataOnCanvasExtract,
+  autoDeclineNoInput
+) {
   return SpecialPowers.pushPrefEnv({
     set: [
       ["privacy.fingerprintingProtection", true],
@@ -65,6 +77,10 @@ function enableResistFingerprinting(autoDeclineNoInput) {
           (autoDeclineNoInput
             ? ",+CanvasExtractionBeforeUserInputIsBlocked"
             : ""),
+      ],
+      [
+        "privacy.resistFingerprinting.randomDataOnCanvasExtract",
+        randomDataOnCanvasExtract,
       ],
     ],
   });
@@ -78,7 +94,7 @@ function promisePopupHidden() {
   return BrowserTestUtils.waitForEvent(PopupNotifications.panel, "popuphidden");
 }
 
-function extractCanvasData(grantPermission) {
+function extractCanvasData(randomDataOnCanvasExtract, grantPermission) {
   let contentWindow = content.wrappedJSObject;
   let canvas = contentWindow.document.getElementById("canvas-id-canvas");
   let canvasData = canvas.toDataURL();
@@ -88,18 +104,51 @@ function extractCanvasData(grantPermission) {
       contentWindow.kPlacedData,
       "privacy.resistFingerprinting = true, permission granted, canvas data == placed data"
     );
+    if (!randomDataOnCanvasExtract) {
+      isnot(
+        canvasData,
+        contentWindow.kPlaceholderData,
+        "privacy.resistFingerprinting = true and randomDataOnCanvasExtract = false, permission granted, canvas data != placeholderdata"
+      );
+    }
   } else if (grantPermission === false) {
     isnot(
       canvasData,
       contentWindow.kPlacedData,
       "privacy.resistFingerprinting = true, permission denied, canvas data != placed data"
     );
+    if (!randomDataOnCanvasExtract) {
+      is(
+        canvasData,
+        contentWindow.kPlaceholderData,
+        "privacy.resistFingerprinting = true and randomDataOnCanvasExtract = false, permission denied, canvas data == placeholderdata"
+      );
+    } else {
+      isnot(
+        canvasData,
+        contentWindow.kPlaceholderData,
+        "privacy.resistFingerprinting = true and randomDataOnCanvasExtract = true, permission denied, canvas data != placeholderdata"
+      );
+    }
   } else {
     isnot(
       canvasData,
       contentWindow.kPlacedData,
       "privacy.resistFingerprinting = true, requesting permission, canvas data != placed data"
     );
+    if (!randomDataOnCanvasExtract) {
+      is(
+        canvasData,
+        contentWindow.kPlaceholderData,
+        "privacy.resistFingerprinting = true and randomDataOnCanvasExtract = false, requesting permission, canvas data == placeholderdata"
+      );
+    } else {
+      isnot(
+        canvasData,
+        contentWindow.kPlaceholderData,
+        "privacy.resistFingerprinting = true and randomDataOnCanvasExtract = true, requesting permission, canvas data != placeholderdata"
+      );
+    }
   }
 }
 
@@ -121,11 +170,19 @@ function testPermission() {
   return Services.perms.testPermissionFromPrincipal(kPrincipal, kPermission);
 }
 
-async function withNewTabNoInput(grantPermission, browser) {
+async function withNewTabNoInput(
+  randomDataOnCanvasExtract,
+  grantPermission,
+  browser
+) {
   await SpecialPowers.spawn(browser, [], initTab);
-  await enableResistFingerprinting(false);
+  await enableResistFingerprinting(randomDataOnCanvasExtract, false);
   let popupShown = promisePopupShown();
-  await SpecialPowers.spawn(browser, [], extractCanvasData);
+  await SpecialPowers.spawn(
+    browser,
+    [randomDataOnCanvasExtract],
+    extractCanvasData
+  );
   await popupShown;
   let popupHidden = promisePopupHidden();
   if (grantPermission) {
@@ -137,28 +194,34 @@ async function withNewTabNoInput(grantPermission, browser) {
     await popupHidden;
     is(testPermission(), Services.perms.DENY_ACTION, "permission denied");
   }
-  await SpecialPowers.spawn(browser, [grantPermission], extractCanvasData);
+  await SpecialPowers.spawn(
+    browser,
+    [randomDataOnCanvasExtract, grantPermission],
+    extractCanvasData
+  );
   await SpecialPowers.popPrefEnv();
 }
 
-async function doTestNoInput(grantPermission) {
+async function doTestNoInput(randomDataOnCanvasExtract, grantPermission) {
   await BrowserTestUtils.withNewTab(
     kUrl,
-    withNewTabNoInput.bind(null, grantPermission)
+    withNewTabNoInput.bind(null, randomDataOnCanvasExtract, grantPermission)
   );
   Services.perms.removeFromPrincipal(kPrincipal, kPermission);
 }
 
 // With auto-declining disabled (not the default)
 // Tests clicking "Don't Allow" button of the permission prompt.
-add_task(doTestNoInput.bind(null, false));
+add_task(doTestNoInput.bind(null, true, false));
+add_task(doTestNoInput.bind(null, false, false));
 
 // Tests clicking "Allow" button of the permission prompt.
-add_task(doTestNoInput.bind(null, true));
+add_task(doTestNoInput.bind(null, true, true));
+add_task(doTestNoInput.bind(null, false, true));
 
-async function withNewTabAutoBlockNoInput(browser) {
+async function withNewTabAutoBlockNoInput(randomDataOnCanvasExtract, browser) {
   await SpecialPowers.spawn(browser, [], initTab);
-  await enableResistFingerprinting(true);
+  await enableResistFingerprinting(randomDataOnCanvasExtract, true);
 
   let noShowHandler = () => {
     ok(false, "The popup notification should not show in this case.");
@@ -172,7 +235,11 @@ async function withNewTabAutoBlockNoInput(browser) {
   );
 
   // Try to extract canvas data without user inputs.
-  await SpecialPowers.spawn(browser, [], extractCanvasData);
+  await SpecialPowers.spawn(
+    browser,
+    [randomDataOnCanvasExtract],
+    extractCanvasData
+  );
 
   await promisePopupObserver;
   info("There should be no popup shown on the panel.");
@@ -193,16 +260,20 @@ async function withNewTabAutoBlockNoInput(browser) {
   await SpecialPowers.popPrefEnv();
 }
 
-async function doTestAutoBlockNoInput() {
+async function doTestAutoBlockNoInput(randomDataOnCanvasExtract) {
   await BrowserTestUtils.withNewTab(
     kUrl,
-    withNewTabAutoBlockNoInput.bind(null)
+    withNewTabAutoBlockNoInput.bind(null, randomDataOnCanvasExtract)
   );
 }
 
-add_task(doTestAutoBlockNoInput.bind(null));
+add_task(doTestAutoBlockNoInput.bind(null, true));
+add_task(doTestAutoBlockNoInput.bind(null, false));
 
-function extractCanvasDataUserInput(grantPermission) {
+function extractCanvasDataUserInput(
+  randomDataOnCanvasExtract,
+  grantPermission
+) {
   let contentWindow = content.wrappedJSObject;
   let canvas = contentWindow.document.getElementById("canvas-id-canvas");
   let canvasData = canvas.toDataURL();
@@ -212,24 +283,61 @@ function extractCanvasDataUserInput(grantPermission) {
       contentWindow.kPlacedData,
       "privacy.resistFingerprinting = true, permission granted, canvas data == placed data"
     );
+    if (!randomDataOnCanvasExtract) {
+      isnot(
+        canvasData,
+        contentWindow.kPlaceholderData,
+        "privacy.resistFingerprinting = true and randomDataOnCanvasExtract = false, permission granted, canvas data != placeholderdata"
+      );
+    }
   } else if (grantPermission === false) {
     isnot(
       canvasData,
       contentWindow.kPlacedData,
       "privacy.resistFingerprinting = true, permission denied, canvas data != placed data"
     );
+    if (!randomDataOnCanvasExtract) {
+      is(
+        canvasData,
+        contentWindow.kPlaceholderData,
+        "privacy.resistFingerprinting = true and randomDataOnCanvasExtract = false, permission denied, canvas data == placeholderdata"
+      );
+    } else {
+      isnot(
+        canvasData,
+        contentWindow.kPlaceholderData,
+        "privacy.resistFingerprinting = true and randomDataOnCanvasExtract = true, permission denied, canvas data != placeholderdata"
+      );
+    }
   } else {
     isnot(
       canvasData,
       contentWindow.kPlacedData,
       "privacy.resistFingerprinting = true, requesting permission, canvas data != placed data"
     );
+    if (!randomDataOnCanvasExtract) {
+      is(
+        canvasData,
+        contentWindow.kPlaceholderData,
+        "privacy.resistFingerprinting = true and randomDataOnCanvasExtract = false, requesting permission, canvas data == placeholderdata"
+      );
+    } else {
+      isnot(
+        canvasData,
+        contentWindow.kPlaceholderData,
+        "privacy.resistFingerprinting = true and randomDataOnCanvasExtract = true, requesting permission, canvas data != placeholderdata"
+      );
+    }
   }
 }
 
-async function withNewTabInput(grantPermission, browser) {
+async function withNewTabInput(
+  randomDataOnCanvasExtract,
+  grantPermission,
+  browser
+) {
   await SpecialPowers.spawn(browser, [], initTab);
-  await enableResistFingerprinting(true);
+  await enableResistFingerprinting(randomDataOnCanvasExtract, true);
   let popupShown = promisePopupShown();
   await SpecialPowers.spawn(browser, [], function () {
     E10SUtils.wrapHandlingUserInput(content, true, function () {
@@ -250,23 +358,25 @@ async function withNewTabInput(grantPermission, browser) {
   }
   await SpecialPowers.spawn(
     browser,
-    [grantPermission],
+    [randomDataOnCanvasExtract, grantPermission],
     extractCanvasDataUserInput
   );
   await SpecialPowers.popPrefEnv();
 }
 
-async function doTestInput(grantPermission) {
+async function doTestInput(randomDataOnCanvasExtract, grantPermission) {
   await BrowserTestUtils.withNewTab(
     kUrl,
-    withNewTabInput.bind(null, grantPermission)
+    withNewTabInput.bind(null, randomDataOnCanvasExtract, grantPermission)
   );
   Services.perms.removeFromPrincipal(kPrincipal, kPermission);
 }
 
 // With auto-declining enabled (the default)
 // Tests clicking "Don't Allow" button of the permission prompt.
-add_task(doTestInput.bind(null, false));
+add_task(doTestInput.bind(null, true, false));
+add_task(doTestInput.bind(null, false, false));
 
 // Tests clicking "Allow" button of the permission prompt.
-add_task(doTestInput.bind(null, true));
+add_task(doTestInput.bind(null, true, true));
+add_task(doTestInput.bind(null, false, true));

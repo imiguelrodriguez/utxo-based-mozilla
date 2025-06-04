@@ -17,29 +17,26 @@ class BackupTest(MarionetteTestCase):
 
     def setUp(self):
         MarionetteTestCase.setUp(self)
-
-        # We need to force the "browser.backup.log" pref already set to true
-        # before Firefox starts in order for it to be displayed.
-        self.marionette.enforce_gecko_prefs({"browser.backup.log": True})
-
-        self.marionette.set_context("chrome")
-
-    def tearDown(self):
-        # Restart Firefox with a new profile to get rid from all modifications.
+        # We need to quit the browser and restart with the browser.backup.log
+        # pref already set to true in order for it to be displayed.
         self.marionette.quit()
+        self.marionette.instance.prefs = {
+            "browser.backup.log": True,
+        }
+        # Now restart the browser.
         self.marionette.instance.switch_profile()
         self.marionette.start_session()
 
-        MarionetteTestCase.tearDown(self)
-
     def test_backup(self):
+        self.marionette.set_context("chrome")
+
         self.add_test_cookie()
         self.add_test_login()
         self.add_test_certificate()
         self.add_test_saved_address()
         self.add_test_identity_credential()
         self.add_test_form_history()
-        self.add_test_asrouter_snippets_data()
+        self.add_test_activity_stream_snippets_data()
         self.add_test_protections_data()
         self.add_test_bookmarks()
         self.add_test_history()
@@ -84,8 +81,9 @@ class BackupTest(MarionetteTestCase):
 
         # Restart the browser to force all of the test data we just added
         # to be flushed to disk and to be made ready for backup
-        self.marionette.restart()
-
+        self.marionette.quit()
+        self.marionette.start_session()
+        self.marionette.set_context("chrome")
         # Put the OSKeyStore label back, since it would have been cleared
         # from memory during the restart.
         self.marionette.execute_script(
@@ -149,7 +147,7 @@ class BackupTest(MarionetteTestCase):
         # Start a brand new profile, one without any of the data we created or
         # backed up. This is the one that we'll be starting recovery from.
         self.marionette.quit()
-        self.marionette.instance.switch_profile()
+        self.marionette.instance.profile = None
         self.marionette.start_session()
         self.marionette.set_context("chrome")
 
@@ -239,7 +237,7 @@ class BackupTest(MarionetteTestCase):
         self.verify_recovered_saved_address()
         self.verify_recovered_identity_credential()
         self.verify_recovered_form_history()
-        self.verify_recovered_asrouter_snippets_data()
+        self.verify_recovered_activity_stream_snippets_data()
         self.verify_recovered_protections_data()
         self.verify_recovered_bookmarks()
         self.verify_recovered_history()
@@ -275,12 +273,12 @@ class BackupTest(MarionetteTestCase):
         )
         self.assertEqual(recoveredClientID, expectedClientID)
 
+        # Try not to pollute the profile list by getting rid of the one we just
+        # created.
         self.marionette.quit()
         self.marionette.instance.profile = originalProfile
         self.marionette.start_session()
         self.marionette.set_context("chrome")
-
-        # Don't pollute the profile list by getting rid of the one we just created.
         self.marionette.execute_async_script(
             """
           let [newProfileName, outerResolve] = arguments;
@@ -294,7 +292,8 @@ class BackupTest(MarionetteTestCase):
             script_args=[newProfileName],
         )
 
-        # Cleanup the archive we moved, and the recovery folder we decompressed to.
+        # Cleanup the archive we moved, and the recovery folder we decompressed
+        # to.
         mozfile.remove(archivePath)
         mozfile.remove(recoveryPath)
 
@@ -316,7 +315,7 @@ class BackupTest(MarionetteTestCase):
               false,
               Date.now() / 1000 + 1,
               {},
-              Ci.nsICookie.SAMESITE_UNSET,
+              Ci.nsICookie.SAMESITE_NONE,
               Ci.nsICookie.SCHEME_HTTP
             );
           })().then(outerResolve);
@@ -583,17 +582,17 @@ class BackupTest(MarionetteTestCase):
         )
         self.assertEqual(formHistoryResultsLength, 1)
 
-    def add_test_asrouter_snippets_data(self):
+    def add_test_activity_stream_snippets_data(self):
         self.marionette.execute_async_script(
             """
-          const { ASRouterStorage } = ChromeUtils.importESModule(
-            "resource:///modules/asrouter/ASRouterStorage.sys.mjs",
+          const { ActivityStreamStorage } = ChromeUtils.importESModule(
+            "resource://activity-stream/lib/ActivityStreamStorage.sys.mjs",
           );
           const SNIPPETS_TABLE_NAME = "snippets";
 
           let [outerResolve] = arguments;
           (async () => {
-            let storage = new ASRouterStorage({
+            let storage = new ActivityStreamStorage({
               storeNames: [SNIPPETS_TABLE_NAME],
             });
             let snippetsTable = await storage.getDbTable(SNIPPETS_TABLE_NAME);
@@ -602,17 +601,17 @@ class BackupTest(MarionetteTestCase):
         """
         )
 
-    def verify_recovered_asrouter_snippets_data(self):
+    def verify_recovered_activity_stream_snippets_data(self):
         snippetsResult = self.marionette.execute_async_script(
             """
-          const { ASRouterStorage } = ChromeUtils.importESModule(
-            "resource:///modules/asrouter/ASRouterStorage.sys.mjs",
+          const { ActivityStreamStorage } = ChromeUtils.importESModule(
+            "resource://activity-stream/lib/ActivityStreamStorage.sys.mjs",
           );
           const SNIPPETS_TABLE_NAME = "snippets";
 
           let [outerResolve] = arguments;
           (async () => {
-            let storage = new ASRouterStorage({
+            let storage = new ActivityStreamStorage({
               storeNames: [SNIPPETS_TABLE_NAME],
             });
             let snippetsTable = await storage.getDbTable(SNIPPETS_TABLE_NAME);

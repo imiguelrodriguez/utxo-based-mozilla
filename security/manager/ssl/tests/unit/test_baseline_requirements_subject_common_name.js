@@ -29,7 +29,7 @@ function checkCertOn25August2016(cert, expectedResult) {
     gCertDB,
     cert,
     expectedResult,
-    Ci.nsIX509CertDB.verifyUsageTLSServer,
+    certificateUsageSSLServer,
     VALIDATION_TIME,
     false,
     "example.com"

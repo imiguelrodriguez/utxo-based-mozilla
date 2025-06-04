@@ -8,11 +8,6 @@
 add_task(async function () {
   ok(CustomizableUI.inDefaultState, "Default state to begin");
 
-  if (!Services.prefs.getBoolPref("extensions.pocket.enabled")) {
-    Assert.ok(true, "Pocket is disabled by default, nothing to do.");
-    return;
-  }
-
   Assert.ok(
     Services.prefs.getBoolPref("extensions.pocket.enabled"),
     "Pocket feature is enabled by default"

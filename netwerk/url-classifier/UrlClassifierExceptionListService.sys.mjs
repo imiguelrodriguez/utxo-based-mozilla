@@ -10,7 +10,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   RemoteSettings: "resource://services-settings/remote-settings.sys.mjs",
 });
 
-const COLLECTION_NAME = "url-classifier-exceptions";
+const COLLECTION_NAME = "url-classifier-skip-urls";
 
 class Feature {
   constructor(name, prefName) {
@@ -48,67 +48,17 @@ class Feature {
   onRemoteSettingsUpdate(entries) {
     this.remoteEntries = [];
 
-    for (let jsEntry of entries) {
-      let { classifierFeatures } = jsEntry;
-      if (classifierFeatures.includes(this.name)) {
-        let entry = Feature.rsObjectToEntry(jsEntry);
-        if (entry) {
-          this.remoteEntries.push(entry);
-        }
+    for (let entry of entries) {
+      if (entry.feature == this.name) {
+        this.remoteEntries.push(entry.pattern.toLowerCase());
       }
     }
-  }
-
-  /**
-   * Convert a JS object from RemoteSettings to an nsIUrlClassifierExceptionListEntry.
-   * @param {Object} rsObject - The JS object from RemoteSettings to convert.
-   * @returns {nsIUrlClassifierExceptionListEntry} The converted nsIUrlClassifierExceptionListEntry.
-   */
-  static rsObjectToEntry(rsObject) {
-    let entry = Cc[
-      "@mozilla.org/url-classifier/exception-list-entry;1"
-    ].createInstance(Ci.nsIUrlClassifierExceptionListEntry);
-
-    let {
-      urlPattern,
-      topLevelUrlPattern = "",
-      isPrivateBrowsingOnly = false,
-      filterContentBlockingCategories = [],
-      classifierFeatures = [],
-    } = rsObject;
-
-    try {
-      entry.init(
-        urlPattern,
-        topLevelUrlPattern,
-        isPrivateBrowsingOnly,
-        filterContentBlockingCategories,
-        classifierFeatures
-      );
-    } catch (e) {
-      console.error(
-        "Error initializing url classifier exception list entry " + e.message,
-        e,
-        rsObject
-      );
-      return null;
-    }
-
-    return entry;
   }
 
   notifyObservers(observer = null) {
     let entries = [];
     if (this.prefValue) {
-      for (let prefEntry of this.prefValue.split(",")) {
-        let entry = Feature.rsObjectToEntry({
-          urlPattern: prefEntry,
-          classifierFeatures: [this.name],
-        });
-        if (entry) {
-          entries.push(entry);
-        }
-      }
+      entries = this.prefValue.split(",");
     }
 
     if (this.remoteEntries) {
@@ -117,28 +67,12 @@ class Feature {
       }
     }
 
-    // Construct nsIUrlClassifierExceptionList with all entries that belong to
-    // this feature.
-    let list = Cc[
-      "@mozilla.org/url-classifier/exception-list;1"
-    ].createInstance(Ci.nsIUrlClassifierExceptionList);
-    for (let entry of entries) {
-      try {
-        list.addEntry(entry);
-      } catch (e) {
-        console.error(
-          "Error adding url classifier exception list entry " + e.message,
-          e,
-          entry
-        );
-      }
-    }
-
+    let entriesAsString = entries.join(",").toLowerCase();
     if (observer) {
-      observer.onExceptionListUpdate(list);
+      observer.onExceptionListUpdate(entriesAsString);
     } else {
       for (let obs of this.observers) {
-        obs.onExceptionListUpdate(list);
+        obs.onExceptionListUpdate(entriesAsString);
       }
     }
   }

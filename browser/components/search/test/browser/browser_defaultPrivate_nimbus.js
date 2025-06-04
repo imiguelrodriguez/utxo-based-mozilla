@@ -5,7 +5,7 @@
 const { ExperimentAPI } = ChromeUtils.importESModule(
   "resource://nimbus/ExperimentAPI.sys.mjs"
 );
-const { NimbusTestUtils } = ChromeUtils.importESModule(
+const { ExperimentFakes } = ChromeUtils.importESModule(
   "resource://testing-common/NimbusTestUtils.sys.mjs"
 );
 
@@ -81,11 +81,11 @@ add_task(async function test_nimbus_experiment() {
   let reloadObserved =
     SearchTestUtils.promiseSearchNotification("engines-reloaded");
 
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "searchConfiguration",
     value: {
-      separatePrivateDefaultUIEnabled: true,
-      separatePrivateDefaultUrlbarResultEnabled: false,
+      seperatePrivateDefaultUIEnabled: true,
+      seperatePrivateDefaultUrlbarResultEnabled: false,
       experiment: "testing",
     },
   });
@@ -97,7 +97,7 @@ add_task(async function test_nimbus_experiment() {
   );
   reloadObserved =
     SearchTestUtils.promiseSearchNotification("engines-reloaded");
-  await doExperimentCleanup();
+  doExperimentCleanup();
   await reloadObserved;
   Assert.equal(
     Services.search.defaultPrivateEngine.name,
@@ -117,11 +117,11 @@ add_task(async function test_nimbus_experiment_urlbar_result_enabled() {
   let reloadObserved =
     SearchTestUtils.promiseSearchNotification("engines-reloaded");
 
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "searchConfiguration",
     value: {
-      separatePrivateDefaultUIEnabled: true,
-      separatePrivateDefaultUrlbarResultEnabled: true,
+      seperatePrivateDefaultUIEnabled: true,
+      seperatePrivateDefaultUrlbarResultEnabled: true,
       experiment: "testing",
     },
   });
@@ -133,7 +133,7 @@ add_task(async function test_nimbus_experiment_urlbar_result_enabled() {
   );
   reloadObserved =
     SearchTestUtils.promiseSearchNotification("engines-reloaded");
-  await doExperimentCleanup();
+  doExperimentCleanup();
   await reloadObserved;
   Assert.equal(
     Services.search.defaultPrivateEngine.name,
@@ -152,13 +152,13 @@ add_task(async function test_non_experiment_prefs() {
     );
   Assert.equal(uiPref(), false, "defaulted false");
   await ExperimentAPI.ready();
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "privatesearch",
     value: {
-      separatePrivateDefaultUIEnabled: true,
+      seperatePrivateDefaultUIEnabled: true,
     },
   });
   Assert.equal(uiPref(), false, "Pref did not change without experiment");
-  await doExperimentCleanup();
+  doExperimentCleanup();
   await SpecialPowers.popPrefEnv();
-}).skip(); // The privatesearch feature does not exist.
+});

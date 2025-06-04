@@ -2,13 +2,6 @@
 /* vim: set sts=2 sw=2 et tw=80: */
 "use strict";
 
-// TODO(Bug 1938594): Remove this allowlisted uncaught rejection once we clarified how
-// the underlying issue hit by SessionStoreInternal.onMoveToNewWindow will be
-// fixed.
-PromiseTestUtils.allowMatchingRejectionsGlobally(
-  /Unexpected undefined tabState for onMoveToNewWindow/
-);
-
 // A single monitor for the tests.  If it receives any
 // incognito data in event listeners it will fail.
 let monitor;
@@ -546,7 +539,7 @@ add_task(async function testTabCreateRelated() {
     gBrowser,
     pageURL
   );
-  gBrowser.moveTabToStart(openerTab);
+  gBrowser.moveTabTo(openerTab, 0);
 
   await extension.startup();
 

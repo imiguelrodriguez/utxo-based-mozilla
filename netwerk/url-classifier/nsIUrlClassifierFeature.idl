@@ -3,7 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsISupports.idl"
-#include "nsIUrlClassifierExceptionList.idl"
+
 %{C++
 #include "nsStringFwd.h"
 #include "nsTArrayForwardDeclare.h"
@@ -56,9 +56,9 @@ interface nsIUrlClassifierFeature : nsISupports
                                           out ACString aPrefTableName);
 
   /**
-   * Exception list for this classifier feature.
+   * Returns a comma-separated list of hosts to be ignored.
    */
-  readonly attribute nsIUrlClassifierExceptionList exceptionList;
+  readonly attribute ACString exceptionHostList;
 
   /**
    * When this feature matches the channel, this method is executed to do

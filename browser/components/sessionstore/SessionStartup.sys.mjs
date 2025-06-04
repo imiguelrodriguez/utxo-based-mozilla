@@ -33,7 +33,6 @@ const lazy = {};
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 
 ChromeUtils.defineESModuleGetters(lazy, {
-  BrowserUsageTelemetry: "resource:///modules/BrowserUsageTelemetry.sys.mjs",
   CrashMonitor: "resource://gre/modules/CrashMonitor.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   SessionFile: "resource:///modules/sessionstore/SessionFile.sys.mjs",
@@ -201,8 +200,10 @@ export var SessionStartup = {
       lazy.sessionStoreLogger.debug(
         `initialState contains ${pinnedTabCount} pinned tabs`
       );
-
-      lazy.BrowserUsageTelemetry.updateMaxTabPinnedCount(pinnedTabCount);
+      Services.telemetry.scalarSetMaximum(
+        "browser.engagement.max_concurrent_tab_pinned_count",
+        pinnedTabCount
+      );
     }, 60000);
 
     let isAutomaticRestoreEnabled = this.isAutomaticRestoreEnabled();
@@ -265,9 +266,9 @@ export var SessionStartup = {
       // Report shutdown success via telemetry. Shortcoming here are
       // being-killed-by-OS-shutdown-logic, shutdown freezing after
       // session restore was written, etc.
-      Glean.sessionRestore.shutdownOk[
-        this._previousSessionCrashed ? "false" : "true"
-      ].add();
+      Services.telemetry
+        .getHistogramById("SHUTDOWN_OK")
+        .add(!this._previousSessionCrashed);
       Glean.sessionRestore.shutdownSuccessSessionStartup.record({
         shutdown_ok: this._previousSessionCrashed.toString(),
         shutdown_reason: previousSessionCrashedReason,

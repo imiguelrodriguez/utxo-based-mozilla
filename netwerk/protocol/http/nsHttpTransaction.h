@@ -8,6 +8,7 @@
 
 #include "ARefBase.h"
 #include "EventTokenBucket.h"
+#include "Http2Push.h"
 #include "HttpTransactionShell.h"
 #include "TimingStruct.h"
 #include "mozilla/StaticPrefs_security.h"
@@ -90,7 +91,6 @@ class nsHttpTransaction final : public nsAHttpTransaction,
   void RemoveConnection();
   void SetIsHttp2Websocket(bool h2ws) override { mIsHttp2Websocket = h2ws; }
   bool IsHttp2Websocket() override { return mIsHttp2Websocket; }
-  bool Closed() { return mClosed; }
 
   void SetTRRInfo(nsIRequest::TRRMode aMode,
                   TRRSkippedReason aSkipReason) override {
@@ -144,6 +144,13 @@ class nsHttpTransaction final : public nsAHttpTransaction,
 
   nsHttpTransaction* QueryHttpTransaction() override { return this; }
 
+  already_AddRefed<Http2PushedStreamWrapper> GetPushedStream() {
+    return do_AddRef(mPushedStream);
+  }
+  already_AddRefed<Http2PushedStreamWrapper> TakePushedStream() {
+    return mPushedStream.forget();
+  }
+
   uint32_t InitialRwin() const { return mInitialRwin; };
   bool ChannelPipeFull() { return mWaitingOnPipeOut; }
 
@@ -172,6 +179,11 @@ class nsHttpTransaction final : public nsAHttpTransaction,
   void OnProxyConnectComplete(int32_t aResponseCode) override;
   void SetFlat407Headers(const nsACString& aHeaders);
 
+  // This is only called by Http2PushedStream::TryOnPush when a new pushed
+  // stream is available. The newly added stream will be taken by another
+  // transaction.
+  void OnPush(Http2PushedStreamWrapper* aStream);
+
   void UpdateConnectionInfo(nsHttpConnectionInfo* aConnInfo);
 
   void SetClassOfService(ClassOfService cos);
@@ -182,11 +194,7 @@ class nsHttpTransaction final : public nsAHttpTransaction,
 
   void GetHashKeyOfConnectionEntry(nsACString& aResult);
 
-  bool IsForWebTransport() override { return mIsForWebTransport; }
-  bool IsResettingForTunnelConn() override { return mIsResettingForTunnelConn; }
-  void SetResettingForTunnelConn(bool aValue) override {
-    mIsResettingForTunnelConn = aValue;
-  }
+  bool IsForWebTransport() { return mIsForWebTransport; }
 
   nsAutoCString GetUrl() { return mUrl; }
 
@@ -206,14 +214,16 @@ class nsHttpTransaction final : public nsAHttpTransaction,
                                        uint32_t* contentRead,
                                        uint32_t* contentRemaining);
   [[nodiscard]] nsresult ProcessData(char*, uint32_t, uint32_t*);
-  void ReportResponseHeader(uint32_t aSubType);
   void DeleteSelfOnConsumerThread();
   void ReleaseBlockingTransaction();
+
   [[nodiscard]] static nsresult ReadRequestSegment(nsIInputStream*, void*,
                                                    const char*, uint32_t,
                                                    uint32_t, uint32_t*);
   [[nodiscard]] static nsresult WritePipeSegment(nsIOutputStream*, void*, char*,
                                                  uint32_t, uint32_t, uint32_t*);
+
+  bool TimingEnabled() const { return mCaps & NS_HTTP_TIMING_ENABLED; }
 
   bool ResponseTimeoutEnabled() const final;
 
@@ -253,7 +263,8 @@ class nsHttpTransaction final : public nsAHttpTransaction,
   void MaybeReportFailedSVCDomain(nsresult aReason,
                                   nsHttpConnectionInfo* aFailedConnInfo);
 
-  void FinalizeConnInfo();
+  already_AddRefed<Http2PushedStreamWrapper> TakePushedStreamById(
+      uint32_t aStreamId);
 
   // IMPORTANT: when adding new values, always add them to the end, otherwise
   // it will mess up telemetry.
@@ -378,6 +389,7 @@ class nsHttpTransaction final : public nsAHttpTransaction,
   // so far been skipped.
   uint32_t mInvalidResponseBytesRead{0};
 
+  RefPtr<Http2PushedStreamWrapper> mPushedStream;
   uint32_t mInitialRwin{0};
 
   nsHttpChunkedDecoder* mChunkedDecoder{nullptr};
@@ -550,6 +562,9 @@ class nsHttpTransaction final : public nsAHttpTransaction,
   HttpTrafficCategory mTrafficCategory{HttpTrafficCategory::eInvalid};
   Atomic<int32_t> mProxyConnectResponseCode{0};
 
+  OnPushCallback mOnPushCallback;
+  nsTHashMap<uint32_t, RefPtr<Http2PushedStreamWrapper>> mIDToStreamMap;
+
   nsCOMPtr<nsICancelable> mDNSRequest;
   Atomic<uint32_t, Relaxed> mHTTPSSVCReceivedStage{HTTPSSVC_NOT_USED};
   bool m421Received = false;
@@ -561,23 +576,13 @@ class nsHttpTransaction final : public nsAHttpTransaction,
   nsCOMPtr<nsITimer> mFastFallbackTimer;
   nsCOMPtr<nsITimer> mHttp3BackupTimer;
   RefPtr<nsHttpConnectionInfo> mBackupConnInfo;
-  // A clone of mConnInfo taken when this transaction is activated.
-  // Describes the server that the associated connection is connected to.
-  RefPtr<nsHttpConnectionInfo> mFinalizedConnInfo;
   RefPtr<HTTPSRecordResolver> mResolver;
   TRANSACTION_RESTART_REASON mRestartReason = TRANSACTION_RESTART_NONE;
 
-  enum TRANSACTION_ECH_RETRY_COUNT : uint32_t {
-    TRANSACTION_ECH_RETRY_OTHERS_COUNT = 0,
-    TRANSACTION_ECH_RETRY_WITH_ECH_COUNT = 1,
-    TRANSACTION_ECH_RETRY_WITHOUT_ECH_COUNT = 2,
-    TRANSACTION_ECH_RETRY_ECH_FAILED_COUNT = 3,
-  };
   nsTHashMap<nsUint32HashKey, uint32_t> mEchRetryCounterMap;
 
   bool mSupportsHTTP3 = false;
   Atomic<bool, Relaxed> mIsForWebTransport{false};
-  bool mIsResettingForTunnelConn = false;
 
   bool mEarlyDataWasAvailable = false;
   bool ShouldRestartOn0RttError(nsresult reason);
@@ -591,7 +596,6 @@ class nsHttpTransaction final : public nsAHttpTransaction,
   nsCString mHashKeyOfConnectionEntry;
   // The CNAME of the host, or empty if none.
   nsCString mCname;
-  nsCString mServerHeader;
 
   nsCOMPtr<WebTransportSessionEventListener> mWebTransportSessionEventListener;
 

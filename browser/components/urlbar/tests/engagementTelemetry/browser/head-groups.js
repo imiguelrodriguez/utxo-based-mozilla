@@ -292,9 +292,7 @@ async function doRestrictKeywordsTest({ trigger, assert }) {
     for (let i = 0; i < totalResults; i++) {
       let details = await UrlbarTestUtils.getDetailsOfResultAt(window, i);
       let symbol = details.result.payload.keyword;
-      let keyword = details.result.payload.l10nRestrictKeywords
-        ?.at(0)
-        .toLowerCase();
+      let keyword = details.result.payload.l10nRestrictKeyword?.toLowerCase();
 
       if (restrictSymbols.includes(symbol)) {
         let rowToSelect = await UrlbarTestUtils.waitForAutocompleteResultAt(

@@ -221,6 +221,14 @@ The search popover
                   UrlbarTokenizer.RESTRICT.TAG
                 ),
             },
+            Titles: {
+              title: "search-titles",
+              type: kInputTypes.BUTTON,
+              callback: () =>
+                gTouchBarHelper.insertRestrictionInUrlbar(
+                  UrlbarTokenizer.RESTRICT.TITLE
+                ),
+            },
           },
         },
       },

@@ -176,6 +176,9 @@ function makeExpectedResult({
       source: "merino",
       provider: telemetryType,
       isBlockable: true,
+      blockL10n: {
+        id: "urlbar-result-menu-dismiss-firefox-suggest",
+      },
       isManageable: true,
     },
   };

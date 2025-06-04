@@ -43,8 +43,8 @@
 }
 
 .identity-color-toolbar {
-  --identity-tab-color: currentColor;
-  --identity-icon-color: currentColor;
+  --identity-tab-color: var(--toolbar-field-color);
+  --identity-icon-color: var(--toolbar-field-color);
 }
 
 .identity-icon-fence {
@@ -106,12 +106,12 @@
 }
 
 #userContext-label {
-  color: var(--identity-tab-color);
-  margin: 0;
+	color: var(--identity-tab-color);
+	margin: 0;
   max-width: 8em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 #userContext-icons {
@@ -124,10 +124,11 @@
   border-radius: 2px;
   margin: -3px 2px 0;
 
+  #vertical-pinned-tabs-container &,
   #tabbrowser-tabs[orient="vertical"] & {
-    height: auto;
+    height: 100%;
+    margin: 0 -2px;
     width: 2px;
-    margin: 3px 0;
   }
 }
 

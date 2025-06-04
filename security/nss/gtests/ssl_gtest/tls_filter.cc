@@ -643,6 +643,7 @@ PacketFilter::Action TlsHandshakeFilter::FilterRecord(
       preceding_fragment_.Assign(handshake);
       continue;
     }
+    preceding_fragment_.Truncate(0);
 
     DataBuffer filtered;
     PacketFilter::Action action;
@@ -652,7 +653,6 @@ PacketFilter::Action TlsHandshakeFilter::FilterRecord(
       action = FilterHandshake(header, handshake, &filtered);
     }
     if (action == DROP) {
-      preceding_fragment_.Truncate(0);
       changed = true;
       std::cerr << "handshake drop: " << handshake << std::endl;
       continue;
@@ -669,7 +669,6 @@ PacketFilter::Action TlsHandshakeFilter::FilterRecord(
       changed = true;
     }
 
-    preceding_fragment_.Truncate(0);
     offset = header.Write(output, offset, *source);
   }
   output->Truncate(offset);

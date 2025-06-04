@@ -14,9 +14,10 @@
 #include "RootCertificateTelemetryUtils.h"
 #include "ScopedNSSTypes.h"
 #include "mozilla/EnumSet.h"
+#include "mozilla/Telemetry.h"
 #include "mozilla/TimeStamp.h"
 #include "mozilla/UniquePtr.h"
-#include "mozilla/glean/bindings/MetricTypes.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozpkix/pkixder.h"
 #include "mozpkix/pkixtypes.h"
 #include "nsString.h"
@@ -70,16 +71,6 @@ enum class CRLiteMode {
   ConfirmRevocations = 3,
 };
 
-enum class VerifyUsage {
-  TLSServer = 1,
-  TLSServerCA = 2,
-  TLSClient = 3,
-  TLSClientCA = 4,
-  EmailSigner = 5,
-  EmailRecipient = 6,
-  EmailCA = 7,
-};
-
 enum class NetscapeStepUpPolicy : uint32_t;
 
 // Describes the source of the associated issuer.
@@ -102,8 +93,7 @@ class PinningTelemetryInfo {
 
   // Should we accumulate pinning telemetry for the result?
   bool accumulateResult;
-  bool isMoz;
-  bool testMode;
+  Maybe<Telemetry::HistogramID> certPinningResultHistogram;
   int32_t certPinningResultBucket;
   // Should we accumulate telemetry for the root?
   bool accumulateForRoot;
@@ -112,8 +102,6 @@ class PinningTelemetryInfo {
   void Reset() {
     accumulateForRoot = false;
     accumulateResult = false;
-    isMoz = false;
-    testMode = false;
   }
 };
 
@@ -196,7 +184,7 @@ class CertVerifier {
   // *evOidPolicy == SEC_OID_UNKNOWN means the cert is NOT EV
   // Only one usage per verification is supported.
   mozilla::pkix::Result VerifyCert(
-      const nsTArray<uint8_t>& certBytes, VerifyUsage usage,
+      const nsTArray<uint8_t>& certBytes, SECCertificateUsage usage,
       mozilla::pkix::Time time, void* pinArg, const char* hostname,
       /*out*/ nsTArray<nsTArray<uint8_t>>& builtChain, Flags flags = 0,
       /*optional in*/
@@ -246,30 +234,16 @@ class CertVerifier {
     Enforce = 2,
   };
 
-  struct CertificateTransparencyConfig {
-    CertificateTransparencyConfig(
-        CertificateTransparencyMode mode, nsCString&& skipForHosts,
-        nsTArray<CopyableTArray<uint8_t>>&& skipForSPKIHashes)
-        : mMode(mode),
-          mSkipForHosts(std::move(skipForHosts)),
-          mSkipForSPKIHashes(std::move(skipForSPKIHashes)) {}
-
-    CertificateTransparencyMode mMode;
-    nsCString mSkipForHosts;
-    nsTArray<CopyableTArray<uint8_t>> mSkipForSPKIHashes;
-  };
-
   CertVerifier(OcspDownloadConfig odc, OcspStrictConfig osc,
                mozilla::TimeDuration ocspTimeoutSoft,
                mozilla::TimeDuration ocspTimeoutHard,
                uint32_t certShortLifetimeInDays,
                NetscapeStepUpPolicy netscapeStepUpPolicy,
-               CertificateTransparencyConfig&& ctConfig, CRLiteMode crliteMode,
+               CertificateTransparencyMode ctMode, CRLiteMode crliteMode,
                const nsTArray<EnterpriseCert>& thirdPartyCerts);
   ~CertVerifier();
 
   void ClearOCSPCache() { mOCSPCache.Clear(); }
-  void ClearTrustCache() { trust_cache_clear(mTrustCache.get()); }
 
   const OcspDownloadConfig mOCSPDownloadConfig;
   const bool mOCSPStrict;
@@ -277,7 +251,7 @@ class CertVerifier {
   const mozilla::TimeDuration mOCSPTimeoutHard;
   const uint32_t mCertShortLifetimeInDays;
   const NetscapeStepUpPolicy mNetscapeStepUpPolicy;
-  const CertificateTransparencyConfig mCTConfig;
+  const CertificateTransparencyMode mCTMode;
   const CRLiteMode mCRLiteMode;
 
  private:
@@ -300,18 +274,9 @@ class CertVerifier {
   // This will also be beneficial in situations where different sites use
   // different certificates that happen to be issued by the same intermediate.
   UniquePtr<SignatureCache, decltype(&signature_cache_free)> mSignatureCache;
-  // Similarly, this caches the results of looking up the trust of a
-  // certificate in NSS, which is slow.
-  UniquePtr<TrustCache, decltype(&trust_cache_free)> mTrustCache;
 
   void LoadKnownCTLogs();
   mozilla::pkix::Result VerifyCertificateTransparencyPolicy(
-      NSSCertDBTrustDomain& trustDomain,
-      const nsTArray<nsTArray<uint8_t>>& builtChain,
-      mozilla::pkix::Input sctsFromTLS, mozilla::pkix::Time time,
-      const char* hostname,
-      /*optional out*/ CertificateTransparencyInfo* ctInfo);
-  mozilla::pkix::Result VerifyCertificateTransparencyPolicyInner(
       NSSCertDBTrustDomain& trustDomain,
       const nsTArray<nsTArray<uint8_t>>& builtChain,
       mozilla::pkix::Input sctsFromTLS, mozilla::pkix::Time time,

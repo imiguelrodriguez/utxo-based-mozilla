@@ -108,6 +108,7 @@
 
 #updateButton {
   margin-inline-start: 0;
+  padding-inline-start: 0;
 }
 
 .text-link {
@@ -121,7 +122,7 @@
 }
 
 #submit-feedback {
-  margin-inline-start: 0.9em;
+  margin-inline-start: .9em;
 }
 
 .bottom-link {

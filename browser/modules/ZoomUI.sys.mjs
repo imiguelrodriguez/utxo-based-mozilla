@@ -9,6 +9,12 @@ const gContentPrefs = Cc["@mozilla.org/content-pref/service;1"].getService(
 );
 const gZoomPropertyName = "browser.content.full-zoom";
 
+const lazy = {};
+
+ChromeUtils.defineESModuleGetters(lazy, {
+  PanelMultiView: "resource:///modules/PanelMultiView.sys.mjs",
+});
+
 export var ZoomUI = {
   init(aWindow) {
     aWindow.addEventListener("EndSwapDocShells", onEndSwapDocShells, true);
@@ -113,19 +119,22 @@ function onZoomChange(event) {
  * @param {boolean} aAnimate Should be True for all cases unless the zoom
  *   change is related to tab switching. Optional
  */
-export async function updateZoomUI(aBrowser, aAnimate = false) {
+async function updateZoomUI(aBrowser, aAnimate = false) {
   let win = aBrowser.ownerGlobal;
-  if (
-    !win.gBrowser ||
-    win.gBrowser.selectedBrowser != aBrowser ||
-    aBrowser.browsingContext.topChromeWindow != win
-  ) {
+  if (!win.gBrowser || win.gBrowser.selectedBrowser != aBrowser) {
     return;
   }
 
-  let appMenuZoomReset = win.document.getElementById(
+  let appMenuZoomReset = lazy.PanelMultiView.getViewNode(
+    win.document,
     "appMenu-zoomReset-button2"
   );
+
+  // Exit early if UI elements aren't present.
+  if (!appMenuZoomReset) {
+    return;
+  }
+
   let customizableZoomControls = win.document.getElementById("zoom-controls");
   let customizableZoomReset = win.document.getElementById("zoom-reset-button");
   let urlbarZoomButton = win.document.getElementById("urlbar-zoom-button");

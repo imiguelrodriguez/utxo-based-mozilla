@@ -6,11 +6,11 @@ import sys
 
 
 def main(output, filename):
-    with open(filename) as file:
-        output.write('R"(')  # insert literal start
-        for line in file:
-            output.write(line)
-        output.write(')"')  # insert literal end
+    file = open(filename, "r")
+    output.write('R"(')  # insert literal start
+    for line in file:
+        output.write(line)
+    output.write(')"')  # insert literal end
 
 
 if __name__ == "__main__":

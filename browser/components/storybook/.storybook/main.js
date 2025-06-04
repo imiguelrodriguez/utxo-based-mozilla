@@ -27,8 +27,6 @@ module.exports = {
     `${projectRoot}/browser/components/asrouter/content/**/*.stories.mjs`,
     // Backup components stories
     `${projectRoot}/browser/components/backup/content/**/*.stories.mjs`,
-    // Settings components stories
-    `${projectRoot}/browser/components/preferences/widgets/**/*.stories.mjs`,
     // Reader View components stories
     `${projectRoot}/toolkit/components/reader/**/*.stories.mjs`,
     // megalist components stories
@@ -38,15 +36,7 @@ module.exports = {
     // Design system files
     `${projectRoot}/toolkit/themes/shared/design-system/**/*.stories.@(js|jsx|mjs|ts|tsx|md)`,
   ],
-  staticDirs: [
-    `${projectRoot}/toolkit/themes/shared/design-system/docs/`,
-    // This allows static images to be correctly served when placed in
-    // a folder outside of the design-system/docs/ folder
-    {
-      from: `${projectRoot}/browser/components/storybook/docs/img`,
-      to: "/img",
-    },
-  ],
+  staticDirs: [`${projectRoot}/toolkit/themes/shared/design-system/docs/`],
   addons: [
     "@storybook/addon-links",
     {

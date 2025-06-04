@@ -130,7 +130,7 @@ add_task(async function test_tabs() {
       // to ensure we properly test that path
       if (client.id === 2) {
         Assert.ok(
-          !row.secondaryButtonEl,
+          !row.renderRoot.querySelector(".dismiss-button"),
           `Dismiss button should NOT appear for tab ${
             j + 1
           } on the client that does not have available commands.`
@@ -138,50 +138,35 @@ add_task(async function test_tabs() {
       } else {
         // We need to use renderRoot since Lit components querySelector
         // won't return the right things
-        await BrowserTestUtils.waitForMutationCondition(
-          row.shadowRoot,
-          { childList: true },
-          () => row.secondaryButtonEl,
+        await BrowserTestUtils.waitForCondition(
+          () => row.renderRoot.querySelector(".dismiss-button") !== null,
           `Dismiss button should appear for tab ${j + 1}`
         );
         // Check the presence of the dismiss button
-        const dismissButton = row.secondaryButtonEl;
+        const dismissButton = row.renderRoot.querySelector(".dismiss-button");
         Assert.ok(dismissButton, `Dismiss button is present on tab ${j + 1}.`);
         // Simulate clicking the dismiss button
         EventUtils.synthesizeMouseAtCenter(dismissButton, {}, content);
 
-        await BrowserTestUtils.waitForMutationCondition(
-          row.secondaryButtonEl,
-          { attributes: true },
-          () => {
-            const undoButton = row.secondaryButtonEl;
-            return (
-              undoButton.classList.contains("undo-button") &&
-              undoButton.style.display !== "none"
-            );
-          },
-          `Undo button is shown after dismissing tab ${j + 1}.`
-        );
+        await TestUtils.waitForCondition(() => {
+          const undoButton = row.renderRoot.querySelector(".undo-button");
+          return undoButton && undoButton.style.display !== "none";
+        }, `Undo button is shown after dismissing tab ${j + 1}.`);
 
         // Simulate clicking the undo button
-        const undoButton = row.secondaryButtonEl;
+        const undoButton = row.renderRoot.querySelector(".undo-button");
         EventUtils.synthesizeMouseAtCenter(
           row.mainEl,
           { type: "mouseover" },
           content
         );
         EventUtils.synthesizeMouseAtCenter(undoButton, {}, content);
-        await BrowserTestUtils.waitForMutationCondition(
-          row.secondaryButtonEl,
-          { attributes: true },
-          () => {
-            return (
-              row.secondaryButtonEl.classList.contains("dismiss-button") &&
-              !row.secondaryButtonEl.classList.contains("undo-button")
-            );
-          },
-          `Dismiss button is restored after undoing tab ${j + 1}.`
-        );
+        await TestUtils.waitForCondition(() => {
+          return (
+            row.renderRoot.querySelector(".dismiss-button") &&
+            !row.renderRoot.querySelector(".undo-button")
+          );
+        }, `Dismiss button is restored after undoing tab ${j + 1}.`);
       }
     }
   }
@@ -253,67 +238,7 @@ add_task(async function test_close_remote_tab_context_menu() {
       "'Close Remote Tab' menu item is enabled."
     );
   });
-  contextMenu.hidePopup();
 
   SidebarController.hide();
-  sandbox.restore();
-});
-
-add_task(async function test_connect_additional_devices() {
-  const sandbox = sinon.createSandbox();
-  sandbox.stub(lazy.SyncedTabsErrorHandler, "getErrorType").returns(null);
-  sandbox.stub(lazy.TabsSetupFlowManager, "uiStateIndex").value(2);
-  sandbox.stub(lazy.SyncedTabs, "getTabClients").resolves([
-    {
-      id: 1,
-      name: "This Device",
-      isCurrentDevice: true,
-      type: "desktop",
-      tabs: [],
-    },
-  ]);
-
-  await SidebarController.show("viewTabsSidebar");
-  const { contentDocument } = SidebarController.browser;
-  const component = contentDocument.querySelector("sidebar-syncedtabs");
-  Assert.ok(component, "Synced tabs panel is shown.");
-  let emptyState = component.shadowRoot.querySelector("fxview-empty-state");
-  ok(
-    emptyState.getAttribute("headerlabel").includes("syncedtabs-adddevice"),
-    "Add device message is shown"
-  );
-
-  const mockConnectAdditionDevicesPath = "https://example.com/";
-  let expectedUrl =
-    "https://support.mozilla.org/kb/how-do-i-set-sync-my-computer#w_connect-additional-devices-to-sync";
-  let connectAdditionalDevicesLink = emptyState?.shadowRoot.querySelector("a");
-  connectAdditionalDevicesLink.scrollIntoView();
-  await TestUtils.waitForCondition(
-    () => BrowserTestUtils.isVisible(connectAdditionalDevicesLink),
-    "Support url is visible"
-  );
-  is(
-    connectAdditionalDevicesLink.href,
-    expectedUrl,
-    "Support link href is correct"
-  );
-  connectAdditionalDevicesLink.href = mockConnectAdditionDevicesPath;
-  info("Mock click on support link");
-  let tabPromise = BrowserTestUtils.waitForLocationChange(
-    gBrowser,
-    mockConnectAdditionDevicesPath
-  );
-  connectAdditionalDevicesLink.click();
-  await tabPromise;
-  is(
-    gBrowser.currentURI.spec,
-    mockConnectAdditionDevicesPath,
-    "Navigated to mock support link"
-  );
-
-  SidebarController.hide();
-
-  cleanUpExtraTabs();
-
   sandbox.restore();
 });

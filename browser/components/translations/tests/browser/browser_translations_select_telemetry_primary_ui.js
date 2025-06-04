@@ -45,7 +45,7 @@ add_task(
           document_language: "es",
           from_language: "es",
           to_language: "en",
-          top_preferred_language: "en-US",
+          top_preferred_language: "en",
           text_source: "selection",
         },
       }
@@ -65,7 +65,7 @@ add_task(
           document_language: "es",
           from_language: "es",
           to_language: "en",
-          top_preferred_language: "en-US",
+          top_preferred_language: "en",
           request_target: "select",
           auto_translate: false,
           source_text_code_units: 165,
@@ -119,7 +119,7 @@ add_task(
           document_language: "es",
           from_language: "fi",
           to_language: "en",
-          top_preferred_language: "en-US",
+          top_preferred_language: "en",
           request_target: "select",
           auto_translate: false,
           source_text_code_units: 165,
@@ -289,16 +289,10 @@ add_task(
       }
     );
 
-    await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated(
-      {
-        fromLanguage: "es",
-        toLanguage: "fa",
-        runInPage,
-      }
-    );
-
-    await TestTranslationsTelemetry.assertTranslationsEnginePerformance({
-      expectedEventCount: 3,
+    await FullPageTranslationsTestUtils.assertPageIsTranslated({
+      fromLanguage: "es",
+      toLanguage: "fa",
+      runInPage,
     });
 
     await cleanup();

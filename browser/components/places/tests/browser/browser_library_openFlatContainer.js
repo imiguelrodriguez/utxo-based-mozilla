@@ -24,7 +24,7 @@ add_task(async function test_open_built_in_folder() {
   let bm = await PlacesUtils.bookmarks.insert({
     parentGuid: PlacesUtils.bookmarks.menuGuid,
     title: "testBM",
-    url: "https://example.com/1",
+    url: "http://example.com/1",
   });
 
   library = await promiseLibrary("AllBookmarks");
@@ -57,7 +57,7 @@ add_task(async function test_open_new_folder_in_unfiled() {
         children: [
           {
             title: "Bookmark",
-            url: "https://example.com",
+            url: "http://example.com",
           },
         ],
       },
@@ -93,7 +93,7 @@ add_task(async function test_open_history_query() {
   const todayTitle = PlacesUtils.getString("finduri-AgeInDays-is-0");
   await PlacesTestUtils.addVisits([
     {
-      uri: "https://example.com",
+      uri: "http://example.com",
       title: "Whittingtons",
     },
   ]);

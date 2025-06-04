@@ -3,7 +3,7 @@
 
 "use strict";
 
-const { NimbusTestUtils } = ChromeUtils.importESModule(
+const { ExperimentFakes } = ChromeUtils.importESModule(
   "resource://testing-common/NimbusTestUtils.sys.mjs"
 );
 
@@ -67,7 +67,7 @@ add_task(async function test_default() {
  * impression.
  */
 add_task(async function test_control() {
-  let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig(
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig(
     {
       featureId: NimbusFeatures.fxaAppMenuItem.featureId,
       value: {
@@ -114,7 +114,7 @@ add_task(async function test_variants() {
     } catch (e) {
       Assert.ok(false, `Missing string for ID: ${expectedL10nID}`);
     }
-    let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig(
+    let doCleanup = await ExperimentFakes.enrollWithFeatureConfig(
       {
         featureId: NimbusFeatures.fxaAppMenuItem.featureId,
         value: {

@@ -102,8 +102,9 @@ class AddonsSearchDetection {
     }
 
     for (const id of addonIds) {
-      const addonVersion =
-        await browser.addonsSearchDetection.getAddonVersion(id);
+      const addonVersion = await browser.addonsSearchDetection.getAddonVersion(
+        id
+      );
       const extra = {
         addonId: id,
         addonVersion,

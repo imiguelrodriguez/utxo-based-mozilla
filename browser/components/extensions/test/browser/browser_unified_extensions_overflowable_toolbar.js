@@ -119,8 +119,6 @@ async function withWindowOverflowed(
 
   await ensureMaximizedWindow(win);
 
-  info(`Window maximized`);
-
   // The OverflowableToolbar operates asynchronously at times, so we will
   // poll a widget's overflowedItem attribute to detect whether or not the
   // widgets have finished being moved. We'll use the first widget that
@@ -229,16 +227,13 @@ async function withWindowOverflowed(
   };
   CustomizableUI.addListener(listener);
   // Start all the extensions sequentially.
-  info(`starting extensions...`);
   for (const extension of extensions) {
     await extension.startup();
   }
-  info(`waiting for menu-created messages`);
   await Promise.all([
     extWithMenuBrowserAction.awaitMessage("menu-created"),
     extWithSubMenuBrowserAction.awaitMessage("menu-created"),
   ]);
-  info(`waiting for browser action widgets`);
   await listener.promise;
   CustomizableUI.removeListener(listener);
 
@@ -248,7 +243,6 @@ async function withWindowOverflowed(
     info("Running beforeOverflowed task");
     await beforeOverflowed(extensionIDs);
   } finally {
-    info(`beforeOverflowed finished`);
     // The beforeOverflowed task may have moved some items out from the navbar,
     // so only listen for overflows for items still in there.
     const browserActionIDs = extensionIDs.map(id =>
@@ -277,10 +271,7 @@ async function withWindowOverflowed(
     };
     CustomizableUI.addListener(widgetOverflowListener);
 
-    info(
-      `Resizing to overflow window width (current width: ${win.innerWidth})`
-    );
-    await ensureWindowInnerDimensions(win, OVERFLOW_WINDOW_WIDTH_PX, null);
+    win.resizeTo(OVERFLOW_WINDOW_WIDTH_PX, win.outerHeight);
     await widgetOverflowListener.promise;
     CustomizableUI.removeListener(widgetOverflowListener);
 
@@ -301,7 +292,6 @@ async function withWindowOverflowed(
       info("Running whenOverflowed task");
       await whenOverflowed(defaultList, unifiedExtensionList, extensionIDs);
     } finally {
-      info("whenOverflowed finished, maximizing again");
       await ensureMaximizedWindow(win);
 
       // Notably, we don't wait for the nav-bar to not have the "overflowing"
@@ -343,7 +333,11 @@ async function verifyExtensionWidget(widget, win = window) {
     "expected no .toolbarbutton-1 CSS class on the action button in the panel"
   );
 
-  let menuButton = widget.querySelector(".unified-extensions-item-menu-button");
+  let menuButton = widget.lastElementChild;
+  Assert.ok(
+    menuButton.classList.contains("unified-extensions-item-menu-button"),
+    "expected class on the button"
+  );
   ok(
     menuButton.classList.contains("subviewbutton"),
     "expected the .subviewbutton CSS class on the menu button in the panel"
@@ -1039,10 +1033,21 @@ add_task(async function test_overflow_with_a_second_window() {
   );
 
   // Make sure the first window is the active window.
-  info("second window is maximized, trying to make first window active");
-  await SimpleTest.promiseFocus(win);
-
-  info("first window focused");
+  let windowActivePromise = new Promise(resolve => {
+    if (Services.focus.activeWindow == win) {
+      resolve();
+    } else {
+      win.addEventListener(
+        "activate",
+        () => {
+          resolve();
+        },
+        { once: true }
+      );
+    }
+  });
+  win.focus();
+  await windowActivePromise;
 
   let extensionWidgetID;
   let aNode;

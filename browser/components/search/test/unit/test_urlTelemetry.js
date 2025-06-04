@@ -2,11 +2,9 @@
    http://creativecommons.org/publicdomain/zero/1.0/ */
 
 ChromeUtils.defineESModuleGetters(this, {
-  BrowserSearchTelemetry:
-    "moz-src:///browser/components/search/BrowserSearchTelemetry.sys.mjs",
+  BrowserSearchTelemetry: "resource:///modules/BrowserSearchTelemetry.sys.mjs",
   NetUtil: "resource://gre/modules/NetUtil.sys.mjs",
-  SearchSERPTelemetry:
-    "moz-src:///browser/components/search/SearchSERPTelemetry.sys.mjs",
+  SearchSERPTelemetry: "resource:///modules/SearchSERPTelemetry.sys.mjs",
   TelemetryTestUtils: "resource://testing-common/TelemetryTestUtils.sys.mjs",
   sinon: "resource://testing-common/Sinon.sys.mjs",
 });
@@ -81,7 +79,7 @@ const TESTS = [
   {
     setUp() {
       Services.cookies.removeAll();
-      const cv = Services.cookies.add(
+      Services.cookies.add(
         "www.bing.com",
         "/",
         "SRCHS",
@@ -91,10 +89,9 @@ const TESTS = [
         false,
         Date.now() + 1000 * 60 * 60,
         {},
-        Ci.nsICookie.SAMESITE_UNSET,
+        Ci.nsICookie.SAMESITE_NONE,
         Ci.nsICookie.SCHEME_HTTPS
       );
-      Assert.equal(cv.result, Ci.nsICookieValidation.eOK, "Valid cookie");
     },
     tearDown() {
       Services.cookies.removeAll();
@@ -263,13 +260,9 @@ async function testAdUrlClicked(serpUrl, adUrl, expectedAdKey) {
 
 do_get_profile();
 
-add_setup(async function () {
+add_task(async function setup() {
   await SearchSERPTelemetry.init();
   sinon.stub(BrowserSearchTelemetry, "shouldRecordSearchCount").returns(true);
-
-  registerCleanupFunction(async () => {
-    sinon.restore();
-  });
 });
 
 add_task(async function test_parsing_search_urls() {

@@ -33,6 +33,7 @@
   margin-block: 32px 8px;
 }
 
+
 .summary > a {
   margin-top: 12px;
 }
@@ -103,7 +104,7 @@
 }
 
 import-details-row:nth-child(odd) {
-  background-color: var(--table-row-background-color-alternate);
+  background-color: var(--in-content-box-background-odd);
 }
 
 import-details-row {

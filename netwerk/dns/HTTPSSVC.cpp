@@ -4,7 +4,6 @@
 
 #include "HTTPSSVC.h"
 #include "mozilla/net/DNS.h"
-#include "mozilla/glean/NetwerkProtocolHttpMetrics.h"
 #include "mozilla/StaticPrefs_network.h"
 #include "nsHttp.h"
 #include "nsHttpHandler.h"
@@ -151,7 +150,7 @@ SvcParam::GetODoHConfig(nsACString& aODoHConfig) {
 }
 
 bool SVCB::operator<(const SVCB& aOther) const {
-  if (nsHttpHandler::EchConfigEnabled()) {
+  if (gHttpHandler->EchConfigEnabled()) {
     if (mHasEchConfig && !aOther.mHasEchConfig) {
       return true;
     }
@@ -214,18 +213,13 @@ class AlpnComparator {
   }
 };
 
-nsTArray<std::tuple<nsCString, SupportedAlpnRank>> SVCB::GetAllAlpn(
-    bool& aHasNoDefaultAlpn) const {
-  aHasNoDefaultAlpn = false;
+nsTArray<std::tuple<nsCString, SupportedAlpnRank>> SVCB::GetAllAlpn() const {
   nsTArray<std::tuple<nsCString, SupportedAlpnRank>> alpnList;
   for (const auto& value : mSvcFieldValue) {
     if (value.mValue.is<SvcParamAlpn>()) {
       for (const auto& alpn : value.mValue.as<SvcParamAlpn>().mValue) {
         alpnList.AppendElement(std::make_tuple(alpn, IsAlpnSupported(alpn)));
       }
-    } else if (value.mValue.is<SvcParamKeyNoDefaultAlpn>()) {
-      // Found "no-default-alpn".
-      aHasNoDefaultAlpn = true;
     }
   }
   alpnList.Sort(AlpnComparator());
@@ -347,52 +341,22 @@ static bool CheckAlpnIsUsable(SupportedAlpnRank aAlpnType, bool aNoHttp2,
   return true;
 }
 
-static nsTArray<SVCBWrapper> FlattenRecords(const nsACString& aHost,
-                                            const nsTArray<SVCB>& aRecords,
-                                            uint32_t& aH3RecordCount) {
+static nsTArray<SVCBWrapper> FlattenRecords(const nsTArray<SVCB>& aRecords) {
   nsTArray<SVCBWrapper> result;
-  aH3RecordCount = 0;
   for (const auto& record : aRecords) {
-    bool hasNoDefaultAlpn = false;
     nsTArray<std::tuple<nsCString, SupportedAlpnRank>> alpnList =
-        record.GetAllAlpn(hasNoDefaultAlpn);
+        record.GetAllAlpn();
     if (alpnList.IsEmpty()) {
       result.AppendElement(SVCBWrapper(record));
     } else {
-      if (!hasNoDefaultAlpn) {
-        // Consider two scenarios when "no-default-alpn" is not found:
-        // 1. If echConfig is present in the record:
-        //    - Firefox should always attempt to connect using echConfig without
-        //    fallback.
-        //    - Therefore, we add an additional record with an empty ALPN to
-        //    allow Firefox to retry using HTTP/1.1 or h2 with echConfig.
-        //
-        // 2. If echConfig is not present in the record::
-        //    - We allow fallback to connections that do not use HTTPS RR.
-        //    - In this case, adding another record with the same target name as
-        //    the host name is unnecessary.
-        if (!aHost.Equals(record.mSvcDomainName) || record.mHasEchConfig) {
-          alpnList.AppendElement(
-              std::make_tuple(""_ns, SupportedAlpnRank::HTTP_1_1));
-        }
-      }
       for (const auto& alpn : alpnList) {
         SVCBWrapper wrapper(record);
         wrapper.mAlpn = Some(alpn);
-        if (IsHttp3(std::get<1>(alpn))) {
-          aH3RecordCount++;
-        }
         result.AppendElement(wrapper);
       }
     }
   }
   return result;
-}
-
-static void TelemetryForServiceModeRecord(const nsACString& aKey) {
-#ifndef ANDROID
-  glean::networking::https_record_state.Get(aKey).Add(1);
-#endif
 }
 
 already_AddRefed<nsISVCBRecord>
@@ -404,17 +368,14 @@ DNSHTTPSSVCRecordBase::GetServiceModeRecordInternal(
   RefPtr<SVCBRecord> h3RecordWithEchConfig;
   uint32_t recordHasNoDefaultAlpnCount = 0;
   uint32_t recordExcludedCount = 0;
-  uint32_t recordHasUnmatchedCname = 0;
   aRecordsAllExcluded = false;
   nsCOMPtr<nsIDNSService> dns = do_GetService(NS_DNSSERVICE_CONTRACTID);
   uint32_t h3ExcludedCount = 0;
-  uint32_t h3RecordCount = 0;
-  nsTArray<SVCBWrapper> records =
-      FlattenRecords(mHost, aRecords, h3RecordCount);
+
+  nsTArray<SVCBWrapper> records = FlattenRecords(aRecords);
   for (const auto& record : records) {
     if (record.mRecord.mSvcFieldPriority == 0) {
       // In ServiceMode, the SvcPriority should never be 0.
-      TelemetryForServiceModeRecord("invalid"_ns);
       return nullptr;
     }
 
@@ -428,7 +389,6 @@ DNSHTTPSSVCRecordBase::GetServiceModeRecordInternal(
     }
 
     if (!CheckRecordIsUsableWithCname(record.mRecord, aCname)) {
-      recordHasUnmatchedCname++;
       continue;
     }
 
@@ -445,8 +405,8 @@ DNSHTTPSSVCRecordBase::GetServiceModeRecordInternal(
         // echConfig. If yes, we'll use the non-h3 record with echConfig
         // to connect. If not, we'll use h3 to connect without echConfig.
         if (record.mRecord.mHasEchConfig &&
-            (nsHttpHandler::EchConfigEnabled() &&
-             !nsHttpHandler::EchConfigEnabled(true))) {
+            (gHttpHandler->EchConfigEnabled() &&
+             !gHttpHandler->EchConfigEnabled(true))) {
           if (!h3RecordWithEchConfig) {
             // Save this h3 record for later use.
             h3RecordWithEchConfig =
@@ -467,32 +427,23 @@ DNSHTTPSSVCRecordBase::GetServiceModeRecordInternal(
   if (!selectedRecord && !h3RecordWithEchConfig) {
     // If all records indicate "no-default-alpn", we should not use this RRSet.
     if (recordHasNoDefaultAlpnCount == records.Length()) {
-      TelemetryForServiceModeRecord("no_default_alpn"_ns);
       return nullptr;
     }
 
     if (recordExcludedCount == records.Length()) {
       aRecordsAllExcluded = true;
-      TelemetryForServiceModeRecord("all_excluded"_ns);
-      return nullptr;
-    }
-
-    if (recordHasUnmatchedCname == records.Length()) {
-      TelemetryForServiceModeRecord("unmatched_cname"_ns);
       return nullptr;
     }
 
     // If all records are in http3 excluded list, try again without checking the
     // excluded list. This is better than returning nothing.
-    if (h3ExcludedCount && h3ExcludedCount == h3RecordCount &&
-        aCheckHttp3ExcludedList) {
+    if (h3ExcludedCount == records.Length() && aCheckHttp3ExcludedList) {
       return GetServiceModeRecordInternal(aNoHttp2, aNoHttp3, aRecords,
                                           aRecordsAllExcluded, false, aCname);
     }
   }
 
   if (h3RecordWithEchConfig) {
-    TelemetryForServiceModeRecord("succeeded"_ns);
     if (selectedRecord && selectedRecord->mData.mHasEchConfig) {
       return selectedRecord.forget();
     }
@@ -500,19 +451,14 @@ DNSHTTPSSVCRecordBase::GetServiceModeRecordInternal(
     return h3RecordWithEchConfig.forget();
   }
 
-  if (selectedRecord) {
-    TelemetryForServiceModeRecord("succeeded"_ns);
-  } else {
-    TelemetryForServiceModeRecord("others"_ns);
-  }
   return selectedRecord.forget();
 }
 
-void DNSHTTPSSVCRecordBase::GetAllRecordsInternal(
+void DNSHTTPSSVCRecordBase::GetAllRecordsWithEchConfigInternal(
     bool aNoHttp2, bool aNoHttp3, const nsACString& aCname,
-    const nsTArray<SVCB>& aRecords, bool aOnlyRecordsWithECH,
-    bool* aAllRecordsHaveEchConfig, bool* aAllRecordsInH3ExcludedList,
-    nsTArray<RefPtr<nsISVCBRecord>>& aResult, bool aCheckHttp3ExcludedList) {
+    const nsTArray<SVCB>& aRecords, bool* aAllRecordsHaveEchConfig,
+    bool* aAllRecordsInH3ExcludedList, nsTArray<RefPtr<nsISVCBRecord>>& aResult,
+    bool aCheckHttp3ExcludedList) {
   if (aRecords.IsEmpty()) {
     return;
   }
@@ -520,17 +466,15 @@ void DNSHTTPSSVCRecordBase::GetAllRecordsInternal(
   *aAllRecordsHaveEchConfig = aRecords[0].mHasEchConfig;
   *aAllRecordsInH3ExcludedList = false;
   // The first record should have echConfig.
-  if (aOnlyRecordsWithECH && !(*aAllRecordsHaveEchConfig)) {
+  if (!(*aAllRecordsHaveEchConfig)) {
     return;
   }
 
   uint32_t h3ExcludedCount = 0;
-  uint32_t h3RecordCount = 0;
-  nsTArray<SVCBWrapper> records =
-      FlattenRecords(mHost, aRecords, h3RecordCount);
+  nsTArray<SVCBWrapper> records = FlattenRecords(aRecords);
   for (const auto& record : records) {
     if (record.mRecord.mSvcFieldPriority == 0) {
-      // This should not happen, since GetAllRecordsInternal()
+      // This should not happen, since GetAllRecordsWithEchConfigInternal()
       // should be called only if GetServiceModeRecordInternal() returns a
       // non-null record.
       MOZ_ASSERT(false);
@@ -540,7 +484,7 @@ void DNSHTTPSSVCRecordBase::GetAllRecordsInternal(
     // Records with echConfig are in front of records without echConfig, so we
     // don't have to continue.
     *aAllRecordsHaveEchConfig &= record.mRecord.mHasEchConfig;
-    if (aOnlyRecordsWithECH && !(*aAllRecordsHaveEchConfig)) {
+    if (!(*aAllRecordsHaveEchConfig)) {
       aResult.Clear();
       return;
     }
@@ -570,11 +514,10 @@ void DNSHTTPSSVCRecordBase::GetAllRecordsInternal(
 
   // If all records are in http3 excluded list, try again without checking the
   // excluded list. This is better than returning nothing.
-  if (h3ExcludedCount && h3ExcludedCount == h3RecordCount &&
-      aCheckHttp3ExcludedList) {
-    GetAllRecordsInternal(aNoHttp2, aNoHttp3, aCname, aRecords,
-                          aOnlyRecordsWithECH, aAllRecordsHaveEchConfig,
-                          aAllRecordsInH3ExcludedList, aResult, false);
+  if (h3ExcludedCount == records.Length() && aCheckHttp3ExcludedList) {
+    GetAllRecordsWithEchConfigInternal(
+        aNoHttp2, aNoHttp3, aCname, aRecords, aAllRecordsHaveEchConfig,
+        aAllRecordsInH3ExcludedList, aResult, false);
     *aAllRecordsInH3ExcludedList = true;
   }
 }

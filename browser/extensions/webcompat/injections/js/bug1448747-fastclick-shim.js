@@ -21,8 +21,12 @@
   const { get } = descriptor;
 
   descriptor.get = exportFunction(function () {
-    if (new Error().stack?.includes("notNeeded")) {
-      return "none";
+    try {
+      throw Error();
+    } catch (e) {
+      if (e.stack?.includes("notNeeded")) {
+        return "none";
+      }
     }
     return get.call(this);
   }, window);

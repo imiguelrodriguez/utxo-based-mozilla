@@ -14,7 +14,7 @@ add_task(async function test_uncheck_never_translate_site_shows_button() {
     languagePairs: LANGUAGE_PAIRS,
   });
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await FullPageTranslationsTestUtils.assertTranslationsButton(
     { button: true, circleArrows: false, locale: false, icon: true },
@@ -24,7 +24,7 @@ add_task(async function test_uncheck_never_translate_site_shows_button() {
   await FullPageTranslationsTestUtils.openPanel({
     expectedFromLanguage: "es",
     expectedToLanguage: "en",
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
   });
   await FullPageTranslationsTestUtils.openTranslationsSettingsMenu();
 
@@ -42,7 +42,7 @@ add_task(async function test_uncheck_never_translate_site_shows_button() {
     expectedFromLanguage: "es",
     expectedToLanguage: "en",
     openFromAppMenu: true,
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
   });
   await FullPageTranslationsTestUtils.openTranslationsSettingsMenu();
 
@@ -78,13 +78,11 @@ add_task(
       downloadHandler: resolveDownloads,
     });
 
-    await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated(
-      {
-        fromLanguage: "es",
-        toLanguage: "en",
-        runInPage,
-      }
-    );
+    await FullPageTranslationsTestUtils.assertPageIsTranslated({
+      fromLanguage: "es",
+      toLanguage: "en",
+      runInPage,
+    });
 
     await FullPageTranslationsTestUtils.openPanel({
       expectedToLanguage: "en",
@@ -110,7 +108,7 @@ add_task(
       { checked: true }
     );
 
-    await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
     await FullPageTranslationsTestUtils.openPanel({
       expectedFromLanguage: "es",
@@ -138,13 +136,11 @@ add_task(
       { checked: false }
     );
 
-    await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated(
-      {
-        fromLanguage: "es",
-        toLanguage: "en",
-        runInPage,
-      }
-    );
+    await FullPageTranslationsTestUtils.assertPageIsTranslated({
+      fromLanguage: "es",
+      toLanguage: "en",
+      runInPage,
+    });
 
     await cleanup();
   }

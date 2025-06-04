@@ -17,7 +17,7 @@ add_task(async function test_translations_button_hidden_in_reader_mode() {
     "The translations button is visible."
   );
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await toggleReaderMode();
 
@@ -36,10 +36,10 @@ add_task(async function test_translations_button_hidden_in_reader_mode() {
   });
 
   await runInPage(async TranslationsTest => {
-    const { getFinalParagraph } = TranslationsTest.getSelectors();
+    const { getLastParagraph } = TranslationsTest.getSelectors();
     await TranslationsTest.assertTranslationResult(
-      "The page's final paragraph is in Spanish.",
-      getFinalParagraph,
+      "The page's last paragraph is in Spanish.",
+      getLastParagraph,
       "— Pues, aunque mováis más brazos que los del gigante Briareo, me lo habéis de pagar."
     );
   });
@@ -51,7 +51,7 @@ add_task(async function test_translations_button_hidden_in_reader_mode() {
     "The translations button is visible again outside of reader mode."
   );
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await cleanup();
 });
@@ -63,7 +63,6 @@ add_task(async function test_translations_persist_in_reader_mode() {
   const { cleanup, resolveDownloads, runInPage } = await loadTestPage({
     page: SPANISH_PAGE_URL,
     languagePairs: LANGUAGE_PAIRS,
-    contentEagerMode: true,
   });
 
   await FullPageTranslationsTestUtils.assertTranslationsButton(
@@ -71,45 +70,22 @@ add_task(async function test_translations_persist_in_reader_mode() {
     "The translations button is visible."
   );
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await FullPageTranslationsTestUtils.openPanel({
     expectedFromLanguage: "es",
     expectedToLanguage: "en",
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
   });
 
   await FullPageTranslationsTestUtils.clickTranslateButton({
     downloadHandler: resolveDownloads,
   });
 
-  await FullPageTranslationsTestUtils.assertAllPageContentIsTranslated({
+  await FullPageTranslationsTestUtils.assertPageIsTranslated({
     fromLanguage: "es",
     toLanguage: "en",
     runInPage,
-  });
-  await FullPageTranslationsTestUtils.assertPageH1TitleIsTranslated({
-    fromLanguage: "es",
-    toLanguage: "en",
-    runInPage,
-    message:
-      "The page's H1's title should be translated because it intersects with the viewport.",
-  });
-  await FullPageTranslationsTestUtils.assertPageFinalParagraphTitleIsNotTranslated(
-    {
-      runInPage,
-      message:
-        "Attribute translations are always lazy based on intersection, so the final paragraph's title should remain untranslated.",
-    }
-  );
-
-  await runInPage(async TranslationsTest => {
-    const { getFinalParagraph } = TranslationsTest.getSelectors();
-    await TranslationsTest.assertTranslationResult(
-      "The page's final paragraph is translated from Spanish to English.",
-      getFinalParagraph,
-      "— PUES, AUNQUE MOVÁIS MÁS BRAZOS QUE LOS DEL GIGANTE BRIAREO, ME LO HABÉIS DE PAGAR. [es to en]"
-    );
   });
 
   await toggleReaderMode();
@@ -119,16 +95,16 @@ add_task(async function test_translations_persist_in_reader_mode() {
     await TranslationsTest.assertTranslationResult(
       "The page's H1 is now the translated reader-mode header",
       getH1,
-      "TRANSLATIONS TEST [es to en]"
+      "TRANSLATIONS TEST [es to en, html]"
     );
   });
 
   await runInPage(async TranslationsTest => {
-    const { getFinalParagraph } = TranslationsTest.getSelectors();
+    const { getLastParagraph } = TranslationsTest.getSelectors();
     await TranslationsTest.assertTranslationResult(
-      "The page's final paragraph is translated from Spanish to English.",
-      getFinalParagraph,
-      "— PUES, AUNQUE MOVÁIS MÁS BRAZOS QUE LOS DEL GIGANTE BRIAREO, ME LO HABÉIS DE PAGAR. [es to en]"
+      "The page's last paragraph is in Spanish.",
+      getLastParagraph,
+      "— PUES, AUNQUE MOVÁIS MÁS BRAZOS QUE LOS DEL GIGANTE BRIAREO, ME LO HABÉIS DE PAGAR. [es to en, html]"
     );
   });
 

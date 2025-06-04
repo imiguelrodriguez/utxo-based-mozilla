@@ -168,7 +168,10 @@ async function run_one_testcase(testcase) {
     let bodyStream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(
       Ci.nsIStringInputStream
     );
-    bodyStream.setByteStringData(testcase.request.content);
+    bodyStream.setData(
+      testcase.request.content,
+      testcase.request.content.length
+    );
     uploadChannel.explicitSetUploadStream(
       bodyStream,
       null,

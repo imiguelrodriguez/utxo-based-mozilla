@@ -12,16 +12,12 @@ const { AddonManager } = ChromeUtils.importESModule(
 const { WebRequest } = ChromeUtils.importESModule(
   "resource://gre/modules/WebRequest.sys.mjs"
 );
-var { ExtensionParent } = ChromeUtils.importESModule(
-  "resource://gre/modules/ExtensionParent.sys.mjs"
-);
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
-  AddonSearchEngine:
-    "moz-src:///toolkit/components/search/AddonSearchEngine.sys.mjs",
+  AddonSearchEngine: "resource://gre/modules/AddonSearchEngine.sys.mjs",
   AppProvidedSearchEngine:
-    "moz-src:///toolkit/components/search/AppProvidedSearchEngine.sys.mjs",
+    "resource://gre/modules/AppProvidedSearchEngine.sys.mjs",
 });
 
 // eslint-disable-next-line mozilla/reject-importGlobalProperties
@@ -51,20 +47,6 @@ this.addonsSearchDetection = class extends ExtensionAPI {
           const patterns = {};
 
           try {
-            // Delaying accessing Services.search if we didn't get to first paint yet
-            // to avoid triggering search internals from loading too soon during the
-            // application startup.
-            if (
-              !Cu.isESModuleLoaded(
-                "resource://gre/modules/SearchService.sys.mjs"
-              )
-            ) {
-              await ExtensionParent.browserPaintedPromise;
-            }
-            // Return earlier if the extension or the application is shutting down.
-            if (extension.hasShutdown || Services.startup.shuttingDown) {
-              return patterns;
-            }
             await Services.search.promiseInitialized;
             const engines = await Services.search.getEngines();
 
@@ -118,7 +100,8 @@ this.addonsSearchDetection = class extends ExtensionAPI {
         },
 
         // `getPublicSuffix()` returns the public suffix/Effective TLD Service
-        // of the given URL. See: `nsIEffectiveTLDService` interface in tree.
+        // of the given URL.
+        // See: https://developer.mozilla.org/en-US/docs/Mozilla/Tech/XPCOM/Reference/Interface/nsIEffectiveTLDService
         async getPublicSuffix(url) {
           try {
             return Services.eTLD.getBaseDomain(Services.io.newURI(url));

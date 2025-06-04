@@ -3,7 +3,7 @@
 
 "use strict";
 
-const TEST_URL = "https://example.com/";
+const TEST_URL = "http://example.com/";
 
 add_task(async function () {
   await PlacesUtils.bookmarks.eraseEverything();

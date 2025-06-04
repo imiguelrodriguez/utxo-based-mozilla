@@ -3,10 +3,6 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-const { AppConstants } = ChromeUtils.importESModule(
-  "resource://gre/modules/AppConstants.sys.mjs"
-);
-
 function BinaryComparer(file, callback) {
   var fstream = Cc["@mozilla.org/network/file-input-stream;1"].createInstance(
     Ci.nsIFileInputStream
@@ -80,11 +76,7 @@ function comparer_callback() {
 function run_test() {
   var source = do_get_file(DATA_DIR + "test_bug399727.html");
   var comparer = new BinaryComparer(
-    do_get_file(
-      DATA_DIR +
-        "test_bug399727" +
-        (AppConstants.USE_LIBZ_RS ? ".libz-rs.zlib" : ".zlib")
-    ),
+    do_get_file(DATA_DIR + "test_bug399727.zlib"),
     comparer_callback
   );
 

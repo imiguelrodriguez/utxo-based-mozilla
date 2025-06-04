@@ -16,9 +16,6 @@ static bool sPopCookieManagerAvailable = true;
 
 void AddWindowsSSO(nsHttpChannel* channel) {
   if (!sPopCookieManagerAvailable) {
-    MOZ_LOG(gHttpLog, mozilla::LogLevel::Debug,
-            ("HttpWinUtils::AddWindowsSSO: sPopCookieManager is not available "
-             "from the beginning"));
     return;
   }
   HRESULT hr;
@@ -37,9 +34,6 @@ void AddWindowsSSO(nsHttpChannel* channel) {
                           reinterpret_cast<void**>(&sPopCookieManager));
     if (FAILED(hr)) {
       sPopCookieManagerAvailable = false;
-      MOZ_LOG(
-          gHttpLog, mozilla::LogLevel::Debug,
-          ("HttpWinUtils::AddWindowsSSO: sPopCookieManager is not available"));
       return;
     }
 
@@ -62,8 +56,6 @@ void AddWindowsSSO(nsHttpChannel* channel) {
   hr = sPopCookieManager->GetCookieInfoForUri(
       NS_ConvertUTF8toUTF16(urispec).get(), &cookieCount, &cookieInfo);
   if (FAILED(hr)) {
-    MOZ_LOG(gHttpLog, mozilla::LogLevel::Debug,
-            ("HttpWinUtils::AddWindowsSSO: GetCookieInfoForUri failed"));
     return;
   }
 

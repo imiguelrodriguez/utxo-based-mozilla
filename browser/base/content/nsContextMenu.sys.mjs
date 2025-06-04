@@ -14,15 +14,13 @@ ChromeUtils.defineESModuleGetters(lazy, {
   DevToolsShim: "chrome://devtools-startup/content/DevToolsShim.sys.mjs",
   E10SUtils: "resource://gre/modules/E10SUtils.sys.mjs",
   GenAI: "resource:///modules/GenAI.sys.mjs",
-  LinkPreview: "moz-src:///browser/components/genai/LinkPreview.sys.mjs",
   LoginHelper: "resource://gre/modules/LoginHelper.sys.mjs",
   LoginManagerContextMenu:
     "resource://gre/modules/LoginManagerContextMenu.sys.mjs",
   NetUtil: "resource://gre/modules/NetUtil.sys.mjs",
-  PlacesUIUtils: "moz-src:///browser/components/places/PlacesUIUtils.sys.mjs",
+  PlacesUIUtils: "resource:///modules/PlacesUIUtils.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
-  ReaderMode: "moz-src:///toolkit/components/reader/ReaderMode.sys.mjs",
-  ScreenshotsUtils: "resource:///modules/ScreenshotsUtils.sys.mjs",
+  ReaderMode: "resource://gre/modules/ReaderMode.sys.mjs",
   ShortcutUtils: "resource://gre/modules/ShortcutUtils.sys.mjs",
   TranslationsParent: "resource://gre/actors/TranslationsParent.sys.mjs",
   WebsiteFilter: "resource:///modules/policies/WebsiteFilter.sys.mjs",
@@ -37,6 +35,20 @@ ChromeUtils.defineLazyGetter(lazy, "ReferrerInfo", () =>
     "nsIReferrerInfo",
     "init"
   )
+);
+
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "SCREENSHOT_BROWSER_COMPONENT",
+  "screenshots.browser.component.enabled",
+  false
+);
+
+XPCOMUtils.defineLazyPreferenceGetter(
+  lazy,
+  "REVEAL_PASSWORD_ENABLED",
+  "layout.forms.reveal-password-context-menu.enabled",
+  false
 );
 
 XPCOMUtils.defineLazyPreferenceGetter(
@@ -82,7 +94,7 @@ export class nsContextMenu {
    * A promise to retrieve the translations language pair
    * if the context menu was opened in a context relevant to
    * open the SelectTranslationsPanel.
-   * @type {Promise<{sourceLanguage: string, targetLanguage: string}>}
+   * @type {Promise<{fromLanguage: string, toLanguage: string}>}
    */
   #translationsLangPairPromise;
 
@@ -171,6 +183,8 @@ export class nsContextMenu {
       nsContextMenu.contentData = null;
     }
 
+    this.remoteType = this.actor?.domProcess?.remoteType;
+
     const { gBrowser } = this.window;
 
     this.shouldDisplay = context.shouldDisplay;
@@ -211,7 +225,6 @@ export class nsContextMenu {
     this.onEditable = context.onEditable;
     this.onImage = context.onImage;
     this.onKeywordField = context.onKeywordField;
-    this.onSearchField = context.onSearchField;
     this.onLink = context.onLink;
     this.onLoadedImage = context.onLoadedImage;
     this.onMailtoLink = context.onMailtoLink;
@@ -269,8 +282,6 @@ export class nsContextMenu {
         );
     }
 
-    this.remoteType = this.actor.manager.domProcess.remoteType;
-
     this.selectedText = this.selectionInfo.text;
     this.isTextSelected = !!this.selectedText.length;
     this.webExtBrowserType = this.browser.getAttribute(
@@ -302,9 +313,6 @@ export class nsContextMenu {
       let canSpell = InlineSpellCheckerUI.canSpellCheck && this.canSpellCheck;
       this.showItem("spell-check-enabled", canSpell);
     }
-
-    this.hasTextFragments = context.hasTextFragments;
-    this.textFragmentURL = null;
   } // setContext
 
   hiding(aXulMenu) {
@@ -350,7 +358,6 @@ export class nsContextMenu {
     this.initScreenshotItem();
     this.initPasswordControlItems();
     this.initPDFItems();
-    this.initTextFragmentItems();
 
     this.showHideSeparators(aXulMenu);
     if (!aXulMenu.showHideSeparators) {
@@ -426,71 +433,6 @@ export class nsContextMenu {
     this.setItemAttr("context-sep-pdfjs-selectall", "disabled", isEmpty);
   }
 
-  initTextFragmentItems() {
-    const shouldShow =
-      Services.prefs.getBoolPref(
-        "dom.text_fragments.create_text_fragment.enabled",
-        false
-      ) &&
-      lazy.STRIP_ON_SHARE_ENABLED &&
-      !(this.inPDFViewer || this.inFrame || this.onEditable) &&
-      this.isContentSelected;
-    this.showItem("context-copy-link-to-highlight", shouldShow);
-    this.showItem("context-copy-clean-link-to-highlight", shouldShow);
-
-    // disables both options by default, while API tries to build a text fragment
-    this.setItemAttr("context-copy-link-to-highlight", "disabled", true);
-    this.setItemAttr("context-copy-clean-link-to-highlight", "disabled", true);
-
-    // Only show remove option if there are text fragments on the page.
-    this.showItem("context-sep-highlights", this.hasTextFragments);
-    this.showItem("context-remove-all-highlights", this.hasTextFragments);
-  }
-
-  async getTextDirective() {
-    if (
-      !Services.prefs.getBoolPref(
-        "dom.text_fragments.create_text_fragment.enabled",
-        false
-      )
-    ) {
-      return;
-    }
-    this.textFragmentURL = await this.actor.getTextDirective();
-
-    // enable menu items when a text fragment can be built
-    if (this.textFragmentURL) {
-      this.setItemAttr("context-copy-link-to-highlight", "disabled", false);
-
-      // only enables the clean link based on preference and canStripForShare()
-      // this follows the same pattern as https://bugzilla.mozilla.org/show_bug.cgi?id=1895334
-      let canNotStripTextFragmentParams =
-        lazy.STRIP_ON_SHARE_CAN_DISABLE &&
-        !this.#canStripParams(this.getLinkURI(this.textFragmentURL));
-
-      this.setItemAttr(
-        "context-copy-clean-link-to-highlight",
-        "disabled",
-        canNotStripTextFragmentParams
-      );
-    }
-  }
-
-  async removeAllTextFragments() {
-    await this.actor.removeAllTextFragments();
-  }
-
-  copyLinkToHighlight(stripSiteTracking = false) {
-    if (this.textFragmentURL) {
-      if (stripSiteTracking) {
-        const uri = this.getLinkURI(this.textFragmentURL);
-        this.copyStrippedLink(uri);
-      } else {
-        this.copyLink(this.textFragmentURL);
-      }
-    }
-  }
-
   initOpenItems() {
     var isMailtoInternal = false;
     if (this.onMailtoLink) {
@@ -558,10 +500,6 @@ export class nsContextMenu {
       shouldShow && !isWindowPrivate && showContainers
     );
     this.showItem("context-openlinkincurrent", this.onPlainTextLink);
-    this.showItem(
-      "context-previewlink",
-      lazy.LinkPreview.shouldShowContextMenu(this)
-    );
   }
 
   initNavigationItems() {
@@ -899,7 +837,6 @@ export class nsContextMenu {
         !this.onMozExtLink) ||
         this.onPlainTextLink
     );
-    this.showItem("context-add-engine", this.shouldShowAddEngine());
     this.showItem("context-keywordfield", this.shouldShowAddKeyword());
     this.showItem("frame", this.inFrame);
 
@@ -909,6 +846,18 @@ export class nsContextMenu {
       let frameOsPid =
         this.actor.manager.browsingContext.currentWindowGlobal.osPid;
       this.setItemAttr("context-frameOsPid", "label", "PID: " + frameOsPid);
+
+      // We need to check if "Take Screenshot" should be displayed in the "This Frame"
+      // context menu
+      let shouldShowTakeScreenshotFrame = this.shouldShowTakeScreenshot();
+      this.showItem(
+        "context-take-frame-screenshot",
+        shouldShowTakeScreenshotFrame
+      );
+      this.showItem(
+        "context-sep-frame-screenshot",
+        shouldShowTakeScreenshotFrame
+      );
     }
 
     this.showAndFormatSearchContextItem();
@@ -1091,7 +1040,7 @@ export class nsContextMenu {
     this.showItem(
       "context-stripOnShareLink",
       lazy.STRIP_ON_SHARE_ENABLED &&
-        (this.onLink || this.onPlainTextLink) &&
+        this.onLink &&
         !this.onMailtoLink &&
         !this.onTelLink &&
         !this.onMozExtLink &&
@@ -1341,7 +1290,7 @@ export class nsContextMenu {
       if (!onViewSource) {
         return;
       }
-      this.setItemAttr(fullId, "checked", check());
+      check().then(checked => this.setItemAttr(fullId, "checked", checked));
       this.setItemAttr(fullId, "label", getString(`context_${id}_label`));
       if (accesskey) {
         this.setItemAttr(
@@ -1354,12 +1303,14 @@ export class nsContextMenu {
 
     const onViewSource = this.browser.currentURI.schemeIs("view-source");
 
-    showViewSourceItem("goToLine", () => false, true);
+    showViewSourceItem("goToLine", async () => false, true);
     showViewSourceItem("wrapLongLines", () =>
-      Services.prefs.getBoolPref("view_source.wrap_long_lines", false)
+      this.window.gViewSourceUtils.getPageActor(this.browser).queryIsWrapping()
     );
     showViewSourceItem("highlightSyntax", () =>
-      Services.prefs.getBoolPref("view_source.syntax_highlight", false)
+      this.window.gViewSourceUtils
+        .getPageActor(this.browser)
+        .queryIsSyntaxHighlighting()
     );
   }
 
@@ -1408,7 +1359,7 @@ export class nsContextMenu {
 
   shouldShowTakeScreenshot() {
     let shouldShow =
-      lazy.ScreenshotsUtils.screenshotsEnabled &&
+      !this.window.gScreenshots.shouldScreenshotsButtonBeDisabled() &&
       this.inTabBrowser &&
       !this.onTextInput &&
       !this.onLink &&
@@ -1421,14 +1372,14 @@ export class nsContextMenu {
   }
 
   initScreenshotItem() {
-    let shouldShow = this.shouldShowTakeScreenshot();
+    let shouldShow = this.shouldShowTakeScreenshot() && !this.inFrame;
 
     this.showItem("context-sep-screenshots", shouldShow);
     this.showItem("context-take-screenshot", shouldShow);
   }
 
   initPasswordControlItems() {
-    let shouldShow = this.onPassword;
+    let shouldShow = this.onPassword && lazy.REVEAL_PASSWORD_ENABLED;
     if (shouldShow) {
       let revealPassword = this.document.getElementById(
         "context-reveal-password"
@@ -1629,11 +1580,19 @@ export class nsContextMenu {
   }
 
   takeScreenshot() {
-    Services.obs.notifyObservers(
-      this.window,
-      "menuitem-screenshot",
-      "ContextMenu"
-    );
+    if (lazy.SCREENSHOT_BROWSER_COMPONENT) {
+      Services.obs.notifyObservers(
+        this.window,
+        "menuitem-screenshot",
+        "ContextMenu"
+      );
+    } else {
+      Services.obs.notifyObservers(
+        null,
+        "menuitem-screenshot-extension",
+        "contextMenu"
+      );
+    }
   }
 
   pdfJSCmd(aName) {
@@ -2003,7 +1962,7 @@ export class nsContextMenu {
         if (aStatusCode == NS_ERROR_SAVE_LINK_AS_TIMEOUT) {
           // do it the old fashioned way, which will pick the best filename
           // it can without waiting.
-          this._window.saveURL(
+          this.window.saveURL(
             linkURL,
             null,
             linkText,
@@ -2154,7 +2113,7 @@ export class nsContextMenu {
     let cookieJarSettings = this.contentData.cookieJarSettings;
     if (this.onCanvas) {
       // Bypass cache, since it's a data: URL.
-      this._canvasToBlobURL(this.targetIdentifier).then(blobURL => {
+      this._canvasToBlobURL(this.targetIdentifier).then(function (blobURL) {
         this.window.internalSave(
           blobURL,
           null, // originalURL
@@ -2277,28 +2236,22 @@ export class nsContextMenu {
     );
   }
 
-  copyLink(url = this.linkURL) {
+  copyLink() {
     // If we're in a view source tab, remove the view-source: prefix
-    let linkURL = url.replace(/^view-source:/, "");
+    let linkURL = this.linkURL.replace(/^view-source:/, "");
     lazy.clipboard.copyString(
       linkURL,
       this.actor.manager.browsingContext.currentWindowGlobal
     );
   }
 
-  previewLink(url = this.linkURL) {
-    // If we're in a view-source tab, remove the view-source: prefix
-    url = url.replace(/^view-source:/, "");
-    lazy.LinkPreview.handleContextMenuClick(url, this);
-  }
-
   /**
-   * Copies a stripped version of a URI to the clipboard.
+   * Copies a stripped version of this.linkURI to the clipboard.
    * 'Stripped' means that query parameters for tracking/ link decoration
    * that are known to us will be removed from the URI.
    */
-  copyStrippedLink(uri = this.linkURI) {
-    let strippedLinkURI = this.getStrippedLink(uri);
+  copyStrippedLink() {
+    let strippedLinkURI = this.getStrippedLink();
     let strippedLinkURL =
       Services.io.createExposableURI(strippedLinkURI)?.displaySpec;
     if (strippedLinkURL) {
@@ -2329,41 +2282,6 @@ export class nsContextMenu {
         this.window
       );
     });
-  }
-
-  async addSearchFieldAsEngine() {
-    let { url, formData, charset, method } =
-      await this.actor.getSearchFieldEngineData(this.targetIdentifier);
-
-    for (let value of formData.values()) {
-      if (typeof value != "string") {
-        throw new Error("Non-string values are not supported.");
-      }
-    }
-
-    let { engineInfo } = await this.window.gDialogBox.open(
-      "chrome://browser/content/search/addEngine.xhtml",
-      {
-        mode: "FORM",
-        title: true,
-        nameTemplate: Services.io.newURI(url).host,
-      }
-    );
-
-    // If the user saved, engineInfo contains `name` and `alias`.
-    // Otherwise, it's undefined.
-    if (engineInfo) {
-      let searchEngine = await Services.search.addUserEngine({
-        name: engineInfo.name,
-        alias: engineInfo.alias,
-        url,
-        params: new URLSearchParams(formData),
-        charset,
-        method,
-      });
-
-      this.window.gURLBar.search("", { searchEngine });
-    }
   }
 
   /**
@@ -2420,9 +2338,9 @@ export class nsContextMenu {
     return node;
   }
 
-  getLinkURI(url = this.linkURL) {
+  getLinkURI() {
     try {
-      return this.window.makeURI(url);
+      return this.window.makeURI(this.linkURL);
     } catch (ex) {
       // e.g. empty URL string
     }
@@ -2436,21 +2354,23 @@ export class nsContextMenu {
    * or the original URI if we could not strip any query parameter.
    *
    */
-  getStrippedLink(uri = this.linkURI) {
-    if (!uri) {
+  getStrippedLink() {
+    if (!this.linkURI) {
       return null;
     }
     let strippedLinkURI = null;
     try {
-      strippedLinkURI = lazy.QueryStringStripper.stripForCopyOrShare(uri);
+      strippedLinkURI = lazy.QueryStringStripper.stripForCopyOrShare(
+        this.linkURI
+      );
     } catch (e) {
       console.warn(`getStrippedLink: ${e.message}`);
-      return uri;
+      return this.linkURI;
     }
 
     // If nothing can be stripped, we return the original URI
     // so the feature can still be used.
-    return strippedLinkURI ?? uri;
+    return strippedLinkURI ?? this.linkURI;
   }
 
   /**
@@ -2458,12 +2378,12 @@ export class nsContextMenu {
    * @returns {Boolean}
    *
    */
-  #canStripParams(uri = this.linkURI) {
-    if (!uri) {
+  #canStripParams() {
+    if (!this.linkURI) {
       return false;
     }
     try {
-      return lazy.QueryStringStripper.canStripForShare(uri);
+      return lazy.QueryStringStripper.canStripForShare(this.linkURI);
     } catch (e) {
       console.warn("canStripForShare failed!", e);
       return false;
@@ -2510,30 +2430,7 @@ export class nsContextMenu {
   }
 
   shouldShowAddKeyword() {
-    return (
-      this.onTextInput &&
-      this.onKeywordField &&
-      !this.isLoginForm() &&
-      !Services.prefs.getBoolPref(
-        "browser.urlbar.update2.engineAliasRefresh",
-        false
-      )
-    );
-  }
-
-  shouldShowAddEngine() {
-    let uri = this.browser.currentURI;
-
-    return (
-      this.onTextInput &&
-      this.onSearchField &&
-      !this.isLoginForm() &&
-      (uri.schemeIs("http") || uri.schemeIs("https")) &&
-      Services.prefs.getBoolPref(
-        "browser.urlbar.update2.engineAliasRefresh",
-        false
-      )
-    );
+    return this.onTextInput && this.onKeywordField && !this.isLoginForm();
   }
 
   addDictionaries() {
@@ -2624,7 +2521,10 @@ export class nsContextMenu {
   getImageText() {
     let dialogBox = this.window.gBrowser.getTabDialogBox(this.browser);
     const imageTextResult = this.actor.getImageText(this.targetIdentifier);
-    let timerId = Glean.textRecognition.apiPerformance.start();
+    TelemetryStopwatch.start(
+      "TEXT_RECOGNITION_API_PERFORMANCE",
+      imageTextResult
+    );
     const { dialog } = dialogBox.open(
       "chrome://browser/content/textrecognition/textrecognition.html",
       {
@@ -2633,8 +2533,7 @@ export class nsContextMenu {
       },
       imageTextResult,
       () => dialog.resizeVertically(),
-      this.window.openLinkIn,
-      timerId
+      this.window.openLinkIn
     );
   }
 
@@ -2680,22 +2579,23 @@ export class nsContextMenu {
    * @returns {Promise<void>}
    */
   async localizeTranslateSelectionItem(translateSelectionItem) {
-    const { targetLanguage } = await this.#translationsLangPairPromise;
+    const { toLanguage } = await this.#translationsLangPairPromise;
 
-    if (targetLanguage) {
+    if (toLanguage) {
       // A valid to-language exists, so localize the menuitem for that language.
       let displayName;
 
       try {
-        const languageDisplayNames =
-          lazy.TranslationsParent.createLanguageDisplayNames();
-        displayName = languageDisplayNames.of(targetLanguage);
+        const displayNames = new Services.intl.DisplayNames(undefined, {
+          type: "language",
+        });
+        displayName = displayNames.of(toLanguage);
       } catch {
-        // languageDisplayNames.of threw, do nothing.
+        // Services.intl.DisplayNames.of threw, do nothing.
       }
 
       if (displayName) {
-        translateSelectionItem.setAttribute("target-language", targetLanguage);
+        translateSelectionItem.setAttribute("target-language", toLanguage);
         this.document.l10n.setAttributes(
           translateSelectionItem,
           this.isTextSelected
@@ -2735,9 +2635,12 @@ export class nsContextMenu {
       return "";
     }
 
-    if (URL.canParse(linkText)) {
-      // The underlying link text is a URL, we should not offer to translate.
+    try {
+      // If the underlying link text is a URL, we should not offer to translate.
+      new URL(linkText);
       return "";
+    } catch {
+      // A URL could not be parsed from the unerlying link text.
     }
 
     // Since the underlying link text is not a URL, we should offer to translate it.
@@ -2785,7 +2688,7 @@ export class nsContextMenu {
     let menuItemPrivate = document.getElementById(
       "context-searchselect-private"
     );
-    if (!Services.search.hasSuccessfullyInitialized) {
+    if (!Services.search.isInitialized) {
       menuItem.hidden = true;
       menuItemPrivate.hidden = true;
       return;

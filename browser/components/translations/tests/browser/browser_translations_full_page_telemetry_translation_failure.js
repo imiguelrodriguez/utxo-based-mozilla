@@ -22,8 +22,21 @@ add_task(
       "The button is available."
     );
 
-    await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
+    await TestTranslationsTelemetry.assertCounter(
+      "RequestCount",
+      Glean.translations.requestsCount,
+      0
+    );
+    await TestTranslationsTelemetry.assertRate(
+      "ErrorRate",
+      Glean.translations.errorRate,
+      {
+        expectedNumerator: 0,
+        expectedDenominator: 0,
+      }
+    );
     await TestTranslationsTelemetry.assertEvent(
       Glean.translations.translationRequest,
       {
@@ -34,7 +47,7 @@ add_task(
     await FullPageTranslationsTestUtils.openPanel({
       expectedFromLanguage: "es",
       expectedToLanguage: "en",
-      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
     });
 
     await TestTranslationsTelemetry.assertEvent(Glean.translationsPanel.open, {
@@ -53,7 +66,7 @@ add_task(
       onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewError,
     });
 
-    await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
     await TestTranslationsTelemetry.assertEvent(Glean.translationsPanel.open, {
       expectedEventCount: 2,
@@ -76,6 +89,19 @@ add_task(
       expectedEventCount: 1,
       expectNewFlowId: false,
     });
+    await TestTranslationsTelemetry.assertCounter(
+      "RequestCount",
+      Glean.translations.requestsCount,
+      1
+    );
+    await TestTranslationsTelemetry.assertRate(
+      "ErrorRate",
+      Glean.translations.errorRate,
+      {
+        expectedNumerator: 1,
+        expectedDenominator: 1,
+      }
+    );
     await TestTranslationsTelemetry.assertEvent(Glean.translations.error, {
       expectedEventCount: 1,
       expectNewFlowId: false,
@@ -100,15 +126,11 @@ add_task(
           to_language: "en",
           auto_translate: false,
           document_language: "es",
-          top_preferred_language: "en-US",
+          top_preferred_language: "en",
           request_target: "full_page",
         },
       }
     );
-
-    await TestTranslationsTelemetry.assertTranslationsEnginePerformance({
-      expectedEventCount: 0,
-    });
 
     await cleanup();
   }
@@ -130,8 +152,21 @@ add_task(async function test_translations_telemetry_auto_translation_failure() {
     onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewError,
   });
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
+  await TestTranslationsTelemetry.assertCounter(
+    "RequestCount",
+    Glean.translations.requestsCount,
+    1
+  );
+  await TestTranslationsTelemetry.assertRate(
+    "ErrorRate",
+    Glean.translations.errorRate,
+    {
+      expectedNumerator: 1,
+      expectedDenominator: 1,
+    }
+  );
   await TestTranslationsTelemetry.assertEvent(Glean.translationsPanel.open, {
     expectedEventCount: 1,
     expectNewFlowId: true,
@@ -170,7 +205,7 @@ add_task(async function test_translations_telemetry_auto_translation_failure() {
         to_language: "en",
         auto_translate: true,
         document_language: "es",
-        top_preferred_language: "en-US",
+        top_preferred_language: "en",
         request_target: "full_page",
       },
     }
@@ -187,10 +222,6 @@ add_task(async function test_translations_telemetry_auto_translation_failure() {
   await TestTranslationsTelemetry.assertEvent(Glean.translationsPanel.close, {
     expectedEventCount: 1,
     expectNewFlowId: false,
-  });
-
-  await TestTranslationsTelemetry.assertTranslationsEnginePerformance({
-    expectedEventCount: 0,
   });
 
   await cleanup();

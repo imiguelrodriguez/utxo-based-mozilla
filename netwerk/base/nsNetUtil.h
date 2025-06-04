@@ -192,7 +192,8 @@ nsresult NS_NewChannelInternal(
     nsILoadGroup* aLoadGroup = nullptr,
     nsIInterfaceRequestor* aCallbacks = nullptr,
     nsLoadFlags aLoadFlags = nsIRequest::LOAD_NORMAL,
-    nsIIOService* aIoService = nullptr, uint32_t aSandboxFlags = 0);
+    nsIIOService* aIoService = nullptr, uint32_t aSandboxFlags = 0,
+    bool aSkipCheckForBrokenURLOrZeroSized = false);
 
 // See NS_NewChannelInternal for usage and argument description
 nsresult NS_NewChannelInternal(
@@ -249,7 +250,8 @@ nsresult NS_NewChannel(
     nsILoadGroup* aLoadGroup = nullptr,
     nsIInterfaceRequestor* aCallbacks = nullptr,
     nsLoadFlags aLoadFlags = nsIRequest::LOAD_NORMAL,
-    nsIIOService* aIoService = nullptr, uint32_t aSandboxFlags = 0);
+    nsIIOService* aIoService = nullptr, uint32_t aSandboxFlags = 0,
+    bool aSkipCheckForBrokenURLOrZeroSized = false);
 
 // See NS_NewChannelInternal for usage and argument description
 nsresult NS_NewChannel(
@@ -260,7 +262,8 @@ nsresult NS_NewChannel(
     nsILoadGroup* aLoadGroup = nullptr,
     nsIInterfaceRequestor* aCallbacks = nullptr,
     nsLoadFlags aLoadFlags = nsIRequest::LOAD_NORMAL,
-    nsIIOService* aIoService = nullptr, uint32_t aSandboxFlags = 0);
+    nsIIOService* aIoService = nullptr, uint32_t aSandboxFlags = 0,
+    bool aSkipCheckForBrokenURLOrZeroSized = false);
 
 // See NS_NewChannelInternal for usage and argument description
 nsresult NS_NewChannel(
@@ -273,7 +276,8 @@ nsresult NS_NewChannel(
     nsILoadGroup* aLoadGroup = nullptr,
     nsIInterfaceRequestor* aCallbacks = nullptr,
     nsLoadFlags aLoadFlags = nsIRequest::LOAD_NORMAL,
-    nsIIOService* aIoService = nullptr, uint32_t aSandboxFlags = 0);
+    nsIIOService* aIoService = nullptr, uint32_t aSandboxFlags = 0,
+    bool aSkipCheckForBrokenURLOrZeroSized = false);
 
 nsresult NS_GetIsDocumentChannel(nsIChannel* aChannel, bool* aIsDocument);
 
@@ -683,7 +687,8 @@ inline void NS_QueryNotificationCallbacks(T* channel, const nsIID& iid,
 
 template <class C, class T>
 inline void NS_QueryNotificationCallbacks(C* channel, nsCOMPtr<T>& result) {
-  NS_QueryNotificationCallbacks(channel, NS_GET_IID(T), getter_AddRefs(result));
+  NS_QueryNotificationCallbacks(channel, NS_GET_TEMPLATE_IID(T),
+                                getter_AddRefs(result));
 }
 
 /**
@@ -760,7 +765,7 @@ template <class T>
 inline void NS_QueryNotificationCallbacks(nsIInterfaceRequestor* callbacks,
                                           nsILoadGroup* loadGroup,
                                           nsCOMPtr<T>& result) {
-  NS_QueryNotificationCallbacks(callbacks, loadGroup, NS_GET_IID(T),
+  NS_QueryNotificationCallbacks(callbacks, loadGroup, NS_GET_TEMPLATE_IID(T),
                                 getter_AddRefs(result));
 }
 
@@ -946,12 +951,6 @@ bool NS_IsAboutBlankAllowQueryAndFragment(nsIURI* uri);
  */
 bool NS_IsAboutSrcdoc(nsIURI* uri);
 
-/**
- * Test whether a URI has an "about", "blob", "data", "file", or an HTTP(S)
- * scheme.
- */
-bool NS_IsFetchScheme(nsIURI* uri);
-
 nsresult NS_GenerateHostPort(const nsCString& host, int32_t port,
                              nsACString& hostLine);
 
@@ -1037,16 +1036,10 @@ nsresult NS_GetSecureUpgradedURI(nsIURI* aURI, nsIURI** aUpgradedURI);
 
 nsresult NS_CompareLoadInfoAndLoadContext(nsIChannel* aChannel);
 
-// The type of classification to perform.
-enum class ClassifyType : uint8_t {
-  SafeBrowsing,  // Perform Safe Browsing classification.
-  ETP,           // Perform URL Classification for Enhanced Tracking Protection.
-};
-
 /**
  * Return true if this channel should be classified by the URL classifier.
  */
-bool NS_ShouldClassifyChannel(nsIChannel* aChannel, ClassifyType aType);
+bool NS_ShouldClassifyChannel(nsIChannel* aChannel);
 
 /**
  * Helper to set the blocking reason on loadinfo of the channel.
@@ -1096,9 +1089,21 @@ nsresult GetParameterHTTP(const nsACString& aHeaderVal, const char* aParamName,
 bool ChannelIsPost(nsIChannel* aChannel);
 
 /**
- * Convenience function for verifying nsIURI scheme is either HTTP or HTTPS.
+ * Convenience functions for verifying nsIURI schemes. These functions simply
+ * wrap aURI->SchemeIs(), but specify the protocol as part of the function name.
  */
-bool SchemeIsHttpOrHttps(nsIURI* aURI);
+
+bool SchemeIsHTTP(nsIURI* aURI);
+bool SchemeIsHTTPS(nsIURI* aURI);
+bool SchemeIsJavascript(nsIURI* aURI);
+bool SchemeIsChrome(nsIURI* aURI);
+bool SchemeIsAbout(nsIURI* aURI);
+bool SchemeIsBlob(nsIURI* aURI);
+bool SchemeIsFile(nsIURI* aURI);
+bool SchemeIsData(nsIURI* aURI);
+bool SchemeIsViewSource(nsIURI* aURI);
+bool SchemeIsResource(nsIURI* aURI);
+bool SchemeIsFTP(nsIURI* aURI);
 
 // Helper functions for SetProtocol methods to follow
 // step 2.1 in https://url.spec.whatwg.org/#scheme-state
@@ -1155,8 +1160,7 @@ enum ASDestination : uint8_t {
   DESTINATION_VIDEO,
   DESTINATION_WORKER,
   DESTINATION_XSLT,
-  DESTINATION_FETCH,
-  DESTINATION_JSON
+  DESTINATION_FETCH
 };
 
 void ParseAsValue(const nsAString& aValue, nsAttrValue& aResult);
@@ -1186,11 +1190,6 @@ bool IsCoepCredentiallessEnabled(bool aIsOriginTrialCoepCredentiallessEnabled);
 
 void ParseSimpleURISchemes(const nsACString& schemeList);
 
-nsresult AddExtraHeaders(nsIHttpChannel* aHttpChannel,
-                         const nsACString& aExtraHeaders, bool aMerge = true);
-
-bool IsLocalNetworkAccess(nsILoadInfo::IPAddressSpace aParentIPAddressSpace,
-                          nsILoadInfo::IPAddressSpace aTargetIPAddressSpace);
 }  // namespace net
 }  // namespace mozilla
 

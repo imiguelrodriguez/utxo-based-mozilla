@@ -10,7 +10,7 @@ var { XPCOMUtils } = ChromeUtils.importESModule(
 
 ChromeUtils.defineESModuleGetters(this, {
   PlacesTransactions: "resource://gre/modules/PlacesTransactions.sys.mjs",
-  PlacesUIUtils: "moz-src:///browser/components/places/PlacesUIUtils.sys.mjs",
+  PlacesUIUtils: "resource:///modules/PlacesUIUtils.sys.mjs",
   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
 });
@@ -40,11 +40,8 @@ XPCOMUtils.defineLazyScriptGetter(
  */
 var SelectBookmarkDialog = {
   init: function SBD_init() {
-    let bookmarks = document.getElementById("bookmarks");
-    bookmarks.place =
+    document.getElementById("bookmarks").place =
       "place:type=" + Ci.nsINavHistoryQueryOptions.RESULTS_AS_ROOTS_QUERY;
-    bookmarks.addEventListener("dblclick", () => this.onItemDblClick());
-    bookmarks.addEventListener("select", () => this.selectionChanged());
 
     // Initial update of the OK button.
     this.selectionChanged();
@@ -120,5 +117,3 @@ var SelectBookmarkDialog = {
     window.arguments[0].names = names;
   },
 };
-
-window.addEventListener("load", () => SelectBookmarkDialog.init());

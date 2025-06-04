@@ -39,11 +39,38 @@ urlbar-group-addon =
 urlbar-group-mdn =
   .label = Recommended resource
 
+# Label shown above a Pocket suggestion in the urlbar results.
+urlbar-group-pocket =
+  .label = Recommended reads
+
 # A label shown above urlbar suggestions for businesses and other locations
 # in the user's city or a city they included in their search string (e.g., Yelp
 # suggestions).
 urlbar-group-local =
   .label = Local recommendations
+
+# Label shown above sponsored suggestions in the urlbar results.
+urlbar-group-sponsored =
+  .label = Sponsored
+
+# Block menu item shown in the result menu of top pick and quick suggest
+# results.
+urlbar-result-menu-dismiss-firefox-suggest =
+    .label = Dismiss this suggestion
+    .accesskey = D
+
+# Learn More menu item shown in the result menu of Firefox Suggest results.
+urlbar-result-menu-learn-more-about-firefox-suggest =
+    .label = Learn more about { -firefox-suggest-brand-name }
+    .accesskey = L
+
+# Manage menu item shown in the result menu of Firefox Suggest results.
+urlbar-result-menu-manage-firefox-suggest =
+    .label = Manage { -firefox-suggest-brand-name }
+    .accesskey = M
+
+# A message shown in a result when the user gives feedback on it.
+firefox-suggest-feedback-acknowledgment = Thanks for your feedback
 
 # A message that replaces a result when the user dismisses a single suggestion.
 firefox-suggest-dismissal-acknowledgment-one = Thanks for your feedback. You won’t see this suggestion again.
@@ -73,8 +100,7 @@ firefox-suggest-dismissal-acknowledgment-one-fakespot = Thanks for your feedback
 # A message that replaces a result when the user dismisses all Fakespot suggestions.
 firefox-suggest-dismissal-acknowledgment-all-fakespot = Thanks for your feedback. You won’t see { -fakespot-brand-name } suggestions anymore.
 
-## These strings are used for urlbar weather suggestions in the "simpler" and
-## "full" weather UIs.
+## These strings are used for weather suggestions in the urlbar.
 
 # This string is displayed above the current temperature
 firefox-suggest-weather-currently = Currently
@@ -85,12 +111,10 @@ firefox-suggest-weather-currently = Currently
 #   $unit (String) - The unit for the temperature
 firefox-suggest-weather-temperature = { $value }°{ $unit }
 
-# This string is the title of the weather summary used for the "full" and
-# "simpler" UI treatments.
+# This string is the title of the weather summary
 # Variables:
 #   $city (String) - The name of the city the weather data is for
-#   $region (String) - The name of the region (e.g., U.S. state)
-firefox-suggest-weather-title = Weather for { $city }, { $region }
+firefox-suggest-weather-title = Weather for { $city }
 
 # This string displays the weather summary
 # Variables:
@@ -105,8 +129,15 @@ firefox-suggest-weather-summary-text = { $currentConditions }; { $forecast }
 #   $low (number) - The number for the low temperature
 firefox-suggest-weather-high-low = High: { $high }°{ $unit } · Low: { $low }°{ $unit }
 
+# This string displays the name of the weather provider
+# Variables:
+#   $provider (String) - The name of the weather provider
+firefox-suggest-weather-sponsored = { $provider } · Sponsored
+
 ## These strings are used as labels of menu items in the result menu.
 
+firefox-suggest-command-show-less-frequently =
+  .label = Show less frequently
 firefox-suggest-command-dont-show-this =
   .label = Don’t show this
 firefox-suggest-command-dont-show-mdn =
@@ -115,6 +146,8 @@ firefox-suggest-command-not-relevant =
   .label = Not relevant
 firefox-suggest-command-not-interested =
   .label = Not interested
+firefox-suggest-weather-command-inaccurate-location =
+  .label = Report inaccurate location
 firefox-suggest-command-manage-fakespot =
   .label = Manage { -fakespot-brand-name } suggestions
 firefox-suggest-command-dont-show-this-suggestion =
@@ -133,13 +166,17 @@ firefox-suggest-addons-recommended = Recommended
 # MDN.
 firefox-suggest-mdn-bottom-text = { -mdn-brand-name }
 
-## These strings are used for Yelp suggestions in the urlbar.
+## These strings are used for Pocket suggestions in the urlbar.
 
-# This string is shown as the title in Yelp suggestions when the suggestion
-# subject is a general service instead of a business name.
+# This string is shown in Pocket suggestions and indicates the suggestion is
+# from Pocket and is related to a particular keyword that matches the user's
+# search string.
 # Variables:
-#   $service (string) - The title of the service, e.g., "coffee shops".
-firefox-suggest-yelp-service-title = Top results for { $service }
+#   $keywordSubstringTyped (string) - The part of the suggestion keyword that the user typed
+#   $keywordSubstringNotTyped (string) - The part of the suggestion keyword that the user did not yet type
+firefox-suggest-pocket-bottom-text = { -pocket-brand-name } · Related to <strong>{ $keywordSubstringTyped }</strong>{ $keywordSubstringNotTyped }
+
+## These strings are used for Yelp suggestions in the urlbar.
 
 # This string is shown in Yelp suggestions and indicates the suggestion is for
 # Yelp.
@@ -172,12 +209,92 @@ firefox-suggest-fakespot-rating-and-total-reviews-overflow =
 # sponsored.
 firefox-suggest-fakespot-sponsored = { -fakespot-brand-name } · Sponsored
 
-# These strings are used for a toggle switch in the settings UI that opts the
-# user into "online" Firefox Suggest, allowing them to receive suggestions from
-# Mozilla's Merino server.
+## These strings are used in the preferences UI (about:preferences). Their names
+## follow the naming conventions of other strings used in the preferences UI.
+
+# When the user is enrolled in a Firefox Suggest rollout, this text replaces
+# the usual addressbar-header string and becomes the text of the address bar
+# section in the preferences UI.
+addressbar-header-firefox-suggest = Address Bar — { -firefox-suggest-brand-name }
+
+# When the user is enrolled in a Firefox Suggest rollout, this text replaces
+# the usual addressbar-suggest string and becomes the text of the description of
+# the address bar section in the preferences UI.
+addressbar-suggest-firefox-suggest = Choose the type of suggestions that appear in the address bar:
+
+# First Firefox Suggest checkbox main label and description. This checkbox
+# controls non-sponsored suggestions related to the user's search string.
+addressbar-firefox-suggest-nonsponsored =
+  .label = Suggestions from { -brand-short-name }
+addressbar-firefox-suggest-nonsponsored-desc = Get suggestions from the web related to your search.
+
+# Second Firefox Suggest checkbox main label and description. This checkbox
+# controls sponsored suggestions related to the user's search string.
+addressbar-firefox-suggest-sponsored =
+  .label = Suggestions from sponsors
+addressbar-firefox-suggest-sponsored-desc = Support { -brand-short-name } with occasional sponsored suggestions.
+
+# An additional toggle button in the Firefox Suggest settings that controls
+# whether userdata-based suggestions like history and bookmarks should be
+# shown in private windows
+addressbar-firefox-suggest-private =
+  .label = Show suggestions in Private Windows
+
+# Third Firefox Suggest toggle button main label and description. This toggle
+# controls data collection related to the user's search string.
+# .description is transferred into a separate paragraph by the moz-toggle
+# custom element code.
 addressbar-firefox-suggest-data-collection =
   .label = Improve the { -firefox-suggest-brand-name } experience
   .description = Share search query data with { -vendor-short-name } to create a richer search experience.
+
+# The "Learn more" link shown in the Firefox Suggest preferences UI.
+addressbar-locbar-firefox-suggest-learn-more = Learn more
+
+## The following addressbar-firefox-suggest-info strings are shown in the
+## Firefox Suggest preferences UI in the info box underneath the toggle.
+## Each string is shown when a particular checkbox or toggle combination is active.
+
+# Non-sponsored suggestions: on
+# Sponsored suggestions: on
+# Data collection: on
+addressbar-firefox-suggest-info-all = Based on your selection, you’ll receive suggestions from the web, including sponsored sites. We will process your search query data to develop the { -firefox-suggest-brand-name } feature.
+
+# Non-sponsored suggestions: on
+# Sponsored suggestions: on
+# Data collection: off
+addressbar-firefox-suggest-info-nonsponsored-sponsored = Based on your selection, you’ll receive suggestions from the web, including sponsored sites. We won’t process your search query data.
+
+# Non-sponsored suggestions: on
+# Sponsored suggestions: off
+# Data collection: on
+addressbar-firefox-suggest-info-nonsponsored-data = Based on your selection, you’ll receive suggestions from the web, but no sponsored sites. We will process your search query data to develop the { -firefox-suggest-brand-name } feature.
+
+# Non-sponsored suggestions: on
+# Sponsored suggestions: off
+# Data collection: off
+addressbar-firefox-suggest-info-nonsponsored = Based on your selection, you’ll receive suggestions from the web, but no sponsored sites. We won’t process your search query data.
+
+# Non-sponsored suggestions: off
+# Sponsored suggestions: on
+# Data collection: on
+addressbar-firefox-suggest-info-sponsored-data = Based on your selection, you’ll receive sponsored suggestions. We will process your search query data to develop the { -firefox-suggest-brand-name } feature.
+
+# Non-sponsored suggestions: off
+# Sponsored suggestions: on
+# Data collection: off
+addressbar-firefox-suggest-info-sponsored = Based on your selection, you’ll receive sponsored suggestions. We won’t process your search query data.
+
+# Non-sponsored suggestions: off
+# Sponsored suggestions: off
+# Data collection: on
+addressbar-firefox-suggest-info-data = Based on your selection, you won’t receive suggestions from the web or sponsored sites. We will process your search query data to develop the { -firefox-suggest-brand-name } feature.
+
+addressbar-dismissed-suggestions-label = Dismissed suggestions
+addressbar-restore-dismissed-suggestions-description = Restore dismissed suggestions from sponsors and { -brand-short-name }.
+addressbar-restore-dismissed-suggestions-button =
+  .label = Restore
+addressbar-restore-dismissed-suggestions-learn-more = Learn more
 
 ## Used as title on the introduction pane. The text can be formatted to span
 ## multiple lines as needed (line breaks are significant).
@@ -257,7 +374,7 @@ firefox-suggest-onboarding-main-accept-option-label = Allow. <a data-l10n-name="
 firefox-suggest-onboarding-main-accept-option-label-2 = Enable
 
 firefox-suggest-onboarding-main-accept-option-description-1 = Help improve the { -firefox-suggest-brand-name } feature with more relevant suggestions. Your search queries will be processed.
-firefox-suggest-onboarding-main-accept-option-description-2 = Recommended for people who support improving the { -firefox-suggest-brand-name } feature. Your search queries will be processed.
+firefox-suggest-onboarding-main-accept-option-description-2 = Recommended for people who support improving the { -firefox-suggest-brand-name } feature.  Your search queries will be processed.
 firefox-suggest-onboarding-main-accept-option-description-3 = Help improve the { -firefox-suggest-brand-name } experience. Your search queries will be processed.
 
 firefox-suggest-onboarding-main-reject-option-label = Don’t allow.
@@ -272,15 +389,13 @@ firefox-suggest-onboarding-main-skip-link = Not now
 
 urlbar-firefox-suggest-contextual-opt-in-title-1 =
   Find the best of the web, faster
-urlbar-firefox-suggest-contextual-opt-in-description-3 =
-  We’re building a better search experience. When you share search query data with { -vendor-short-name }, we can create more relevant suggestions from { -brand-short-name } and our partners.
+urlbar-firefox-suggest-contextual-opt-in-title-2 =
+  Say hello to smarter suggestions
+urlbar-firefox-suggest-contextual-opt-in-description-1 =
+  We’re building a better search experience. When you allow { -vendor-short-name } to process your search queries, we can create more relevant suggestions from { -brand-short-name } and our partners. Privacy-first, always.
+  <a data-l10n-name="learn-more-link">Learn more</a>
+urlbar-firefox-suggest-contextual-opt-in-description-2 =
+  { -firefox-suggest-brand-name } uses your search keywords to make contextual suggestions from { -brand-short-name } and our partners while keeping your privacy in mind.
   <a data-l10n-name="learn-more-link">Learn more</a>
 urlbar-firefox-suggest-contextual-opt-in-allow = Allow suggestions
 urlbar-firefox-suggest-contextual-opt-in-dismiss = Not now
-
-## Local search mode indicator labels in the urlbar
-
-urlbar-search-mode-bookmarks-en = Bookmarks
-urlbar-search-mode-tabs-en = Tabs
-urlbar-search-mode-history-en = History
-urlbar-search-mode-actions-en = Actions

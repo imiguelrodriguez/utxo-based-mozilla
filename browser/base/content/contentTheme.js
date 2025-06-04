@@ -33,12 +33,6 @@
       },
     ],
     [
-      "--newtab-background-card",
-      {
-        lwtProperty: "ntp_card_background",
-      },
-    ],
-    [
       "--newtab-text-primary-color",
       {
         lwtProperty: "ntp_text",

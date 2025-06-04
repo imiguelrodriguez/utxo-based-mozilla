@@ -23,7 +23,7 @@
 #include "mozilla/Telemetry.h"
 #include "mozilla/Tokenizer.h"
 #include "mozilla/dom/ContentParent.h"
-#include "mozilla/glean/NetwerkMetrics.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/net/NeckoParent.h"
 #include "mozilla/net/TRRServiceChild.h"
 // Put DNSLogging.h at the end to avoid LOG being overwritten by other headers.
@@ -100,8 +100,6 @@ void TRRService::SetProviderDomain(const nsACString& aTRRDomain) {
   }
 }
 
-const nsCString& TRRProviderKey() { return TRRService::ProviderKey(); }
-
 // static
 const nsCString& TRRService::ProviderKey() {
   return kTRRDomains[sCurrentTRRModeIndex][sDomainIndex];
@@ -116,7 +114,7 @@ NS_IMPL_RELEASE_USING_AGGREGATOR(TRRService::ConfirmationContext,
 NS_IMPL_QUERY_INTERFACE(TRRService::ConfirmationContext, nsITimerCallback,
                         nsINamed)
 
-TRRService::TRRService() : mLock("TRRService") {
+TRRService::TRRService() : mLock("TRRService", this) {
   MOZ_ASSERT(NS_IsMainThread(), "wrong thread");
 }
 
@@ -302,7 +300,7 @@ bool TRRService::MaybeSetPrivateURI(const nsACString& aURI) {
 
   ProcessURITemplate(newURI);
   {
-    MutexAutoLock lock(mLock);
+    MutexSingleWriterAutoLock lock(mLock);
     if (mPrivateURI.Equals(newURI)) {
       return false;
     }
@@ -383,28 +381,27 @@ nsresult TRRService::ReadPrefs(const char* name) {
     OnTRRURIChange();
   }
   if (!name || !strcmp(name, TRR_PREF("credentials"))) {
-    MutexAutoLock lock(mLock);
+    MutexSingleWriterAutoLock lock(mLock);
     Preferences::GetCString(TRR_PREF("credentials"), mPrivateCred);
   }
   if (!name || !strcmp(name, TRR_PREF("confirmationNS"))) {
-    MutexAutoLock lock(mLock);
+    MutexSingleWriterAutoLock lock(mLock);
     Preferences::GetCString(TRR_PREF("confirmationNS"), mConfirmationNS);
     LOG(("confirmationNS = %s", mConfirmationNS.get()));
   }
   if (!name || !strcmp(name, TRR_PREF("bootstrapAddr"))) {
-    MutexAutoLock lock(mLock);
+    MutexSingleWriterAutoLock lock(mLock);
     Preferences::GetCString(TRR_PREF("bootstrapAddr"), mBootstrapAddr);
     clearEntireCache = true;
   }
   if (!name || !strcmp(name, TRR_PREF("excluded-domains")) ||
       !strcmp(name, TRR_PREF("builtin-excluded-domains"))) {
-    MutexAutoLock lock(mLock);
-
+    MutexSingleWriterAutoLock lock(mLock);
     mExcludedDomains.Clear();
 
-    auto parseExcludedDomains = [this](const char* aPrefName) MOZ_REQUIRES(
-                                    mLock) {
+    auto parseExcludedDomains = [this](const char* aPrefName) {
       nsAutoCString excludedDomains;
+      mLock.AssertCurrentThreadOwns();
       Preferences::GetCString(aPrefName, excludedDomains);
       if (excludedDomains.IsEmpty()) {
         return;
@@ -447,7 +444,7 @@ void TRRService::ClearEntireCache() {
 }
 
 void TRRService::AddEtcHosts(const nsTArray<nsCString>& aArray) {
-  MutexAutoLock lock(mLock);
+  MutexSingleWriterAutoLock lock(mLock);
   for (const auto& item : aArray) {
     LOG(("Adding %s from /etc/hosts to excluded domains", item.get()));
     mEtcHostsDomains.Insert(item);
@@ -469,12 +466,12 @@ void TRRService::ReadEtcHostsFile() {
 }
 
 void TRRService::GetURI(nsACString& result) {
-  MutexAutoLock lock(mLock);
+  MutexSingleWriterAutoLock lock(mLock);
   result = mPrivateURI;
 }
 
 nsresult TRRService::GetCredentials(nsCString& result) {
-  MutexAutoLock lock(mLock);
+  MutexSingleWriterAutoLock lock(mLock);
   result = mPrivateCred;
   return NS_OK;
 }
@@ -531,7 +528,7 @@ already_AddRefed<nsIThread> TRRService::MainThreadOrTRRThread(bool aWithLock) {
 }
 
 already_AddRefed<nsIThread> TRRService::TRRThread() {
-  MutexAutoLock lock(mLock);
+  MutexSingleWriterAutoLock lock(mLock);
   return TRRThread_locked();
 }
 
@@ -543,7 +540,7 @@ already_AddRefed<nsIThread> TRRService::TRRThread_locked() {
 bool TRRService::IsOnTRRThread() {
   nsCOMPtr<nsIThread> thread;
   {
-    MutexAutoLock lock(mLock);
+    MutexSingleWriterAutoLock lock(mLock);
     thread = sTRRBackgroundThread;
   }
   if (!thread) {
@@ -564,7 +561,7 @@ TRRService::Observe(nsISupports* aSubject, const char* aTopic,
     mConfirmationTriggered = false;
     ReadPrefs(NS_ConvertUTF16toUTF8(aData).get());
     {
-      MutexAutoLock lock(mLock);
+      MutexSingleWriterAutoLock lock(mLock);
       mConfirmation.RecordEvent("pref-change", lock);
     }
 
@@ -616,7 +613,7 @@ TRRService::Observe(nsISupports* aSubject, const char* aTopic,
     if (!strcmp(aTopic, NS_NETWORK_LINK_TOPIC)) {
       if (NS_ConvertUTF16toUTF8(aData).EqualsLiteral(
               NS_NETWORK_LINK_DATA_DOWN)) {
-        MutexAutoLock lock(mLock);
+        MutexSingleWriterAutoLock lock(mLock);
         mConfirmation.RecordEvent("network-change", lock);
       }
 
@@ -636,7 +633,7 @@ TRRService::Observe(nsISupports* aSubject, const char* aTopic,
     // Since there should be no more confirmations after this, the shutdown
     // reason would not really be recorded in telemetry.
     {
-      MutexAutoLock lock(mLock);
+      MutexSingleWriterAutoLock lock(mLock);
       mConfirmation.RecordEvent("shutdown", lock);
     }
 
@@ -656,7 +653,7 @@ void TRRService::RebuildSuffixList(nsTArray<nsCString>&& aSuffixList) {
     return;
   }
 
-  MutexAutoLock lock(mLock);
+  MutexSingleWriterAutoLock lock(mLock);
   mDNSSuffixDomains.Clear();
   for (const auto& item : aSuffixList) {
     LOG(("TRRService adding %s to suffix list", item.get()));
@@ -715,13 +712,13 @@ void TRRService::ConfirmationContext::SetState(
 }
 
 bool TRRService::ConfirmationContext::HandleEvent(ConfirmationEvent aEvent) {
-  MutexAutoLock lock(OwningObject()->mLock);
+  MutexSingleWriterAutoLock lock(OwningObject()->mLock);
   return HandleEvent(aEvent, lock);
 }
 
 // We're protected by service->mLock
-bool TRRService::ConfirmationContext::HandleEvent(ConfirmationEvent aEvent,
-                                                  const MutexAutoLock&) {
+bool TRRService::ConfirmationContext::HandleEvent(
+    ConfirmationEvent aEvent, const MutexSingleWriterAutoLock&) {
   auto prevAddr = TaskAddr();
   TRRService* service = OwningObject();
   service->mLock.AssertCurrentThreadOwns();
@@ -892,7 +889,7 @@ bool TRRService::ConfirmationContext::HandleEvent(ConfirmationEvent aEvent,
 
 bool TRRService::MaybeBootstrap(const nsACString& aPossible,
                                 nsACString& aResult) {
-  MutexAutoLock lock(mLock);
+  MutexSingleWriterAutoLock lock(mLock);
   if (mMode == nsIDNSService::MODE_TRROFF || mBootstrapAddr.IsEmpty()) {
     return false;
   }
@@ -992,12 +989,14 @@ bool TRRService::IsExcludedFromTRR(const nsACString& aHost) {
   // This method may be called off the main thread. We need to lock so
   // mExcludedDomains and mDNSSuffixDomains don't change while this code
   // is running.
-  MutexAutoLock lock(mLock);
+  MutexSingleWriterAutoLock lock(mLock);
 
   return IsExcludedFromTRR_unlocked(aHost);
 }
 
 bool TRRService::IsExcludedFromTRR_unlocked(const nsACString& aHost) {
+  mLock.AssertOnWritingThreadOrHeld();
+
   int32_t dot = 0;
   // iteratively check the sub-domain of |aHost|
   while (dot < static_cast<int32_t>(aHost.Length())) {
@@ -1079,7 +1078,7 @@ void TRRService::AddToBlocklist(const nsACString& aHost,
 
 NS_IMETHODIMP
 TRRService::ConfirmationContext::Notify(nsITimer* aTimer) {
-  MutexAutoLock lock(OwningObject()->mLock);
+  MutexSingleWriterAutoLock lock(OwningObject()->mLock);
   if (aTimer == mTimer) {
     HandleEvent(ConfirmationEvent::ConfirmationRetry, lock);
   }
@@ -1205,8 +1204,8 @@ void TRRService::ConfirmationContext::RecordTRRStatus(TRR* aTrrRequest) {
   }
 }
 
-void TRRService::ConfirmationContext::RecordEvent(const char* aReason,
-                                                  const MutexAutoLock&) {
+void TRRService::ConfirmationContext::RecordEvent(
+    const char* aReason, const MutexSingleWriterAutoLock&) {
   // Reset the confirmation context attributes
   // Only resets the attributes that we keep for telemetry purposes.
   auto reset = [&]() {
@@ -1279,7 +1278,7 @@ void TRRService::ConfirmationContext::RequestCompleted(
 void TRRService::ConfirmationContext::CompleteConfirmation(nsresult aStatus,
                                                            TRR* aTRRRequest) {
   {
-    MutexAutoLock lock(OwningObject()->mLock);
+    MutexSingleWriterAutoLock lock(OwningObject()->mLock);
     // Ignore confirmations that dont match the pending task.
     if (mTask != aTRRRequest) {
       return;

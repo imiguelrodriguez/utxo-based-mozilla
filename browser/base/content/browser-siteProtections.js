@@ -698,10 +698,7 @@ let ThirdPartyCookies =
         (state &
           Ci.nsIWebProgressListener.STATE_COOKIES_BLOCKED_BY_PERMISSION) !=
           0 ||
-        (state & Ci.nsIWebProgressListener.STATE_COOKIES_BLOCKED_FOREIGN) !=
-          0 ||
-        (state & Ci.nsIWebProgressListener.STATE_COOKIES_PARTITIONED_TRACKER) !=
-          0
+        (state & Ci.nsIWebProgressListener.STATE_COOKIES_BLOCKED_FOREIGN) != 0
       );
     }
 
@@ -1375,47 +1372,6 @@ let cookieBannerHandling = new (class {
 var gProtectionsHandler = {
   PREF_CB_CATEGORY: "browser.contentblocking.category",
 
-  /**
-   * Contains an array of smartblock compatible sites and information on the corresponding shim
-   * sites is a list of compatible sites
-   * shimId is the id of the shim blocking content from the origin
-   * displayName is the name shown for the toggle used for blocking/unblocking the origin
-   */
-  smartblockEmbedInfo: [
-    {
-      sites: ["https://itisatracker.org"],
-      shimId: "EmbedTestShim",
-      displayName: "Test",
-    },
-    {
-      sites: ["https://www.instagram.com", "https://platform.instagram.com"],
-      shimId: "InstagramEmbed",
-      displayName: "Instagram",
-    },
-    {
-      sites: ["https://www.tiktok.com"],
-      shimId: "TiktokEmbed",
-      displayName: "Tiktok",
-    },
-    {
-      sites: ["https://platform.twitter.com"],
-      shimId: "TwitterEmbed",
-      displayName: "X",
-    },
-  ],
-
-  /**
-   * Keeps track of if a smartblock toggle has been clicked since the panel was opened. Resets
-   * everytime the panel is closed. Used for telemetry purposes.
-   */
-  _hasClickedSmartBlockEmbedToggle: false,
-
-  /**
-   * Keeps track of what was responsible for opening the protections panel popup. Used for
-   * telemetry purposes.
-   */
-  _protectionsPopupOpeningReason: null,
-
   _protectionsPopup: null,
   _initializePopup() {
     if (!this._protectionsPopup) {
@@ -1449,6 +1405,11 @@ var gProtectionsHandler = {
       notBlockingWhy.addEventListener("mouseout", closeTooltip);
       notBlockingWhy.addEventListener("blur", closeTooltip);
 
+      document
+        .getElementById("protections-popup-mainView-panel-header")
+        .addEventListener("click", event =>
+          gProtectionsHandler.onHeaderClicked(event)
+        );
       document
         .getElementById(
           "protections-popup-trackers-blocked-counter-description"
@@ -1501,12 +1462,6 @@ var gProtectionsHandler = {
       "protections-popup-tp-switch"
     ));
   },
-  get _protectionsPopupCategoryList() {
-    delete this._protectionsPopupCategoryList;
-    return (this._protectionsPopupCategoryList = document.getElementById(
-      "protections-popup-category-list"
-    ));
-  },
   get _protectionsPopupBlockingHeader() {
     delete this._protectionsPopupBlockingHeader;
     return (this._protectionsPopupBlockingHeader = document.getElementById(
@@ -1524,22 +1479,6 @@ var gProtectionsHandler = {
     return (this._protectionsPopupNotFoundHeader = document.getElementById(
       "protections-popup-not-found-section-header"
     ));
-  },
-  get _protectionsPopupSmartblockContainer() {
-    delete this._protectionsPopupSmartblockContainer;
-    return (this._protectionsPopupSmartblockContainer = document.getElementById(
-      "protections-popup-smartblock-highlight-container"
-    ));
-  },
-  get _protectionsPopupSmartblockDescription() {
-    delete this._protectionsPopupSmartblockDescription;
-    return (this._protectionsPopupSmartblockDescription =
-      document.getElementById("protections-popup-smartblock-description"));
-  },
-  get _protectionsPopupSmartblockToggleContainer() {
-    delete this._protectionsPopupSmartblockToggleContainer;
-    return (this._protectionsPopupSmartblockToggleContainer =
-      document.getElementById("protections-popup-smartblock-toggle-container"));
   },
   get _protectionsPopupSettingsButton() {
     delete this._protectionsPopupSettingsButton;
@@ -1643,13 +1582,6 @@ var gProtectionsHandler = {
 
     XPCOMUtils.defineLazyPreferenceGetter(
       this,
-      "_protectionsPopupButtonDelay",
-      "security.notification_enable_delay",
-      500
-    );
-
-    XPCOMUtils.defineLazyPreferenceGetter(
-      this,
       "milestoneListPref",
       "browser.contentblocking.cfr-milestone.milestones",
       "[]",
@@ -1689,13 +1621,6 @@ var gProtectionsHandler = {
       false
     );
 
-    XPCOMUtils.defineLazyPreferenceGetter(
-      this,
-      "smartblockEmbedsEnabledPref",
-      "extensions.webcompat.smartblockEmbeds.enabled",
-      false
-    );
-
     for (let blocker of Object.values(this.blockers)) {
       if (blocker.init) {
         blocker.init();
@@ -1704,13 +1629,6 @@ var gProtectionsHandler = {
 
     // Add an observer to observe that the history has been cleared.
     Services.obs.addObserver(this, "browser:purge-session-history");
-    // Add an observer to listen to requests to open the protections panel
-    Services.obs.addObserver(this, "smartblock:open-protections-panel");
-
-    // bind the reset toggle sec delay function to this so we can use it
-    // as an event listener without this becoming the event target inside
-    // the function
-    this._resetToggleSecDelay = this._resetToggleSecDelay.bind(this);
   },
 
   uninit() {
@@ -1721,7 +1639,6 @@ var gProtectionsHandler = {
     }
 
     Services.obs.removeObserver(this, "browser:purge-session-history");
-    Services.obs.removeObserver(this, "smartblock:open-protections-panel");
   },
 
   getTrackingProtectionLabel() {
@@ -1805,17 +1722,21 @@ var gProtectionsHandler = {
     if (PrivateBrowsingUtils.isWindowPrivate(window)) {
       return;
     }
-    Glean.contentblocking.trackingProtectionShield.accumulateSingleSample(
-      value
-    );
+    Services.telemetry
+      .getHistogramById("TRACKING_PROTECTION_SHIELD")
+      .add(value);
   },
 
   cryptominersHistogramAdd(value) {
-    Glean.contentblocking.cryptominersBlockedCount[value].add(1);
+    Services.telemetry
+      .getHistogramById("CRYPTOMINERS_BLOCKED_COUNT")
+      .add(value);
   },
 
   fingerprintersHistogramAdd(value) {
-    Glean.contentblocking.fingerprintersBlockedCount[value].add(1);
+    Services.telemetry
+      .getHistogramById("FINGERPRINTERS_BLOCKED_COUNT")
+      .add(value);
   },
 
   handleProtectionsButtonEvent(event) {
@@ -1829,7 +1750,7 @@ var gProtectionsHandler = {
       return; // Left click, space or enter only
     }
 
-    this.showProtectionsPopup({ event, openingReason: "shieldButtonClicked" });
+    this.showProtectionsPopup({ event });
   },
 
   onPopupShown(event) {
@@ -1843,29 +1764,8 @@ var gProtectionsHandler = {
       // remain collapsed.
       this._insertProtectionsPanelInfoMessage(event);
 
-      // Record telemetry for open, don't record if the panel open is only a toast
       if (!event.target.hasAttribute("toast")) {
-        Glean.securityUiProtectionspopup.openProtectionsPopup.record({
-          openingReason: this._protectionsPopupOpeningReason,
-          smartblockEmbedTogglesShown:
-            !this._protectionsPopupSmartblockContainer.hidden,
-        });
-      }
-
-      // Add the "open" attribute to the tracking protection icon container
-      // for styling.
-      // Only set the attribute once the panel is opened to avoid icon being
-      // incorrectly highlighted if opening is cancelled. See Bug 1926460.
-      this._trackingProtectionIconContainer.setAttribute("open", "true");
-
-      // Disable the toggles for a short time after opening via SmartBlock placeholder button
-      // to prevent clickjacking.
-      if (this._protectionsPopupOpeningReason == "embedPlaceholderButton") {
-        this._disablePopupToggles();
-        this._protectionsPopupToggleDelayTimer = setTimeout(() => {
-          this._enablePopupToggles();
-          delete this._protectionsPopupToggleDelayTimer;
-        }, this._protectionsPopupButtonDelay);
+        Glean.securityUiProtectionspopup.openProtectionsPopup.record();
       }
 
       ReportBrokenSite.updateParentMenu(event);
@@ -1876,23 +1776,17 @@ var gProtectionsHandler = {
     if (event.target == this._protectionsPopup) {
       window.removeEventListener("focus", this, true);
       this._protectionsPopupTPSwitch.removeEventListener("toggle", this);
+    }
+  },
 
-      // Record close telemetry, don't record for toasts
-      if (!event.target.hasAttribute("toast")) {
-        Glean.securityUiProtectionspopup.closeProtectionsPopup.record({
-          openingReason: this._protectionsPopupOpeningReason,
-          smartblockToggleClicked: this._hasClickedSmartBlockEmbedToggle,
-        });
-      }
+  onHeaderClicked(event) {
+    // Display the whole protections panel if the toast has been clicked.
+    if (this._protectionsPopup.hasAttribute("toast")) {
+      // Hide the toast first.
+      PanelMultiView.hidePopup(this._protectionsPopup);
 
-      if (this._protectionsPopupToggleDelayTimer) {
-        clearTimeout(this._protectionsPopupToggleDelayTimer);
-        this._enablePopupToggles();
-        delete this._protectionsPopupToggleDelayTimer;
-      }
-
-      this._hasClickedSmartBlockEmbedToggle = false;
-      this._protectionsPopupOpeningReason = null;
+      // Open the full protections panel.
+      this.showProtectionsPopup({ event });
     }
   },
 
@@ -2224,17 +2118,6 @@ var gProtectionsHandler = {
       case "protections-popup-cookieBannerView-disable-button":
         gProtectionsHandler.onCookieBannerToggleCommand();
         break;
-      case "protections-popup-toast-panel-tp-on-desc":
-      case "protections-popup-toast-panel-tp-off-desc":
-        // Hide the toast first.
-        PanelMultiView.hidePopup(this._protectionsPopup);
-
-        // Open the full protections panel.
-        this.showProtectionsPopup({
-          event,
-          openingReason: "toastButtonClicked",
-        });
-        break;
     }
   },
 
@@ -2283,23 +2166,6 @@ var gProtectionsHandler = {
         // cleared.
         this._earliestRecordedDate = 0;
         this.maybeUpdateEarliestRecordedDateTooltip();
-        break;
-      case "smartblock:open-protections-panel":
-        if (!this.smartblockEmbedsEnabledPref) {
-          // don't react if smartblock disabled by pref
-          break;
-        }
-
-        if (gBrowser.selectedBrowser.browserId !== subject.browserId) {
-          break;
-        }
-
-        // Ensure panel is fully hidden before trying to open
-        this._hidePopup();
-
-        this.showProtectionsPopup({
-          openingReason: "embedPlaceholderButton",
-        });
         break;
     }
   },
@@ -2383,7 +2249,6 @@ var gProtectionsHandler = {
     this._protectionsPopupBlockingHeader.hidden = true;
     this._protectionsPopupNotBlockingHeader.hidden = true;
     this._protectionsPopupNotFoundHeader.hidden = true;
-    this._protectionsPopupSmartblockContainer.hidden = true;
 
     for (let { categoryItem } of Object.values(this.blockers)) {
       if (
@@ -2392,7 +2257,7 @@ var gProtectionsHandler = {
       ) {
         // Add the item to the bottom of the list. This will be under
         // the "None Detected" section.
-        this._protectionsPopupCategoryList.insertAdjacentElement(
+        categoryItem.parentNode.insertAdjacentElement(
           "beforeend",
           categoryItem
         );
@@ -2407,11 +2272,11 @@ var gProtectionsHandler = {
       categoryItem.removeAttribute("disabled");
 
       if (categoryItem.classList.contains("blocked") && !this.hasException) {
-        // Add the item just above the Smartblock embeds section - this will be the
+        // Add the item just above the "Allowed" section - this will be the
         // bottom of the "Blocked" section.
         categoryItem.parentNode.insertBefore(
           categoryItem,
-          this._protectionsPopupSmartblockContainer
+          this._protectionsPopupNotBlockingHeader
         );
         // We have a blocking category, show the header.
         this._protectionsPopupBlockingHeader.hidden = false;
@@ -2427,138 +2292,6 @@ var gProtectionsHandler = {
       // We have an allowing category, show the header.
       this._protectionsPopupNotBlockingHeader.hidden = false;
     }
-
-    // add toggles if required to the Smartblock embed section
-    let smartblockEmbedDetected = this._addSmartblockEmbedToggles();
-
-    if (smartblockEmbedDetected) {
-      // We have a compatible smartblock toggle, show the smartblock
-      // embed section
-      this._protectionsPopupSmartblockContainer.hidden = false;
-    }
-  },
-
-  /**
-   * Adds the toggles into the smartblock toggle container. Clears existing toggles first, then
-   * searches through the contentBlockingLog for smartblock-compatible content.
-   *
-   * @returns {boolean} true if a smartblock compatible resource is blocked or shimmed, false otherwise
-   */
-  _addSmartblockEmbedToggles() {
-    if (!this.smartblockEmbedsEnabledPref) {
-      // Do not insert toggles if feature is disabled.
-      return false;
-    }
-
-    let contentBlockingLog = gBrowser.selectedBrowser.getContentBlockingLog();
-    contentBlockingLog = JSON.parse(contentBlockingLog);
-    let smartBlockEmbedToggleAdded = false;
-
-    // remove all old toggles
-    while (this._protectionsPopupSmartblockToggleContainer.lastChild) {
-      this._protectionsPopupSmartblockToggleContainer.lastChild.remove();
-    }
-
-    // check that there is an allowed or replaced flag present
-    let contentBlockingEvents =
-      gBrowser.selectedBrowser.getContentBlockingEvents();
-
-    // In the future, we should add a flag specifically for smartblock embeds so that
-    // these checks do not trigger when a non-embed-related shim is shimming
-    // a smartblock compatible site, see Bug 1926461
-    let somethingAllowedOrReplaced =
-      contentBlockingEvents &
-        Ci.nsIWebProgressListener.STATE_ALLOWED_TRACKING_CONTENT ||
-      contentBlockingEvents &
-        Ci.nsIWebProgressListener.STATE_REPLACED_TRACKING_CONTENT;
-
-    if (!somethingAllowedOrReplaced) {
-      // return early if there is no content that is allowed or replaced
-      return smartBlockEmbedToggleAdded;
-    }
-
-    // search through content log for compatible blocked origins
-    for (let [origin, actions] of Object.entries(contentBlockingLog)) {
-      let shimAllowed = actions.some(
-        ([flag]) =>
-          (flag & Ci.nsIWebProgressListener.STATE_ALLOWED_TRACKING_CONTENT) != 0
-      );
-
-      let shimDetected = actions.some(
-        ([flag]) =>
-          (flag & Ci.nsIWebProgressListener.STATE_REPLACED_TRACKING_CONTENT) !=
-          0
-      );
-
-      if (!shimAllowed && !shimDetected) {
-        // origin is not being shimmed or allowed
-        continue;
-      }
-
-      let shimInfo = this.smartblockEmbedInfo.find(element =>
-        element.sites.includes(origin)
-      );
-      if (!shimInfo) {
-        // origin not relevant to smartblock
-        continue;
-      }
-
-      const { shimId, displayName } = shimInfo;
-      smartBlockEmbedToggleAdded = true;
-
-      // check that a toggle doesn't already exist
-      let existingToggle = document.getElementById(
-        `smartblock-${shimId.toLowerCase()}-toggle`
-      );
-      if (existingToggle) {
-        // make sure toggle state is allowed if ANY of the sites are allowed
-        if (shimAllowed) {
-          existingToggle.setAttribute("pressed", true);
-        }
-        // skip adding a new toggle
-        continue;
-      }
-
-      // create the toggle element
-      let toggle = document.createElement("moz-toggle");
-      toggle.setAttribute("id", `smartblock-${shimId.toLowerCase()}-toggle`);
-      toggle.setAttribute("data-l10n-attrs", "label");
-      document.l10n.setAttributes(
-        toggle,
-        "protections-panel-smartblock-blocking-toggle",
-        {
-          trackername: displayName,
-        }
-      );
-
-      // set toggle to correct position
-      toggle.toggleAttribute("pressed", !!shimAllowed);
-
-      // add functionality to toggle
-      toggle.addEventListener("toggle", event => {
-        let newToggleState = event.target.pressed;
-
-        if (newToggleState) {
-          this._sendUnblockMessageToSmartblock(shimId);
-        } else {
-          this._sendReblockMessageToSmartblock(shimId);
-        }
-
-        Glean.securityUiProtectionspopup.clickSmartblockembedsToggle.record({
-          isBlock: !newToggleState,
-          openingReason: this._protectionsPopupOpeningReason,
-        });
-
-        this._hasClickedSmartBlockEmbedToggle = true;
-      });
-
-      this._protectionsPopupSmartblockToggleContainer.insertAdjacentElement(
-        "beforeend",
-        toggle
-      );
-    }
-
-    return smartBlockEmbedToggleAdded;
   },
 
   disableForCurrentPage(shouldReload = true) {
@@ -2741,17 +2474,11 @@ var gProtectionsHandler = {
    *                   A boolean to indicate if we need to open the protections
    *                   popup as a toast. A toast only has a header section and
    *                   will be hidden after a certain amount of time.
-   *                 openingReason:
-   *                   A string indicating why the panel was opened. Used for
-   *                   telemetry purposes.
    */
   showProtectionsPopup(options = {}) {
-    const { event, toast, openingReason } = options;
+    const { event, toast } = options;
 
     this._initializePopup();
-
-    // Set opening reason variable for telemetry
-    this._protectionsPopupOpeningReason = openingReason;
 
     // Ensure we've updated category state based on the last blocking event:
     if (this.hasOwnProperty("_lastEvent")) {
@@ -2784,6 +2511,10 @@ var gProtectionsHandler = {
         { once: true }
       );
     }
+
+    // Add the "open" attribute to the tracking protection icon container
+    // for styling.
+    this._trackingProtectionIconContainer.setAttribute("open", "true");
 
     // Check the panel state of other panels. Hide them if needed.
     let openPanels = Array.from(document.querySelectorAll("panel[openpanel]"));
@@ -2824,32 +2555,6 @@ var gProtectionsHandler = {
       );
       this._earliestRecordedDate = date;
     }
-  },
-
-  /**
-   * Sends a message to webcompat extension to unblock content and remove placeholders
-   *
-   * @param {String} shimId - the id of the shim blocking the content
-   */
-  _sendUnblockMessageToSmartblock(shimId) {
-    Services.obs.notifyObservers(
-      gBrowser.selectedTab,
-      "smartblock:unblock-embed",
-      shimId
-    );
-  },
-
-  /**
-   * Sends a message to webcompat extension to reblock content
-   *
-   * @param {String} shimId - the id of the shim blocking the content
-   */
-  _sendReblockMessageToSmartblock(shimId) {
-    Services.obs.notifyObservers(
-      gBrowser.selectedTab,
-      "smartblock:reblock-embed",
-      shimId
-    );
   },
 
   /**
@@ -3030,30 +2735,5 @@ var gProtectionsHandler = {
     }
 
     return messageEl;
-  },
-
-  _resetToggleSecDelay() {
-    // Note: `this` is bound to gProtectionsHandler in init.
-    clearTimeout(this._protectionsPopupToggleDelayTimer);
-    this._protectionsPopupToggleDelayTimer = setTimeout(() => {
-      this._enablePopupToggles();
-      delete this._protectionsPopupToggleDelayTimer;
-    }, this._protectionsPopupButtonDelay);
-  },
-
-  _disablePopupToggles() {
-    // Disables all toggles in the protections panel
-    this._protectionsPopup.querySelectorAll("moz-toggle").forEach(toggle => {
-      toggle.setAttribute("disabled", true);
-      toggle.addEventListener("pointerdown", this._resetToggleSecDelay);
-    });
-  },
-
-  _enablePopupToggles() {
-    // Enables all toggles in the protections panel
-    this._protectionsPopup.querySelectorAll("moz-toggle").forEach(toggle => {
-      toggle.removeAttribute("disabled");
-      toggle.removeEventListener("pointerdown", this._resetToggleSecDelay);
-    });
   },
 };

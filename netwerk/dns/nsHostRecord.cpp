@@ -8,21 +8,17 @@
 // Put DNSLogging.h at the end to avoid LOG being overwritten by other headers.
 #include "DNSLogging.h"
 #include "mozilla/StaticPrefs_network.h"
-#include "mozilla/glean/NetwerkDnsMetrics.h"
 #include "mozilla/Telemetry.h"
-#include "mozilla/ThreadSafety.h"
 #include "TRRService.h"
 
 //----------------------------------------------------------------------------
 // this macro filters out any flags that are not used when constructing the
 // host key.  the significant flags are those that would affect the resulting
 // host record (i.e., the flags that are passed down to PR_GetAddrInfoByName).
-#define RES_KEY_FLAGS(_f)                           \
-  ((_f) &                                           \
-   ((StaticPrefs::network_dns_always_ai_canonname() \
-         ? 0                                        \
-         : nsIDNSService::RESOLVE_CANONICAL_NAME) | \
-    nsIDNSService::RESOLVE_DISABLE_TRR |            \
+#define RES_KEY_FLAGS(_f)                   \
+  ((_f) &                                   \
+   (nsIDNSService::RESOLVE_CANONICAL_NAME | \
+    nsIDNSService::RESOLVE_DISABLE_TRR |    \
     nsIDNSService::RESOLVE_TRR_MODE_MASK | nsIDNSService::RESOLVE_IP_HINT))
 
 #define IS_ADDR_TYPE(_type) ((_type) == nsIDNSService::RESOLVE_TYPE_DEFAULT)
@@ -43,15 +39,6 @@ nsHostKey::nsHostKey(const nsACString& aHost, const nsACString& aTrrServer,
       af(aAf),
       pb(aPb),
       originSuffix(aOriginsuffix) {}
-
-nsHostKey::nsHostKey(const nsHostKey& other)
-    : host(other.host),
-      mTrrServer(other.mTrrServer),
-      type(other.type),
-      flags(other.flags),
-      af(other.af),
-      pb(other.pb),
-      originSuffix(other.originSuffix) {}
 
 bool nsHostKey::operator==(const nsHostKey& other) const {
   return host == other.host && mTrrServer == other.mTrrServer &&
@@ -165,7 +152,7 @@ AddrHostRecord::AddrHostRecord(const nsHostKey& key) : nsHostRecord(key) {}
 
 AddrHostRecord::~AddrHostRecord() {
   mCallbacks.clear();
-  glean::dns::blocklist_count.AccumulateSingleSample(mUnusableCount);
+  Telemetry::Accumulate(Telemetry::DNS_BLACKLIST_COUNT, mUnusableCount);
 }
 
 bool AddrHostRecord::Blocklisted(const NetAddr* aQuery) {
@@ -289,7 +276,8 @@ void AddrHostRecord::NotifyRetryingTrr() {
 void AddrHostRecord::ResolveComplete() {
   if (LoadNativeUsed()) {
     if (mNativeSuccess) {
-      glean::dns::native_lookup_time.AccumulateRawDuration(mNativeDuration);
+      uint32_t millis = static_cast<uint32_t>(mNativeDuration.ToMilliseconds());
+      Telemetry::Accumulate(Telemetry::DNS_NATIVE_LOOKUP_TIME, millis);
     }
     AccumulateCategoricalKeyed(
         TRRService::ProviderKey(),
@@ -301,8 +289,9 @@ void AddrHostRecord::ResolveComplete() {
     if (mTRRSuccess) {
       MOZ_DIAGNOSTIC_ASSERT(mTRRSkippedReason ==
                             mozilla::net::TRRSkippedReason::TRR_OK);
-      glean::dns::trr_lookup_time.Get(TRRService::ProviderKey())
-          .AccumulateRawDuration(mTrrDuration);
+      uint32_t millis = static_cast<uint32_t>(mTrrDuration.ToMilliseconds());
+      Telemetry::Accumulate(Telemetry::DNS_TRR_LOOKUP_TIME3,
+                            TRRService::ProviderKey(), millis);
     }
     AccumulateCategoricalKeyed(
         TRRService::ProviderKey(),
@@ -314,34 +303,27 @@ void AddrHostRecord::ResolveComplete() {
       nsHostResolver::Mode() == nsIDNSService::MODE_TRRONLY) {
     MOZ_ASSERT(mTRRSkippedReason != mozilla::net::TRRSkippedReason::TRR_UNSET);
 
-    glean::dns::trr_skip_reason_trr_first.Get(TRRService::ProviderKey())
-        .AccumulateSingleSample(static_cast<uint32_t>(mTRRSkippedReason));
+    Telemetry::Accumulate(Telemetry::TRR_SKIP_REASON_TRR_FIRST2,
+                          TRRService::ProviderKey(),
+                          static_cast<uint32_t>(mTRRSkippedReason));
     if (!mTRRSuccess && LoadNativeUsed()) {
-      if (mNativeSuccess) {
-        glean::dns::trr_skip_reason_native_success
-            .Get(TRRService::ProviderKey())
-            .AccumulateSingleSample(static_cast<uint32_t>(mTRRSkippedReason));
-      } else {
-        glean::dns::trr_skip_reason_native_failed.Get(TRRService::ProviderKey())
-            .AccumulateSingleSample(static_cast<uint32_t>(mTRRSkippedReason));
-      }
+      Telemetry::Accumulate(
+          mNativeSuccess ? Telemetry::TRR_SKIP_REASON_NATIVE_SUCCESS
+                         : Telemetry::TRR_SKIP_REASON_NATIVE_FAILED,
+          TRRService::ProviderKey(), static_cast<uint32_t>(mTRRSkippedReason));
     }
 
     if (IsRelevantTRRSkipReason(mTRRSkippedReason)) {
-      glean::dns::trr_relevant_skip_reason_trr_first
-          .Get(TRRService::ProviderKey())
-          .AccumulateSingleSample(static_cast<uint32_t>(mTRRSkippedReason));
+      Telemetry::Accumulate(Telemetry::TRR_RELEVANT_SKIP_REASON_TRR_FIRST,
+                            TRRService::ProviderKey(),
+                            static_cast<uint32_t>(mTRRSkippedReason));
 
       if (!mTRRSuccess && LoadNativeUsed()) {
-        if (mNativeSuccess) {
-          glean::dns::trr_relevant_skip_reason_native_success
-              .Get(TRRService::ProviderKey())
-              .AccumulateSingleSample(static_cast<uint32_t>(mTRRSkippedReason));
-        } else {
-          glean::dns::trr_relevant_skip_reason_native_failed
-              .Get(TRRService::ProviderKey())
-              .AccumulateSingleSample(static_cast<uint32_t>(mTRRSkippedReason));
-        }
+        Telemetry::Accumulate(
+            mNativeSuccess ? Telemetry::TRR_RELEVANT_SKIP_REASON_NATIVE_SUCCESS
+                           : Telemetry::TRR_RELEVANT_SKIP_REASON_NATIVE_FAILED,
+            TRRService::ProviderKey(),
+            static_cast<uint32_t>(mTRRSkippedReason));
       }
     }
 
@@ -353,25 +335,20 @@ void AddrHostRecord::ResolveComplete() {
         telemetryKey.AppendLiteral("|");
         telemetryKey.AppendInt(static_cast<uint32_t>(mFirstTRRSkippedReason));
 
-        if (mTRRSuccess) {
-          glean::dns::trr_skip_reason_retry_success
-              .Get(TRRService::ProviderKey())
-              .AccumulateSingleSample(
-                  static_cast<uint32_t>(mFirstTRRSkippedReason));
-        } else {
-          glean::dns::trr_skip_reason_retry_failed
-              .Get(TRRService::ProviderKey())
-              .AccumulateSingleSample(
-                  static_cast<uint32_t>(mFirstTRRSkippedReason));
-        }
+        Telemetry::Accumulate(mTRRSuccess
+                                  ? Telemetry::TRR_SKIP_REASON_RETRY_SUCCESS
+                                  : Telemetry::TRR_SKIP_REASON_RETRY_FAILED,
+                              TRRService::ProviderKey(),
+                              static_cast<uint32_t>(mFirstTRRSkippedReason));
       }
 
-      glean::dns::trr_skip_reason_strict_mode.Get(telemetryKey)
-          .AccumulateSingleSample(static_cast<uint32_t>(mTRRSkippedReason));
+      Telemetry::Accumulate(Telemetry::TRR_SKIP_REASON_STRICT_MODE,
+                            telemetryKey,
+                            static_cast<uint32_t>(mTRRSkippedReason));
 
       if (mTRRSuccess) {
-        glean::dns::trr_attempt_count.Get(TRRService::ProviderKey())
-            .AccumulateSingleSample(mTrrAttempts);
+        Telemetry::Accumulate(Telemetry::TRR_ATTEMPT_COUNT,
+                              TRRService::ProviderKey(), mTrrAttempts);
       }
     }
   }
@@ -404,19 +381,13 @@ void AddrHostRecord::ResolveComplete() {
 
   switch (mEffectiveTRRMode) {
     case nsIRequest::TRR_DISABLED_MODE:
-      glean::dns::lookup_algorithm
-          .EnumGet(glean::dns::LookupAlgorithmLabel::eNativeonly)
-          .Add();
+      AccumulateCategorical(Telemetry::LABELS_DNS_LOOKUP_ALGORITHM::nativeOnly);
       break;
     case nsIRequest::TRR_FIRST_MODE:
-      glean::dns::lookup_algorithm
-          .EnumGet(glean::dns::LookupAlgorithmLabel::eTrrfirst)
-          .Add();
+      AccumulateCategorical(Telemetry::LABELS_DNS_LOOKUP_ALGORITHM::trrFirst);
       break;
     case nsIRequest::TRR_ONLY_MODE:
-      glean::dns::lookup_algorithm
-          .EnumGet(glean::dns::LookupAlgorithmLabel::eTrronly)
-          .Add();
+      AccumulateCategorical(Telemetry::LABELS_DNS_LOOKUP_ALGORITHM::trrOnly);
       break;
     case nsIRequest::TRR_DEFAULT_MODE:
       MOZ_ASSERT_UNREACHABLE("We should not have a default value here");
@@ -469,10 +440,7 @@ bool TypeHostRecord::HasUsableResultInternal(
     return true;
   }
 
-  MOZ_PUSH_IGNORE_THREAD_SAFETY
-  // To avoid locking in a const method
   return !mResults.is<Nothing>();
-  MOZ_POP_THREAD_SAFETY
 }
 
 bool TypeHostRecord::RefreshForNegativeResponse() const { return false; }
@@ -578,22 +546,6 @@ TypeHostRecord::IsTRR(bool* aResult) {
 }
 
 NS_IMETHODIMP
-TypeHostRecord::GetAllRecords(bool aNoHttp2, bool aNoHttp3,
-                              const nsACString& aCname,
-                              nsTArray<RefPtr<nsISVCBRecord>>& aResult) {
-  MutexAutoLock lock(mResultsLock);
-  if (!mResults.is<TypeRecordHTTPSSVC>()) {
-    return NS_ERROR_NOT_AVAILABLE;
-  }
-
-  auto& records = mResults.as<TypeRecordHTTPSSVC>();
-  bool notused;
-  GetAllRecordsInternal(aNoHttp2, aNoHttp3, aCname, records, false, &notused,
-                        &notused, aResult);
-  return NS_OK;
-}
-
-NS_IMETHODIMP
 TypeHostRecord::GetAllRecordsWithEchConfig(
     bool aNoHttp2, bool aNoHttp3, const nsACString& aCname,
     bool* aAllRecordsHaveEchConfig, bool* aAllRecordsInH3ExcludedList,
@@ -604,9 +556,9 @@ TypeHostRecord::GetAllRecordsWithEchConfig(
   }
 
   auto& records = mResults.as<TypeRecordHTTPSSVC>();
-  GetAllRecordsInternal(aNoHttp2, aNoHttp3, aCname, records, true,
-                        aAllRecordsHaveEchConfig, aAllRecordsInH3ExcludedList,
-                        aResult);
+  GetAllRecordsWithEchConfigInternal(aNoHttp2, aNoHttp3, aCname, records,
+                                     aAllRecordsHaveEchConfig,
+                                     aAllRecordsInH3ExcludedList, aResult);
   return NS_OK;
 }
 
@@ -646,15 +598,15 @@ TypeHostRecord::GetTtl(uint32_t* aResult) {
 
 void TypeHostRecord::ResolveComplete() {
   if (IsRelevantTRRSkipReason(mTRRSkippedReason)) {
-    glean::dns::trr_relevant_skip_reason_trr_first_type_rec
-        .Get(TRRService::ProviderKey())
-        .AccumulateSingleSample(static_cast<uint32_t>(mTRRSkippedReason));
+    Telemetry::Accumulate(
+        Telemetry::TRR_RELEVANT_SKIP_REASON_TRR_FIRST_TYPE_REC,
+        TRRService::ProviderKey(), static_cast<uint32_t>(mTRRSkippedReason));
   }
 
+  uint32_t millis = static_cast<uint32_t>(mTrrDuration.ToMilliseconds());
   if (mTRRSuccess) {
-    glean::dns::by_type_succeeded_lookup_time.AccumulateRawDuration(
-        mTrrDuration);
+    Telemetry::Accumulate(Telemetry::DNS_BY_TYPE_SUCCEEDED_LOOKUP_TIME, millis);
   } else {
-    glean::dns::by_type_failed_lookup_time.AccumulateRawDuration(mTrrDuration);
+    Telemetry::Accumulate(Telemetry::DNS_BY_TYPE_FAILED_LOOKUP_TIME, millis);
   }
 }

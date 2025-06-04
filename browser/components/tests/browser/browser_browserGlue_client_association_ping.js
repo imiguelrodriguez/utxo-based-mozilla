@@ -56,9 +56,14 @@ async function testMockUIState(status, taskFn) {
   Services.obs.notifyObservers(null, UIState.ON_UPDATE);
 
   try {
-    await GleanPings.fxAccounts.testSubmission(taskFn, () =>
-      GleanPings.fxAccounts.submit()
-    );
+    let checkValues = new Promise(resolve => {
+      GleanPings.fxAccounts.testBeforeNextSubmit(() => {
+        taskFn();
+        resolve();
+      });
+    });
+    GleanPings.fxAccounts.submit();
+    await checkValues;
   } finally {
     sandbox.restore();
   }

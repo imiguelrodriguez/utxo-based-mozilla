@@ -85,6 +85,7 @@ ChromeUtils.defineESModuleGetters(this, {
     "resource://gre/modules/ExtensionPreferencesManager.sys.mjs",
   ExtensionSettingsStore:
     "resource://gre/modules/ExtensionSettingsStore.sys.mjs",
+  FeatureGate: "resource://featuregates/FeatureGate.sys.mjs",
   FileUtils: "resource://gre/modules/FileUtils.sys.mjs",
   FirefoxRelay: "resource://gre/modules/FirefoxRelay.sys.mjs",
   HomePage: "resource:///modules/HomePage.sys.mjs",
@@ -201,10 +202,8 @@ function init_all() {
     register_module("paneTranslations", gTranslationsPane);
   }
   if (Services.prefs.getBoolPref("browser.preferences.experimental")) {
-    // Set hidden based on previous load's hidden value or if Nimbus is
-    // disabled.
+    // Set hidden based on previous load's hidden value.
     document.getElementById("category-experimental").hidden =
-      !ExperimentAPI.studiesEnabled ||
       Services.prefs.getBoolPref(
         "browser.preferences.experimental.hidden",
         false
@@ -311,18 +310,14 @@ async function gotoPref(
   }
 
   let item;
-  let unknownCategory = false;
   if (category != "paneSearchResults") {
     // Hide second level headers in normal view
     for (let element of document.querySelectorAll(".search-header")) {
       element.hidden = true;
     }
 
-    item = categories.querySelector(
-      ".category[value=" + CSS.escape(category) + "]"
-    );
+    item = categories.querySelector(".category[value=" + category + "]");
     if (!item || item.hidden) {
-      unknownCategory = true;
       category = kDefaultCategoryInternalName;
       item = categories.querySelector(".category[value=" + category + "]");
     }
@@ -330,7 +325,6 @@ async function gotoPref(
 
   if (
     gLastCategory.category ||
-    unknownCategory ||
     category != kDefaultCategoryInternalName ||
     subcategory
   ) {
@@ -434,7 +428,7 @@ function search(aQuery, aAttribute) {
   }
 }
 
-function spotlight(subcategory, category) {
+async function spotlight(subcategory, category) {
   let highlightedElements = document.querySelectorAll(".spotlight");
   if (highlightedElements.length) {
     for (let element of highlightedElements) {
@@ -446,17 +440,44 @@ function spotlight(subcategory, category) {
   }
 }
 
-function scrollAndHighlight(subcategory) {
+async function scrollAndHighlight(subcategory) {
   let element = document.querySelector(`[data-subcategory="${subcategory}"]`);
   if (!element) {
     return;
   }
+  let header = getClosestDisplayedHeader(element);
 
-  element.scrollIntoView({
-    behavior: "smooth",
-    block: "center",
-  });
+  scrollContentTo(header);
   element.classList.add("spotlight");
+}
+
+/**
+ * If there is no visible second level header it will return first level header,
+ * otherwise return second level header.
+ * @returns {Element} - The closest displayed header.
+ */
+function getClosestDisplayedHeader(element) {
+  let header = element.closest("groupbox");
+  let searchHeader = header.querySelector(".search-header");
+  if (
+    searchHeader &&
+    searchHeader.hidden &&
+    header.previousElementSibling.classList.contains("subcategory")
+  ) {
+    header = header.previousElementSibling;
+  }
+  return header;
+}
+
+function scrollContentTo(element) {
+  const STICKY_CONTAINER_HEIGHT =
+    document.querySelector(".sticky-container").clientHeight;
+  let mainContent = document.querySelector(".main-content");
+  let top = element.getBoundingClientRect().top - STICKY_CONTAINER_HEIGHT;
+  mainContent.scroll({
+    top,
+    behavior: "smooth",
+  });
 }
 
 function friendlyPrefCategoryNameToInternalName(aName) {
@@ -590,7 +611,7 @@ async function ensureScrollPadding() {
   let stickyContainer = document.querySelector(".sticky-container");
   let height = await window.browsingContext.topChromeWindow
     .promiseDocumentFlushed(() => stickyContainer.clientHeight)
-    .catch(console.error); // Can reject if the window goes away.
+    .catch(() => Cu.reportError); // Can reject if the window goes away.
 
   // Make it a bit more, to ensure focus rectangles etc. don't get cut off.
   // This being 8px causes us to end up with 90px if the policies container
@@ -605,6 +626,6 @@ async function ensureScrollPadding() {
 function maybeDisplayPoliciesNotice() {
   if (Services.policies.status == Services.policies.ACTIVE) {
     document.getElementById("policies-container").removeAttribute("hidden");
+    ensureScrollPadding();
   }
-  ensureScrollPadding();
 }

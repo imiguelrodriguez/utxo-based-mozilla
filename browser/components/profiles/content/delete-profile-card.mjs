@@ -21,11 +21,6 @@ export class DeleteProfileCard extends MozLitElement {
     data: { type: Object },
   };
 
-  static queries = {
-    headerAvatar: "#header-avatar",
-    cancelButton: "#cancel-delete",
-  };
-
   connectedCallback() {
     super.connectedCallback();
 
@@ -42,29 +37,10 @@ export class DeleteProfileCard extends MozLitElement {
     let titleEl = document.querySelector("title");
     titleEl.setAttribute(
       "data-l10n-args",
-      JSON.stringify({ profilename: this.data.profile.name })
+      JSON.stringify({ profilename: this.data.name })
     );
 
     this.initialized = true;
-  }
-
-  updated() {
-    super.updated();
-
-    if (!this.data?.profile) {
-      return;
-    }
-
-    let { themeFg, themeBg } = this.data.profile;
-    this.headerAvatar.style.fill = themeBg;
-    this.headerAvatar.style.stroke = themeFg;
-
-    this.setFavicon();
-  }
-
-  setFavicon() {
-    let favicon = document.getElementById("favicon");
-    favicon.href = `chrome://browser/content/profiles/assets/16_${this.data.profile.avatar}.svg`;
   }
 
   cancelDelete() {
@@ -90,53 +66,41 @@ export class DeleteProfileCard extends MozLitElement {
       />
       <moz-card
         ><div id="delete-profile-card">
-          <img
-            id="header-avatar"
-            width="80"
-            height="80"
-            data-l10n-id=${this.data.profile.avatarL10nId}
-            src="chrome://browser/content/profiles/assets/80_${this.data.profile
-              .avatar}.svg"
-          />
+          <img width="80" height="80" src="${this.data.avatar}" />
           <div id="profile-content">
-            <div>
-              <h1
-                data-l10n-id="delete-profile-header"
-                data-l10n-args=${JSON.stringify({
-                  profilename: this.data.profile.name,
-                })}
-              ></h1>
-              <p
-                class="sub-header"
-                data-l10n-id="delete-profile-description"
-              ></p>
-            </div>
-            <div class="data-list">
-              <div class="data-list-item" id="windows">
+            <h1
+              data-l10n-id="delete-profile-header"
+              data-l10n-args="${JSON.stringify({
+                profilename: this.data.name,
+              })}"
+            ></h1>
+            <h2 data-l10n-id="delete-profile-description"></h2>
+            <ul>
+              <li id="windows">
                 <span data-l10n-id="delete-profile-windows"></span>
-                <b>${this.data.windowCount}</b>
-              </div>
-              <div class="data-list-item" id="tabs">
+                <span class="count">${this.data.windowCount}</span>
+              </li>
+              <li id="tabs">
                 <span data-l10n-id="delete-profile-tabs"></span>
-                <b>${this.data.tabCount}</b>
-              </div>
-              <div class="data-list-item" id="bookmarks">
+                <span class="count">${this.data.tabCount}</span>
+              </li>
+              <li id="bookmarks">
                 <span data-l10n-id="delete-profile-bookmarks"></span>
-                <b>${this.data.bookmarkCount}</b>
-              </div>
-              <div class="data-list-item" id="history">
+                <span class="count">${this.data.bookmarkCount}</span>
+              </li>
+              <li id="history">
                 <span data-l10n-id="delete-profile-history"></span>
-                <b>${this.data.historyCount}</b>
-              </div>
-              <div class="data-list-item" id="autofill">
+                <span class="count">${this.data.historyCount}</span>
+              </li>
+              <li id="autofill">
                 <span data-l10n-id="delete-profile-autofill"></span>
-                <b>${this.data.autofillCount}</b>
-              </div>
-              <div class="data-list-item" id="logins">
+                <span class="count">${this.data.autofillCount}</span>
+              </li>
+              <li id="logins">
                 <span data-l10n-id="delete-profile-logins"></span>
-                <b>${this.data.loginCount}</b>
-              </div>
-            </div>
+                <span class="count">${this.data.loginCount}</span>
+              </li>
+            </ul>
             <moz-button-group>
               <moz-button
                 id="cancel-delete"

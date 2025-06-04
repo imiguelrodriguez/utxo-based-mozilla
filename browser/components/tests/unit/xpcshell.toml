@@ -1,6 +1,7 @@
 [DEFAULT]
 head = "head.js"
 firefox-appdir = "browser"
+skip-if = ["os == 'android'"] # bug 1730213
 support-files = ["distribution.ini"]
 
 ["test_browserGlue_migration_ctrltab_recently_used_order.js"]
@@ -10,10 +11,7 @@ support-files = ["distribution.ini"]
 ["test_browserGlue_migration_no_errors.js"]
 
 ["test_browserGlue_migration_osauth.js"]
-skip-if = [
-  "nightly_build",
-  "os == 'linux' && os_version == '18.04' && processor == 'x86_64'",
-]
+skip-if = ["nightly_build", "os == 'linux'"]
 
 ["test_browserGlue_migration_places_xulstore.js"]
 

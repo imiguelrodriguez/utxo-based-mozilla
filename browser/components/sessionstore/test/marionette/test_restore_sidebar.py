@@ -12,7 +12,9 @@ from session_store_test_case import SessionStoreTestCase
 
 
 def inline(title):
-    return f"data:text/html;charset=utf-8,<html><head><title>{title}</title></head><body></body></html>"
+    return "data:text/html;charset=utf-8,<html><head><title>{}</title></head><body></body></html>".format(
+        title
+    )
 
 
 class TestSessionRestore(SessionStoreTestCase):
@@ -41,14 +43,12 @@ class TestSessionRestore(SessionStoreTestCase):
             1,
             msg="Should have 1 window open.",
         )
-        self.marionette.execute_async_script(
+        self.marionette.execute_script(
             """
-            const resolve = arguments[0];
             let window = BrowserWindowTracker.getTopWindow()
-            window.SidebarController.show("viewHistorySidebar").then(() => {
-              let sidebarBox = window.document.getElementById("sidebar-box")
-              sidebarBox.style.width = "100px";
-            }).then(resolve);
+            window.SidebarController.show("viewHistorySidebar");
+            let sidebarBox = window.document.getElementById("sidebar-box")
+            sidebarBox.style.width = "100px";
             """
         )
 
@@ -110,15 +110,13 @@ class TestSessionRestore(SessionStoreTestCase):
         )
 
     def test_restore_sidebar_closed(self):
-        self.marionette.execute_async_script(
+        self.marionette.execute_script(
             """
-            const resolve = arguments[0];
             let window = BrowserWindowTracker.getTopWindow()
-            window.SidebarController.show("viewHistorySidebar").then(() => {
-             let sidebarBox = window.document.getElementById("sidebar-box")
-             sidebarBox.style.width = "100px";
-             window.SidebarController.toggle();
-            }).then(resolve);
+            window.SidebarController.show("viewHistorySidebar");
+            let sidebarBox = window.document.getElementById("sidebar-box")
+            sidebarBox.style.width = "100px";
+            window.SidebarController.toggle();
             """
         )
 
@@ -168,8 +166,6 @@ class TestSessionRestore(SessionStoreTestCase):
         self.marionette.execute_script(
             """
             Services.prefs.setBoolPref("sidebar.revamp", true);
-            // Always show is only available with vertical tabs
-            Services.prefs.setBoolPref("sidebar.verticalTabs", true);
             Services.prefs.setBoolPref("sidebar.animation.enabled", false);
             Services.prefs.setStringPref("sidebar.visibility", "always-show");
             """
@@ -186,6 +182,7 @@ class TestSessionRestore(SessionStoreTestCase):
             self.marionette.execute_script(
                 """
                 const window = BrowserWindowTracker.getTopWindow();
+                window.SidebarController.toolbarButton.click();
                 return window.SidebarController.sidebarMain.expanded;
                 """
             ),
@@ -231,6 +228,7 @@ class TestSessionRestore(SessionStoreTestCase):
             self.marionette.execute_script(
                 """
                 const window = BrowserWindowTracker.getTopWindow();
+                window.SidebarController.toolbarButton.click();
                 return window.SidebarController.sidebarContainer.hidden;
                 """
             ),
@@ -248,59 +246,3 @@ class TestSessionRestore(SessionStoreTestCase):
             ),
             "Sidebar visibility state has been restored.",
         )
-
-    def test_restore_sidebar_open_from_backup_pref(self):
-        self.marionette.execute_script(
-            """
-            Services.prefs.setBoolPref("sidebar.revamp", true);
-            Services.prefs.setBoolPref("browser.privatebrowsing.autostart", true);
-            """
-        )
-        self.marionette.restart()
-        self.marionette.set_context("chrome")
-
-        # Open the history panel.
-        self.marionette.execute_async_script(
-            """
-            let resolve = arguments[0];
-            let window = BrowserWindowTracker.getTopWindow();
-            window.SidebarController.show("viewHistorySidebar").then(resolve);
-            """
-        )
-
-        # Restart the browser.
-        self.marionette.restart()
-        self.marionette.execute_async_script(
-            """
-            let resolve = arguments[0];
-            let { BrowserInitState } = ChromeUtils.importESModule("resource:///modules/BrowserGlue.sys.mjs");
-            BrowserInitState.startupIdleTaskPromise.then(resolve);
-            """
-        )
-
-        # Check to see if the history panel was restored.
-        self.assertEqual(
-            self.marionette.execute_script(
-                """
-                let window = BrowserWindowTracker.getTopWindow();
-                return window.SidebarController.currentID;
-                """
-            ),
-            "viewHistorySidebar",
-            "Correct sidebar category has been restored.",
-        )
-
-    def test_upgrade_profile_and_restore_sidebar_from_backup_pref(self):
-        # Bug 1963549 - Sidebar bookmarks no longer open automatically since the last update.
-        self.marionette.execute_script(
-            """
-            Services.prefs.setIntPref("browser.migration.version", 154);
-            Services.xulStore.setValue(
-                AppConstants.BROWSER_CHROME_URL,
-                "sidebar-box",
-                "checked",
-                "true"
-            );
-            """
-        )
-        self.test_restore_sidebar_open_from_backup_pref()

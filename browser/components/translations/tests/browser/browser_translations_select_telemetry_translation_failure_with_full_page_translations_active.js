@@ -28,7 +28,7 @@ add_task(
           document_language: "es",
           from_language: "es",
           to_language: "en",
-          top_preferred_language: "en-US",
+          top_preferred_language: "en",
           text_source: "hyperlink",
         },
       }
@@ -48,7 +48,7 @@ add_task(
           document_language: "es",
           from_language: "es",
           to_language: "en",
-          top_preferred_language: "en-US",
+          top_preferred_language: "en",
           request_target: "select",
           auto_translate: false,
           source_text_code_units: 23,
@@ -84,7 +84,7 @@ add_task(
           document_language: "es",
           from_language: "es",
           to_language: "fr",
-          top_preferred_language: "en-US",
+          top_preferred_language: "en",
           request_target: "select",
           auto_translate: false,
           source_text_code_units: 23,
@@ -122,13 +122,11 @@ add_task(
       }
     );
 
-    await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated(
-      {
-        fromLanguage: "es",
-        toLanguage: "fr",
-        runInPage,
-      }
-    );
+    await FullPageTranslationsTestUtils.assertPageIsTranslated({
+      fromLanguage: "es",
+      toLanguage: "fr",
+      runInPage,
+    });
 
     await SelectTranslationsTestUtils.openPanel(runInPage, {
       selectFrenchSection: true,
@@ -173,9 +171,9 @@ add_task(
           auto_translate: false,
           source_text_code_units:
             AppConstants.platform === "win"
-              ? 1616 // With carriage returns
-              : 1607, // No carriage returns
-          source_text_word_count: 257,
+              ? 1718 // With carriage returns
+              : 1709, // No carriage returns
+          source_text_word_count: 281,
         },
       }
     );
@@ -201,10 +199,6 @@ add_task(
         opened_from: "translationsButton",
         document_language: "es",
       },
-    });
-
-    await TestTranslationsTelemetry.assertTranslationsEnginePerformance({
-      expectedEventCount: 2,
     });
 
     await cleanup();

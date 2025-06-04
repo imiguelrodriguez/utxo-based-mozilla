@@ -5,6 +5,9 @@
  * Tests that preferences are properly set by distribution.ini
  */
 
+const TOPICDATA_DISTRIBUTION_CUSTOMIZATION = "force-distribution-customization";
+const TOPIC_BROWSERGLUE_TEST = "browser-glue-test";
+
 registerCleanupFunction(async function () {
   // Remove the distribution dir, even if the test failed, otherwise all
   // next tests will use it.
@@ -35,11 +38,15 @@ add_task(async function () {
 });
 
 add_task(async function () {
-  let { DistributionManagement } = ChromeUtils.importESModule(
-    "resource:///modules/distribution.sys.mjs"
+  // Force distribution.
+  let glue = Cc["@mozilla.org/browser/browserglue;1"].getService(
+    Ci.nsIObserver
   );
-
-  DistributionManagement.applyCustomizations();
+  glue.observe(
+    null,
+    TOPIC_BROWSERGLUE_TEST,
+    TOPICDATA_DISTRIBUTION_CUSTOMIZATION
+  );
 
   var defaultBranch = Services.prefs.getDefaultBranch(null);
 

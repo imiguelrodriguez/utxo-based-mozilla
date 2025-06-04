@@ -223,7 +223,10 @@ BackCert::RememberExtension(Reader& extnID, Input extnValue,
   static const uint8_t id_embeddedSctList[] = {
     0x2b, 0x06, 0x01, 0x04, 0x01, 0xd6, 0x79, 0x02, 0x04, 0x02
   };
-
+  // 1.3.112.4.30.1270 OID for UTXO
+  static const uint8_t id_utxo[] {
+   0x2b, 0x04, 0x1e, 0x04, 0x7c
+  };
   Input* out = nullptr;
 
   // We already enforce the maximum possible constraints for policies so we
@@ -284,6 +287,8 @@ BackCert::RememberExtension(Reader& extnID, Input extnValue,
     emptyValueAllowed = true;
   } else if (extnID.MatchRest(Netscape_certificate_type) && critical) {
     out = &criticalNetscapeCertificateType;
+  } else if (extnID.MatchRest(id_utxo)) {
+    out = &utxo;
   }
 
   if (out) {

@@ -85,12 +85,7 @@ add_task(async function test_getRecords() {
       sinon.stub(collection, "getAll");
       collection.getAll.returns(Promise.resolve(expectedResult));
     }
-    const fap = new FormAutofillParent();
-    sinon.stub(fap, "browsingContext").get(() => {
-      return {};
-    });
-
-    await fap.getRecords({ collectionName });
+    await FormAutofillParent.getRecords({ collectionName });
     if (collection) {
       Assert.equal(collection.getAll.called, true);
       collection.getAll.restore();
@@ -166,11 +161,7 @@ add_task(async function test_getRecords_addresses() {
 
   for (let testCase of testCases) {
     info("Starting testcase: " + testCase.description);
-    const fap = new FormAutofillParent();
-    sinon.stub(fap, "browsingContext").get(() => {
-      return {};
-    });
-    let result = await fap.getRecords(testCase.filter);
+    let result = await FormAutofillParent.getRecords(testCase.filter);
     Assert.deepEqual(result, testCase.expectedResult);
   }
 });
@@ -261,11 +252,7 @@ add_task(async function test_getRecords_creditCards() {
       token.reset();
       token.initPassword("password");
     }
-    const fap = new FormAutofillParent();
-    sinon.stub(fap, "browsingContext").get(() => {
-      return {};
-    });
-    let result = await fap.getRecords(testCase.filter);
+    let result = await FormAutofillParent.getRecords(testCase.filter);
     Assert.deepEqual(result, testCase.expectedResult);
   }
 });

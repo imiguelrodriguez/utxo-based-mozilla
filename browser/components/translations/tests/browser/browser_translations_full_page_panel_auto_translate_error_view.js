@@ -37,7 +37,7 @@ add_task(
     await FullPageTranslationsTestUtils.openPanel({
       expectedFromLanguage: "es",
       expectedToLanguage: "en",
-      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
     });
     await FullPageTranslationsTestUtils.openTranslationsSettingsMenu();
 
@@ -51,13 +51,11 @@ add_task(
       checked: true,
     });
 
-    await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated(
-      {
-        fromLanguage: "es",
-        toLanguage: "en",
-        runInPage,
-      }
-    );
+    await FullPageTranslationsTestUtils.assertPageIsTranslated({
+      fromLanguage: "es",
+      toLanguage: "en",
+      runInPage,
+    });
 
     await navigate("Navigate to a page in an unsupported language", {
       url: FRENCH_PAGE_URL,
@@ -82,6 +80,8 @@ add_task(
       downloadHandler: rejectDownloads,
       onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewError,
     });
+
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
     await cleanup();
   }

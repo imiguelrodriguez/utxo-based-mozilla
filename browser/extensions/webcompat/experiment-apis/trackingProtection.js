@@ -44,18 +44,13 @@ class AllowList {
 class Manager {
   constructor() {
     this._allowLists = new Map();
-    this._PBModeAllowLists = new Map();
   }
 
-  _getAllowList(id, isPrivateMode) {
-    const activeAllowLists = isPrivateMode
-      ? this._PBModeAllowLists
-      : this._allowLists;
-
-    if (!activeAllowLists.has(id)) {
-      activeAllowLists.set(id, new AllowList(id));
+  _getAllowList(id) {
+    if (!this._allowLists.has(id)) {
+      this._allowLists.set(id, new AllowList(id));
     }
-    return activeAllowLists.get(id);
+    return this._allowLists.get(id);
   }
 
   _ensureStarted() {
@@ -64,7 +59,6 @@ class Manager {
     }
 
     this._unblockedChannelIds = new Set();
-    this._PBModeUnblockedChannelIds = new Set();
     this._channelClassifier = Cc[
       "@mozilla.org/url-classifier/channel-classifier-service;1"
     ].getService(Ci.nsIChannelClassifierService);
@@ -73,21 +67,13 @@ class Manager {
       switch (topic) {
         case "http-on-stop-request": {
           const { channelId } = subject.QueryInterface(Ci.nsIIdentChannel);
-          const isPrivateMode =
-            subject.loadInfo.browsingContext?.originAttributes
-              ?.privateBrowsingId;
-          if (isPrivateMode) {
-            this._PBModeUnblockedChannelIds.delete(channelId);
-          } else {
-            this._unblockedChannelIds.delete(channelId);
-          }
+          this._unblockedChannelIds.delete(channelId);
           break;
         }
         case "urlclassifier-before-block-channel": {
           const channel = subject.QueryInterface(
             Ci.nsIUrlClassifierBlockedChannel
           );
-          const isPrivateMode = subject.isPrivateBrowsing;
           const { channelId, url } = channel;
           let topHost;
           try {
@@ -95,28 +81,22 @@ class Manager {
           } catch (_) {
             return;
           }
-          const activeAllowLists = isPrivateMode
-            ? this._PBModeAllowLists
-            : this._allowLists;
-          const activeUnblockedChannelIds = isPrivateMode
-            ? this._PBModeUnblockedChannelIds
-            : this._unblockedChannelIds;
           // If anti-tracking webcompat is disabled, we only permit replacing
           // channels, not fully unblocking them.
           if (Manager.ENABLE_WEBCOMPAT) {
             // if any allowlist unblocks the request entirely, we allow it
-            for (const allowList of activeAllowLists.values()) {
+            for (const allowList of this._allowLists.values()) {
               if (allowList.allows(url, topHost)) {
-                activeUnblockedChannelIds.add(channelId);
+                this._unblockedChannelIds.add(channelId);
                 channel.allow();
                 return;
               }
             }
           }
           // otherwise, if any allowlist shims the request we say it's replaced
-          for (const allowList of activeAllowLists.values()) {
+          for (const allowList of this._allowLists.values()) {
             if (allowList.shims(url, topHost)) {
-              activeUnblockedChannelIds.add(channelId);
+              this._unblockedChannelIds.add(channelId);
               channel.replace();
               return;
             }
@@ -143,26 +123,22 @@ class Manager {
     delete this._classifierObserver;
   }
 
-  wasChannelIdUnblocked(channelId, isPrivateMode) {
-    const activeUnblockedChannelIds = isPrivateMode
-      ? this._PBModeUnblockedChannelIds
-      : this._unblockedChannelIds;
-    return activeUnblockedChannelIds?.has(channelId);
+  wasChannelIdUnblocked(channelId) {
+    return this._unblockedChannelIds?.has(channelId);
   }
 
-  allow(allowListId, patterns, isPrivateMode, hosts) {
+  allow(allowListId, patterns, hosts) {
     this._ensureStarted();
-    this._getAllowList(allowListId, isPrivateMode).setAllows(patterns, hosts);
+    this._getAllowList(allowListId).setAllows(patterns, hosts);
   }
 
-  shim(allowListId, patterns, isPrivateMode, notHosts) {
+  shim(allowListId, patterns, notHosts) {
     this._ensureStarted();
-    this._getAllowList(allowListId, isPrivateMode).setShims(patterns, notHosts);
+    this._getAllowList(allowListId).setShims(patterns, notHosts);
   }
 
   revoke(allowListId) {
     this._allowLists.delete(allowListId);
-    this._PBModeAllowLists.delete(allowListId);
   }
 }
 var manager = new Manager();
@@ -196,76 +172,22 @@ this.trackingProtection = class extends ExtensionAPI {
   }
 
   getAPI(context) {
-    const {
-      extension: { tabManager },
-    } = this;
-    const EventManager = ExtensionCommon.EventManager;
     Services.prefs.addObserver(dFPIPrefName, updateDFPIStatus);
     Services.prefs.addObserver(dFPIPbPrefName, updateDFPIStatus);
     updateDFPIStatus();
 
     return {
       trackingProtection: {
-        onSmartBlockEmbedUnblock: new EventManager({
-          context,
-          name: "trackingProtection.onSmartBlockEmbedUnblock",
-          register: fire => {
-            const callback = (subject, topic, data) => {
-              // chrome tab id needs to be converted to extension tab id
-              let hostname = subject.linkedBrowser.currentURI.host;
-              let tabId = tabManager.convert(subject).id;
-              fire.sync(tabId, data, hostname);
-            };
-            Services.obs.addObserver(callback, "smartblock:unblock-embed");
-            return () => {
-              Services.obs.removeObserver(callback, "smartblock:unblock-embed");
-            };
-          },
-        }).api(),
-        onSmartBlockEmbedReblock: new EventManager({
-          context,
-          name: "trackingProtection.onSmartBlockEmbedReblock",
-          register: fire => {
-            const callback = (subject, _topic, data) => {
-              // chrome tab id needs to be converted to extension tab id
-              let hostname = subject.linkedBrowser.currentURI.host;
-              let tabId = tabManager.convert(subject).id;
-              fire.sync(tabId, data, hostname);
-            };
-            Services.obs.addObserver(callback, "smartblock:reblock-embed");
-            return () => {
-              Services.obs.removeObserver(callback, "smartblock:reblock-embed");
-            };
-          },
-        }).api(),
-        onPrivateSessionEnd: new EventManager({
-          context,
-          name: "trackingProtection.onPrivateSessionEnd",
-          register: fire => {
-            const callback = (_subject, _topic) => {
-              fire.sync();
-            };
-            Services.obs.addObserver(callback, "last-pb-context-exited");
-            return () => {
-              Services.obs.removeObserver(callback, "last-pb-context-exited");
-            };
-          },
-        }).api(),
         async shim(allowListId, patterns, notHosts) {
-          // shim for both PB and non-PB modes
-          manager.shim(allowListId, patterns, true, notHosts);
-          manager.shim(allowListId, patterns, false, notHosts);
+          manager.shim(allowListId, patterns, notHosts);
         },
-        async allow(allowListId, patterns, isPrivate, hosts) {
-          manager.allow(allowListId, patterns, isPrivate, hosts);
+        async allow(allowListId, patterns, hosts) {
+          manager.allow(allowListId, patterns, hosts);
         },
         async revoke(allowListId) {
           manager.revoke(allowListId);
         },
-        async clearResourceCache() {
-          ChromeUtils.clearResourceCache({ target: "content" });
-        },
-        async wasRequestUnblocked(requestId, isPrivate) {
+        async wasRequestUnblocked(requestId) {
           if (!manager) {
             return false;
           }
@@ -273,56 +195,13 @@ this.trackingProtection = class extends ExtensionAPI {
           if (!channelId) {
             return false;
           }
-          return manager.wasChannelIdUnblocked(channelId, isPrivate);
+          return manager.wasChannelIdUnblocked(channelId);
         },
         async isDFPIActive(isPrivate) {
           if (isPrivate) {
             return dFPIStatus.pbMode;
           }
           return dFPIStatus.nonPbMode;
-        },
-        openProtectionsPanel(tabId) {
-          let tab = tabManager.get(tabId);
-          if (!tab?.active) {
-            // break if tab is not the active tab
-            return;
-          }
-
-          let win = tab?.window;
-          Services.obs.notifyObservers(
-            win.gBrowser.selectedBrowser.browsingContext,
-            "smartblock:open-protections-panel"
-          );
-        },
-        incrementSmartblockEmbedShownTelemetry() {
-          Glean.securityUiProtectionspopup.smartblockembedsShown.add();
-        },
-        async getSmartBlockEmbedFluentString(tabId, shimId, websiteHost) {
-          let win = tabManager.get(tabId).window;
-          let document = win.document;
-
-          let { gProtectionsHandler } = win.gBrowser.ownerGlobal;
-          let { displayName } = gProtectionsHandler.smartblockEmbedInfo.find(
-            element => element.shimId == shimId
-          );
-
-          let fluentArgs = [
-            {
-              id: "smartblock-placeholder-title",
-              args: {
-                trackername: displayName,
-              },
-            },
-            {
-              id: "smartblock-placeholder-desc",
-            },
-            {
-              id: "smartblock-placeholder-button-text",
-              args: { websitehost: websiteHost },
-            },
-          ];
-
-          return document.l10n.formatValues(fluentArgs);
         },
       },
     };

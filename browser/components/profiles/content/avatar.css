@@ -5,9 +5,6 @@
 :host {
   --avatar-size: 40px;
   --avatar-img-size: 20px;
-
-  box-sizing: border-box;
-  border-radius: var(--border-radius-circle);
 }
 
 .avatar {
@@ -17,9 +14,12 @@
   appearance: none;
   background-color: transparent;
   padding: 0;
+  outline-offset: var(--focus-outline-offset);
+  box-sizing: border-box;
   width: var(--avatar-size);
   height: var(--avatar-size);
   border-radius: var(--border-radius-circle);
+  border: 1px solid var(--border-color-interactive);
 
   > img {
     width: var(--avatar-img-size);
@@ -33,23 +33,11 @@
     background-color: var(--button-background-color-hover);
   }
 
-  @media (forced-colors) {
-    &:hover {
-      border-color: SelectedItem;
-
-      > img {
-        stroke: SelectedItem;
-      }
-    }
-
-    :host([checked]) & {
-      border-color: SelectedItemText;
-      background-color: SelectedItem;
-
-      > img {
-        fill: SelectedItem;
-        stroke: SelectedItemText;
-      }
-    }
+  &:focus-visible {
+    outline: var(--focus-outline);
   }
+}
+
+:host([selected]) .avatar {
+  border: var(--focus-outline);
 }

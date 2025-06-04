@@ -36,7 +36,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "resource:///modules/asrouter/ASRouterTriggerListeners.sys.mjs",
   AttributionCode: "resource:///modules/AttributionCode.sys.mjs",
   BookmarksBarButton: "resource:///modules/asrouter/BookmarksBarButton.sys.mjs",
-  UnstoredDownloader: "resource://services-settings/Attachments.sys.mjs",
+  Downloader: "resource://services-settings/Attachments.sys.mjs",
   ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
   FeatureCalloutBroker:
     "resource:///modules/asrouter/FeatureCalloutBroker.sys.mjs",
@@ -60,22 +60,14 @@ ChromeUtils.defineESModuleGetters(lazy, {
   ToolbarBadgeHub: "resource:///modules/asrouter/ToolbarBadgeHub.sys.mjs",
 });
 
-XPCOMUtils.defineLazyPreferenceGetter(
-  lazy,
-  "messagingProfileId",
-  "messaging-system.profile.messagingProfileId",
-  ""
-);
-
-XPCOMUtils.defineLazyPreferenceGetter(
-  lazy,
-  "disableSingleProfileMessaging",
-  "messaging-system.profile.singleProfileMessaging.disable",
-  false
-);
-
 XPCOMUtils.defineLazyServiceGetters(lazy, {
   BrowserHandler: ["@mozilla.org/browser/clh;1", "nsIBrowserHandler"],
+});
+ChromeUtils.defineLazyGetter(lazy, "log", () => {
+  const { Logger } = ChromeUtils.importESModule(
+    "resource://messaging-system/lib/Logger.sys.mjs"
+  );
+  return new Logger("ASRouter");
 });
 import { MESSAGING_EXPERIMENTS_DEFAULT_FEATURES } from "resource:///modules/asrouter/MessagingExperimentConstants.sys.mjs";
 import { CFRMessageProvider } from "resource:///modules/asrouter/CFRMessageProvider.sys.mjs";
@@ -271,8 +263,8 @@ export const MessageLoaderUtils = {
    * "ms-language-packs" collection. E.g. for "en-US" with version "v1",
    * the Fluent file is attched to the record with ID "cfr-v1-en-US".
    *
-   * 2). To prevent duplicate downloads, we verify that the local file matches
-   * the attachment on the Remote Settings record.
+   * 2). The Remote Settings downloader is able to detect the duplicate download
+   * requests for the same attachment and ignore the redundent requests automatically.
    *
    * @param {object} provider An AS router provider
    * @param {string} provider.id The id of the provider
@@ -306,29 +298,16 @@ export const MessageLoaderUtils = {
             .collection(RS_COLLECTION_L10N)
             .getRecord(recordId);
           if (record && record.data) {
-            // Check that the file on disk is the same as the one on the server.
-            // If the file is the same, we don't need to download it again.
-            const localFile = lazy.RemoteL10n.cfrFluentFilePath;
-            const { size: remoteSize } = record.data.attachment;
-            if (
-              !(await IOUtils.exists(localFile)) ||
-              (await IOUtils.stat(localFile)).size !== remoteSize
-            ) {
-              // Here we are using the UnstoredDownloader to download the attachment
-              // because we don't want to store it in the (default) IndexedDB cache.
-              const downloader = new lazy.UnstoredDownloader(
-                RS_MAIN_BUCKET,
-                RS_COLLECTION_L10N
-              );
-              // Await here in order to capture the exceptions for reporting.
-              const { buffer } = await downloader.download(record.data, {
-                retries: RS_DOWNLOAD_MAX_RETRIES,
-              });
-              // Write on disk.
-              await IOUtils.write(localFile, new Uint8Array(buffer), {
-                tmpPath: `${localFile}.tmp`,
-              });
-            }
+            const downloader = new lazy.Downloader(
+              RS_MAIN_BUCKET,
+              RS_COLLECTION_L10N,
+              "browser",
+              "newtab"
+            );
+            // Await here in order to capture the exceptions for reporting.
+            await downloader.downloadToDisk(record.data, {
+              retries: RS_DOWNLOAD_MAX_RETRIES,
+            });
             lazy.RemoteL10n.reloadL10n();
           } else {
             MessageLoaderUtils._handleRemoteSettingsUndesiredEvent(
@@ -383,11 +362,16 @@ export const MessageLoaderUtils = {
     let experiments = [];
     for (const featureId of featureIds) {
       const featureAPI = lazy.NimbusFeatures[featureId];
-      const enrollmentData = featureAPI.getEnrollmentMetadata();
+      const experimentData = lazy.ExperimentAPI.getExperimentMetaData({
+        featureId,
+      });
 
       // We are not enrolled in any experiment or rollout for this feature, so
       // we can skip the feature.
-      if (!enrollmentData) {
+      if (
+        !experimentData &&
+        !lazy.ExperimentAPI.getRolloutMetaData({ featureId })
+      ) {
         continue;
       }
 
@@ -415,7 +399,7 @@ export const MessageLoaderUtils = {
       if (
         NO_REACH_EVENT_GROUPS.includes(featureId) ||
         !MESSAGING_EXPERIMENTS_DEFAULT_FEATURES.includes(featureId) ||
-        enrollmentData.isRollout
+        !experimentData
       ) {
         continue;
       }
@@ -424,10 +408,10 @@ export const MessageLoaderUtils = {
       // if found any. The `forReachEvent` label is used to identify those
       // branches so that they would only be used to record the Reach event.
       const branches =
-        (await lazy.ExperimentAPI.getAllBranches(enrollmentData.slug)) || [];
+        (await lazy.ExperimentAPI.getAllBranches(experimentData.slug)) || [];
       for (const branch of branches) {
         let branchValue = branch[featureId].value;
-        if (!branchValue || branch.slug === enrollmentData.branch) {
+        if (!branchValue || branch.slug === experimentData.branch.slug) {
           continue;
         }
         const branchMessages =
@@ -441,7 +425,7 @@ export const MessageLoaderUtils = {
           }
           experiments.push({
             forReachEvent: { sent: false, group: featureId },
-            experimentSlug: enrollmentData.slug,
+            experimentSlug: experimentData.slug,
             branchSlug: branch.slug,
             ...message,
           });
@@ -559,7 +543,7 @@ export const MessageLoaderUtils = {
             try {
               return this._delocalizeValues(message);
             } catch (e) {
-              lazy.ASRouterPreferences.console.error(
+              lazy.log.error(
                 `Failed to delocalize message ${message.id}:`,
                 e.message,
                 e.cause
@@ -963,13 +947,8 @@ export class _ASRouter {
 
       // Some messages have triggers that require us to initalise trigger listeners
       const unseenListeners = new Set(lazy.ASRouterTriggerListeners.keys());
-      for (const message of newState.messages) {
-        const { trigger } = message;
-        if (
-          trigger &&
-          lazy.ASRouterTriggerListeners.has(trigger.id) &&
-          !this._shouldSkipForAutomation(message)
-        ) {
+      for (const { trigger } of newState.messages) {
+        if (trigger && lazy.ASRouterTriggerListeners.has(trigger.id)) {
           lazy.ASRouterTriggerListeners.get(trigger.id).init(
             this._triggerHandler,
             trigger.params,
@@ -1395,17 +1374,6 @@ export class _ASRouter {
     return true;
   }
 
-  _shouldSkipForAutomation(message) {
-    return (
-      message.skip_in_tests &&
-      // `this.messagesEnabledInAutomation` should be stubbed in tests
-      !this.messagesEnabledInAutomation?.includes(message.id) &&
-      (Cu.isInAutomation ||
-        Services.env.exists("XPCSHELL_TEST_PROFILE_DIR") ||
-        Services.env.get("MOZ_AUTOMATION"))
-    );
-  }
-
   _findProvider(providerID) {
     return this._localProviders[
       this.state.providers.find(i => i.id === providerID).localProvider
@@ -1414,6 +1382,21 @@ export class _ASRouter {
 
   routeCFRMessage(message, browser, trigger, force = false) {
     if (!message) {
+      return { message: {} };
+    }
+
+    // filter out messages we want to exclude from tests
+    if (
+      message.skip_in_tests &&
+      // `this.messagesEnabledInAutomation` should be stubbed in tests
+      !this.messagesEnabledInAutomation?.includes(message.id) &&
+      (Cu.isInAutomation ||
+        Services.env.exists("XPCSHELL_TEST_PROFILE_DIR") ||
+        Services.env.get("MOZ_AUTOMATION"))
+    ) {
+      lazy.log.debug(
+        `Skipping message ${message.id} because ${message.skip_in_tests}`
+      );
       return { message: {} };
     }
 
@@ -1499,28 +1482,12 @@ export class _ASRouter {
       case "menu_message":
         lazy.MenuMessage.showMenuMessage(browser, message, trigger, force);
         break;
-      case "newtab_message": {
-        let targetBrowser = force ? null : browser;
-        let messageWithBrowser = {
-          targetBrowser,
-          message,
-          dispatch: this.dispatchCFRAction,
-        };
-        Services.obs.notifyObservers(messageWithBrowser, "newtab-message");
-        break;
-      }
     }
 
     return { message };
   }
 
-  async addScreenImpression(screen) {
-    // wait to ensure storage has been intialized before setting
-    // screenImpression
-    if (!this.initialized) {
-      await this.waitForInitialized;
-    }
-
+  addScreenImpression(screen) {
     lazy.ASRouterPreferences.console.debug(
       `entering addScreenImpression for ${screen.id}`
     );
@@ -1685,29 +1652,6 @@ export class _ASRouter {
     return impressions;
   }
 
-  // Determine whether the current profile is using Selectable profiles;
-  // if yes, ensure we only message a single profile in the group.
-  shouldShowMessagesToProfile() {
-    // If the pref for this mitigation is disabled, skip these checks.
-    if (lazy.disableSingleProfileMessaging) {
-      return true;
-    }
-    // If multiple profiles aren't enabled or aren't being used,
-    // then always show messages.
-    if (
-      !lazy.ASRouterTargeting.Environment.canCreateSelectableProfiles ||
-      !lazy.ASRouterTargeting.Environment.hasSelectableProfiles
-    ) {
-      return true;
-    }
-    // if multiple profiles exist and messagingProfileID is set,
-    // then show messages when profileID matches.
-    return (
-      lazy.messagingProfileId ===
-      lazy.ASRouterTargeting.Environment.currentProfileId
-    );
-  }
-
   handleMessageRequest({
     messages: candidates,
     triggerId,
@@ -1718,13 +1662,6 @@ export class _ASRouter {
     ordered = false,
     returnAll = false,
   }) {
-    // If using a selectable profile, return no messages
-    if (!this.shouldShowMessagesToProfile()) {
-      lazy.ASRouterPreferences.console.debug(
-        "Selectable profile in use; skip loading messages"
-      );
-      return returnAll ? [] : null;
-    }
     let shouldCache;
     lazy.ASRouterPreferences.console.debug(
       "in handleMessageRequest, arguments = ",
@@ -1734,13 +1671,6 @@ export class _ASRouter {
     const messages =
       candidates ||
       this.state.messages.filter(m => {
-        if (this._shouldSkipForAutomation(m)) {
-          lazy.ASRouterPreferences.console.debug(
-            m.id,
-            ` filtered in tests because ${m.skip_in_tests}`
-          );
-          return false;
-        }
         if (provider && m.provider !== provider) {
           lazy.ASRouterPreferences.console.debug(m.id, " filtered by provider");
           return false;
@@ -1998,7 +1928,7 @@ export class _ASRouter {
     return this.loadMessagesFromAllProviders();
   }
 
-  async sendPBNewTabMessage({ hideDefault }) {
+  async sendPBNewTabMessage({ tabId, hideDefault }) {
     let message = null;
     const PromoInfo = {
       FOCUS: { enabledPref: "browser.promo.focus.enabled" },
@@ -2032,11 +1962,12 @@ export class _ASRouter {
       ),
     }));
 
-    const timerId = Glean.messagingSystem.messageRequestTime.start();
+    const telemetryObject = { tabId };
+    TelemetryStopwatch.start("MS_MESSAGE_REQUEST_TIME_MS", telemetryObject);
     message = await this.handleMessageRequest({
       template: "pb_newtab",
     });
-    Glean.messagingSystem.messageRequestTime.stopAndAccumulate(timerId);
+    TelemetryStopwatch.finish("MS_MESSAGE_REQUEST_TIME_MS", telemetryObject);
 
     // Format urls if any are defined
     ["infoLinkUrl"].forEach(key => {
@@ -2051,33 +1982,20 @@ export class _ASRouter {
   }
 
   _recordReachEvent(message) {
-    lazy.ASRouterPreferences.console.log(
-      "In ASRouter._recordReachEvent for message: ",
-      message
-    );
-
-    try {
-      const messageGroup = message.forReachEvent.group;
-      // Keeping parity with legacy event telemetry values that only accepted
-      // underscores in featureID passed to event telemetry.
-      // Glean expects the metric name in camelCase.
-      const name = messageGroup
-        .replace(/-/g, "_")
-        .split("_")
-        .map(word => word[0].toUpperCase() + word.slice(1))
-        .join("");
-      const extra = {
-        value: message.experimentSlug,
-        branches: message.branchSlug,
-      };
-      Glean.messagingExperiments[`reach${name}`].record(extra);
-    } catch (ex) {
-      // XXX ideally send this to telemetry, maybe along with a stack trace
-      lazy.ASRouterPreferences.console.error(
-        "Error recording reach event: ",
-        ex
-      );
-    }
+    const messageGroup = message.forReachEvent.group;
+    // Keeping parity with legacy event telemetry values that only accepted
+    // underscores in featureID passed to event telemetry.
+    // Glean expects the metric name in camelCase.
+    const name = messageGroup
+      .replace(/-/g, "_")
+      .split("_")
+      .map(word => word[0].toUpperCase() + word.slice(1))
+      .join("");
+    const extra = {
+      value: message.experimentSlug,
+      branches: message.branchSlug,
+    };
+    Glean.messagingExperiments[`reach${name}`].record(extra);
   }
 
   /**
@@ -2090,6 +2008,7 @@ export class _ASRouter {
    * @param {object} [trigger.context] an object with data about the source of
    *   the trigger, matched against the message's targeting expression
    * @param {MozBrowser} trigger.browser the browser to route messages to
+   * @param {number} [trigger.tabId] identifier used only for exposure testing
    * @param {boolean} [skipLoadingMessages=false] pass true to skip looking for
    *   new messages. use when calling from loadMessagesFromAllProviders to avoid
    *   recursion. we call this from loadMessagesFromAllProviders in order to
@@ -2098,11 +2017,9 @@ export class _ASRouter {
    * @resolves {message} an object with the routed message
    */
   async sendTriggerMessage(
-    { browser, ...trigger },
+    { tabId, browser, ...trigger },
     skipLoadingMessages = false
   ) {
-    lazy.ASRouterPreferences.console.debug("entering sendTriggerMessage");
-    lazy.ASRouterPreferences.console.debug("trigger.id = ", trigger.id);
     if (!skipLoadingMessages) {
       await this.loadMessagesFromAllProviders();
     }
@@ -2117,7 +2034,8 @@ export class _ASRouter {
           browser === browser.ownerGlobal.gBrowser?.selectedBrowser;
       }
     }
-    const timerId = Glean.messagingSystem.messageRequestTime.start();
+    const telemetryObject = { tabId };
+    TelemetryStopwatch.start("MS_MESSAGE_REQUEST_TIME_MS", telemetryObject);
     // Return all the messages so that it can record the Reach event
     const messages =
       (await this.handleMessageRequest({
@@ -2126,7 +2044,7 @@ export class _ASRouter {
         triggerContext: trigger.context,
         returnAll: true,
       })) || [];
-    Glean.messagingSystem.messageRequestTime.stopAndAccumulate(timerId);
+    TelemetryStopwatch.finish("MS_MESSAGE_REQUEST_TIME_MS", telemetryObject);
 
     // Record the Reach event for all the messages with `forReachEvent`,
     // only send the first message without forReachEvent to the target
@@ -2138,10 +2056,6 @@ export class _ASRouter {
           message.forReachEvent.sent = true;
         }
       } else {
-        lazy.ASRouterPreferences.console.debug(
-          "about to push a nonReachMessage: ",
-          message
-        );
         nonReachMessages.push(message);
       }
     }
@@ -2195,7 +2109,7 @@ export class _ASRouter {
       privateBrowserOpener.browsingContext.currentWindowGlobal
         .getActor("AboutPrivateBrowsing")
         .sendAsyncMessage("ShowDevToolsMessage", msg);
-    }, 200);
+    }, 100);
 
     return privateBrowserOpener;
   }

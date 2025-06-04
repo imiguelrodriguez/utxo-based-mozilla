@@ -23,12 +23,12 @@ add_task(
       "The button is available."
     );
 
-    await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
     await FullPageTranslationsTestUtils.openPanel({
       expectedFromLanguage: "es",
       expectedToLanguage: "en",
-      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
     });
     ok(
       !fromMenuList.querySelector('[value="ja"]'),
@@ -47,13 +47,13 @@ add_task(
     info("Publishing Japanese as a source language in Remote Settings.");
     await modifyRemoteSettingsRecords(remoteClients.translationModels.client, {
       recordsToCreate: recordsForJaEn,
-      expectedCreatedRecordsCount: RECORDS_PER_LANGUAGE_PAIR_SHARED_VOCAB,
+      expectedCreatedRecordsCount: FILES_PER_LANGUAGE_PAIR,
     });
 
     await FullPageTranslationsTestUtils.openPanel({
       expectedFromLanguage: "es",
       expectedToLanguage: "en",
-      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
     });
     ok(
       fromMenuList.querySelector('[value="ja"]'),
@@ -69,13 +69,13 @@ add_task(
     info("Removing Japanese as a source language from Remote Settings.");
     await modifyRemoteSettingsRecords(remoteClients.translationModels.client, {
       recordsToDelete: recordsForJaEn,
-      expectedDeletedRecordsCount: RECORDS_PER_LANGUAGE_PAIR_SHARED_VOCAB,
+      expectedDeletedRecordsCount: FILES_PER_LANGUAGE_PAIR,
     });
 
     await FullPageTranslationsTestUtils.openPanel({
       expectedFromLanguage: "es",
       expectedToLanguage: "en",
-      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
     });
     ok(
       !fromMenuList.querySelector('[value="ja"]'),
@@ -91,13 +91,13 @@ add_task(
     info("Publishing Japanese as a target language in Remote Settings.");
     await modifyRemoteSettingsRecords(remoteClients.translationModels.client, {
       recordsToCreate: recordsForEnJa,
-      expectedCreatedRecordsCount: RECORDS_PER_LANGUAGE_PAIR_SHARED_VOCAB,
+      expectedCreatedRecordsCount: FILES_PER_LANGUAGE_PAIR,
     });
 
     await FullPageTranslationsTestUtils.openPanel({
       expectedFromLanguage: "es",
       expectedToLanguage: "en",
-      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
     });
     ok(
       !fromMenuList.querySelector('[value="ja"]'),
@@ -113,13 +113,13 @@ add_task(
     info("Republishing Japanese as a source language in Remote Settings.");
     await modifyRemoteSettingsRecords(remoteClients.translationModels.client, {
       recordsToCreate: recordsForJaEn,
-      expectedCreatedRecordsCount: RECORDS_PER_LANGUAGE_PAIR_SHARED_VOCAB,
+      expectedCreatedRecordsCount: FILES_PER_LANGUAGE_PAIR,
     });
 
     await FullPageTranslationsTestUtils.openPanel({
       expectedFromLanguage: "es",
       expectedToLanguage: "en",
-      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
     });
     ok(
       fromMenuList.querySelector('[value="ja"]'),
@@ -135,13 +135,11 @@ add_task(
     });
     await FullPageTranslationsTestUtils.clickTranslateButton();
 
-    await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated(
-      {
-        fromLanguage: "es",
-        toLanguage: "ja",
-        runInPage,
-      }
-    );
+    await FullPageTranslationsTestUtils.assertPageIsTranslated({
+      fromLanguage: "es",
+      toLanguage: "ja",
+      runInPage,
+    });
 
     await cleanup();
   }

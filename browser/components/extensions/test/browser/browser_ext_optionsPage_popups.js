@@ -101,8 +101,9 @@ add_task(async function test_tab_options_popups() {
 
   const optionsBrowser = getInlineOptionsBrowser(gBrowser.selectedBrowser);
 
-  const contentAreaContextMenu =
-    await openContextMenuInOptionsPage(optionsBrowser);
+  const contentAreaContextMenu = await openContextMenuInOptionsPage(
+    optionsBrowser
+  );
 
   let contextMenuItemIds = [
     "context-openlinkintab",
@@ -219,8 +220,9 @@ add_task(async function overrideContext_in_options_page() {
   await extension.awaitMessage("options-page:loaded");
 
   const optionsBrowser = getInlineOptionsBrowser(gBrowser.selectedBrowser);
-  const contentAreaContextMenu =
-    await openContextMenuInOptionsPage(optionsBrowser);
+  const contentAreaContextMenu = await openContextMenuInOptionsPage(
+    optionsBrowser
+  );
 
   await extension.awaitMessage("contextmenu-overridden");
 

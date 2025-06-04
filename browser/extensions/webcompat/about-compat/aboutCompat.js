@@ -45,25 +45,10 @@ const DOMContentLoadedPromise = new Promise(resolve => {
   );
 });
 
-const ua = navigator.userAgent;
-if (ua.includes("Tablet") || ua.includes("Mobile")) {
-  document.documentElement.classList.add("mobile");
-}
-
 Promise.all([
   browser.runtime.sendMessage("getAllInterventions"),
   DOMContentLoadedPromise,
 ]).then(([info]) => {
-  // alphabetize the interventions and shims
-  if (info.interventions) {
-    info.interventions = info.interventions.sort((a, b) =>
-      a.domain.localeCompare(b.domain)
-    );
-  }
-  if (info.shims) {
-    info.shims = info.shims.sort((a, b) => a.name.localeCompare(b.name));
-  }
-
   document.body.addEventListener("click", async evt => {
     const ele = evt.target;
     if (ele.nodeName === "BUTTON") {
@@ -99,6 +84,10 @@ async function onMessageFromAddon(msg) {
     redrawTable($("#interventions"), msg.interventionsChanged, alsoShowHidden);
   }
 
+  if ("overridesChanged" in msg) {
+    redrawTable($("#overrides"), msg.overridesChanged, alsoShowHidden);
+  }
+
   if ("shimsChanged" in msg) {
     updateShimTables(msg.shimsChanged, alsoShowHidden);
   }
@@ -120,8 +109,9 @@ function redraw() {
   if (!availablePatches) {
     return;
   }
-  const { interventions, shims } = availablePatches;
+  const { overrides, interventions, shims } = availablePatches;
   const alsoShowHidden = location.hash === "#all";
+  redrawTable($("#overrides"), overrides, alsoShowHidden);
   redrawTable($("#interventions"), interventions, alsoShowHidden);
   updateShimTables(shims, alsoShowHidden);
 }

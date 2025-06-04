@@ -28,8 +28,12 @@
 #include "nsIProgressEventSink.h"
 #include "nsIRedirectResultListener.h"
 
-#define DOCUMENT_LOAD_LISTENER_IID \
-  {0x3b393c56, 0x9e01, 0x11e9, {0xa2, 0xa3, 0x2a, 0x2a, 0xe2, 0xdb, 0xcc, 0xe4}}
+#define DOCUMENT_LOAD_LISTENER_IID                   \
+  {                                                  \
+    0x3b393c56, 0x9e01, 0x11e9, {                    \
+      0xa2, 0xa3, 0x2a, 0x2a, 0xe2, 0xdb, 0xcc, 0xe4 \
+    }                                                \
+  }
 
 namespace mozilla {
 namespace dom {
@@ -222,7 +226,7 @@ class DocumentLoadListener : public nsIInterfaceRequestor,
   // Returns true if the channel was finished before we could resume it.
   bool ResumeSuspendedChannel(nsIStreamListener* aListener);
 
-  NS_INLINE_DECL_STATIC_IID(DOCUMENT_LOAD_LISTENER_IID)
+  NS_DECLARE_STATIC_IID_ACCESSOR(DOCUMENT_LOAD_LISTENER_IID)
 
   // Called by the DocumentChannel if cancelled.
   void Cancel(const nsresult& aStatusCode, const nsACString& aReason);
@@ -349,7 +353,6 @@ class DocumentLoadListener : public nsIInterfaceRequestor,
   // channel, and ensures that RedirectToRealChannelFinished is called when
   // this is complete.
   void TriggerRedirectToRealChannel(
-      dom::CanonicalBrowsingContext* aDestinationBrowsingContext,
       const Maybe<dom::ContentParent*>& aDestinationProcess,
       nsTArray<StreamFilterRequest> aStreamFilterRequests);
 
@@ -364,17 +367,11 @@ class DocumentLoadListener : public nsIInterfaceRequestor,
   // by us, and resumes the underlying source channel.
   void FinishReplacementChannelSetup(nsresult aResult);
 
-  // TODO: Make nsIRequestObserver MOZ_CAN_RUN_SCRIPT, then remove this. It's a
-  // scriptable interface so it should be the right thing to do.
-  MOZ_CAN_RUN_SCRIPT_BOUNDARY
-  nsresult DoOnStartRequest(nsIRequest*);
-
   // Called from `OnStartRequest` to make the decision about whether or not to
   // change process. This method will return `nullptr` if the current target
   // process is appropriate.
   // aWillSwitchToRemote is set to true if we initiate a process switch,
   // and that the new remote type will be something other than NOT_REMOTE
-  MOZ_CAN_RUN_SCRIPT
   bool MaybeTriggerProcessSwitch(bool* aWillSwitchToRemote);
 
   // Called when the process switch is going to happen, potentially
@@ -387,7 +384,6 @@ class DocumentLoadListener : public nsIInterfaceRequestor,
   // If `aIsNewTab` is specified, the navigation in the original process will be
   // aborted immediately, rather than waiting for a process switch to happen and
   // the previous page to be unloaded or hidden.
-  MOZ_CAN_RUN_SCRIPT
   void TriggerProcessSwitch(dom::CanonicalBrowsingContext* aContext,
                             const dom::NavigationIsolationOptions& aOptions,
                             bool aIsNewTab = false);
@@ -625,6 +621,8 @@ class DocumentLoadListener : public nsIInterfaceRequestor,
 
   RefPtr<HTTPSFirstDowngradeData> mHTTPSFirstDowngradeData;
 };
+
+NS_DEFINE_STATIC_IID_ACCESSOR(DocumentLoadListener, DOCUMENT_LOAD_LISTENER_IID)
 
 inline nsISupports* ToSupports(DocumentLoadListener* aObj) {
   return static_cast<nsIInterfaceRequestor*>(aObj);

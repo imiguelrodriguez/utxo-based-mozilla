@@ -3,7 +3,7 @@
 const { ExperimentAPI } = ChromeUtils.importESModule(
   "resource://nimbus/ExperimentAPI.sys.mjs"
 );
-const { NimbusTestUtils } = ChromeUtils.importESModule(
+const { ExperimentFakes } = ChromeUtils.importESModule(
   "resource://testing-common/NimbusTestUtils.sys.mjs"
 );
 const { TelemetryTestUtils } = ChromeUtils.importESModule(
@@ -16,7 +16,7 @@ const { TelemetryTestUtils } = ChromeUtils.importESModule(
 add_task(async function test_multistage_zeroOnboarding_experimentAPI() {
   await setAboutWelcomePref(true);
   await ExperimentAPI.ready();
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     value: { enabled: false },
   });
@@ -35,15 +35,14 @@ add_task(async function test_multistage_zeroOnboarding_experimentAPI() {
 
   await test_screen_content(
     browser,
-    // When about:welcome is disabled, we should redirect to about:home
-    "home",
+    "Opens new tab",
     // Expected selectors:
     ["div.search-wrapper", "body.activity-stream"],
     // Unexpected selectors:
     ["div.onboardingContainer", "main.AW_STEP1"]
   );
 
-  await doExperimentCleanup();
+  doExperimentCleanup();
 });
 
 /**
@@ -135,7 +134,7 @@ add_task(async function test_multistage_aboutwelcome_experimentAPI() {
   await setAboutWelcomePref(true);
   await ExperimentAPI.ready();
 
-  let doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     enabled: true,
     value: {
@@ -143,6 +142,8 @@ add_task(async function test_multistage_aboutwelcome_experimentAPI() {
       screens: TEST_CONTENT,
     },
   });
+
+  sandbox.spy(ExperimentAPI, "recordExposureEvent");
 
   Services.telemetry.clearScalars();
   let tab = await BrowserTestUtils.openNewForegroundTab(
@@ -241,7 +242,21 @@ add_task(async function test_multistage_aboutwelcome_experimentAPI() {
     ["div.onboardingContainer"]
   );
 
-  await doExperimentCleanup();
+  Assert.equal(
+    ExperimentAPI.recordExposureEvent.callCount,
+    1,
+    "Called only once for exposure event"
+  );
+
+  const scalars = TelemetryTestUtils.getProcessScalars("parent", true, true);
+  TelemetryTestUtils.assertKeyedScalar(
+    scalars,
+    "telemetry.event_counts",
+    "normandy#expose#nimbus_experiment",
+    1
+  );
+
+  doExperimentCleanup();
 });
 
 /* Test multistage custom backdrop
@@ -264,7 +279,7 @@ add_task(async function test_multistage_aboutwelcome_backdrop() {
   await ExperimentAPI.ready();
   await pushPrefs(["browser.aboutwelcome.backdrop", TEST_BACKDROP]);
 
-  const doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  const doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     value: {
       id: "my-mochitest-experiment",
@@ -292,7 +307,7 @@ add_task(async function test_multistage_aboutwelcome_backdrop() {
     [`div.outer-wrapper.onboardingContainer[style*='${TEST_BACKDROP}']`]
   );
 
-  await doExperimentCleanup();
+  doExperimentCleanup();
 });
 
 add_task(async function test_multistage_aboutwelcome_utm_term() {
@@ -321,7 +336,7 @@ add_task(async function test_multistage_aboutwelcome_utm_term() {
   await setAboutWelcomePref(true);
   await ExperimentAPI.ready();
 
-  const doExperimentCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  const doExperimentCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "aboutwelcome",
     value: {
       id: "my-mochitest-experiment",
@@ -365,5 +380,5 @@ add_task(async function test_multistage_aboutwelcome_utm_term() {
     BrowserTestUtils.removeTab(tab);
   });
 
-  await doExperimentCleanup();
+  doExperimentCleanup();
 });

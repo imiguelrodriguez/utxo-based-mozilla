@@ -3,10 +3,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-/* eslint-env mozilla/browser-window */
-
 {
-  // start private scope for Tabbrowser
+  // start private scope for gBrowser
   /**
    * A set of known icons to use for internal pages. These are hardcoded so we can
    * start loading them faster than FaviconLoader would normally find them.
@@ -29,9 +27,6 @@
     LOAD_FLAGS_FORCE_ALLOW_DATA_URI,
     LOAD_FLAGS_DISABLE_TRR,
   } = Ci.nsIWebNavigation;
-
-  const DIRECTION_FORWARD = 1;
-  const DIRECTION_BACKWARD = -1;
 
   /**
    * Updates the User Context UI indicators if the browser is in a non-default context
@@ -83,37 +78,19 @@
     hbox.hidden = false;
   }
 
-  async function getTotalMemoryUsage() {
-    const procInfo = await ChromeUtils.requestProcInfo();
-    let totalMemoryUsage = procInfo.memory;
-    for (const child of procInfo.children) {
-      totalMemoryUsage += child.memory;
-    }
-    return totalMemoryUsage;
-  }
-
-  window.Tabbrowser = class {
+  window._gBrowser = {
     init() {
-      this.tabContainer = document.getElementById("tabbrowser-tabs");
-      this.tabGroupMenu = document.getElementById("tab-group-editor");
-      this.tabbox = document.getElementById("tabbrowser-tabbox");
-      this.tabpanels = document.getElementById("tabbrowser-tabpanels");
-      this.pinnedTabsContainer = document.getElementById(
-        "pinned-tabs-container"
-      );
-
       ChromeUtils.defineESModuleGetters(this, {
-        AsyncTabSwitcher:
-          "moz-src:///browser/components/tabbrowser/AsyncTabSwitcher.sys.mjs",
+        AsyncTabSwitcher: "resource:///modules/AsyncTabSwitcher.sys.mjs",
         PictureInPicture: "resource://gre/modules/PictureInPicture.sys.mjs",
-        SmartTabGroupingManager:
-          "moz-src:///browser/components/tabbrowser/SmartTabGrouping.sys.mjs",
-        TabMetrics:
-          "moz-src:///browser/components/tabbrowser/TabMetrics.sys.mjs",
-        TabStateFlusher:
-          "resource:///modules/sessionstore/TabStateFlusher.sys.mjs",
         UrlbarProviderOpenTabs:
           "resource:///modules/UrlbarProviderOpenTabs.sys.mjs",
+      });
+      XPCOMUtils.defineLazyServiceGetters(this, {
+        MacSharingService: [
+          "@mozilla.org/widget/macsharingservice;1",
+          "nsIMacSharingService",
+        ],
       });
       ChromeUtils.defineLazyGetter(this, "tabLocalization", () => {
         return new Localization(
@@ -151,24 +128,6 @@
         "browser.tabs.groups.enabled",
         false
       );
-      XPCOMUtils.defineLazyPreferenceGetter(
-        this,
-        "showPidAndActiveness",
-        "browser.tabs.tooltipsShowPidAndActiveness",
-        false
-      );
-      XPCOMUtils.defineLazyPreferenceGetter(
-        this,
-        "_unloadTabInContextMenu",
-        "browser.tabs.unloadTabInContextMenu",
-        false
-      );
-      XPCOMUtils.defineLazyPreferenceGetter(
-        this,
-        "_notificationEnableDelay",
-        "security.notification_enable_delay",
-        500
-      );
 
       if (AppConstants.MOZ_CRASHREPORTER) {
         ChromeUtils.defineESModuleGetters(this, {
@@ -184,9 +143,7 @@
       window.addEventListener("framefocusrequested", this);
       window.addEventListener("activate", this);
       window.addEventListener("deactivate", this);
-      window.addEventListener("TabGroupCreateByUser", this);
-      window.addEventListener("TabGrouped", this);
-      window.addEventListener("TabUngrouped", this);
+      window.addEventListener("TabGroupCreate", this);
 
       this.tabContainer.init();
       this._setupInitialBrowserAndTab();
@@ -194,9 +151,11 @@
       if (
         Services.prefs.getIntPref("browser.display.document_color_use") == 2
       ) {
-        this.tabpanels.style.backgroundColor = Services.prefs.getCharPref(
-          "browser.display.background_color"
-        );
+        this.tabpanels.style.backgroundColor = Services.prefs.getBoolPref(
+          "browser.display.use_system_colors"
+        )
+          ? "canvas"
+          : Services.prefs.getCharPref("browser.display.background_color");
       }
 
       this._setFindbarData();
@@ -209,13 +168,13 @@
 
       this._setupEventListeners();
       this._initialized = true;
-    }
+    },
 
-    ownerGlobal = window;
+    ownerGlobal: window,
 
-    ownerDocument = document;
+    ownerDocument: document,
 
-    closingTabsEnum = {
+    closingTabsEnum: {
       ALL: 0,
       OTHER: 1,
       TO_START: 2,
@@ -223,36 +182,38 @@
       MULTI_SELECTED: 4,
       DUPLICATES: 6,
       ALL_DUPLICATES: 7,
-    };
+    },
 
-    _lastRelatedTabMap = new WeakMap();
+    _lastRelatedTabMap: new WeakMap(),
 
-    mProgressListeners = [];
+    mProgressListeners: [],
 
-    mTabsProgressListeners = [];
+    mTabsProgressListeners: [],
 
-    _tabListeners = new Map();
+    _tabListeners: new Map(),
 
-    _tabFilters = new Map();
+    _tabFilters: new Map(),
 
-    _isBusy = false;
+    _isBusy: false,
 
-    _awaitingToggleCaretBrowsingPrompt = false;
+    _awaitingToggleCaretBrowsingPrompt: false,
 
-    _previewMode = false;
+    arrowKeysShouldWrap: AppConstants == "macosx",
 
-    _lastFindValue = "";
+    _previewMode: false,
 
-    _contentWaitingCount = 0;
+    _lastFindValue: "",
 
-    _tabLayerCache = [];
+    _contentWaitingCount: 0,
 
-    tabAnimationsInProgress = 0;
+    _tabLayerCache: [],
+
+    tabAnimationsInProgress: 0,
 
     /**
      * Binding from browser to tab
      */
-    _tabForBrowser = new WeakMap();
+    _tabForBrowser: new WeakMap(),
 
     /**
      * `_createLazyBrowser` will define properties on the unbound lazy browser
@@ -263,7 +224,7 @@
      * provides the names of properties that may be called while the browser
      * is in its unbound (lazy) state.
      */
-    _browserBindingProperties = [
+    _browserBindingProperties: [
       "canGoBack",
       "canGoForward",
       "goBack",
@@ -308,39 +269,39 @@
       "userTypedClear",
       "didStartLoadSinceLastUserTyping",
       "audioMuted",
-    ];
+    ],
 
-    _removingTabs = new Set();
+    _removingTabs: new Set(),
 
-    _multiSelectedTabsSet = new WeakSet();
+    _multiSelectedTabsSet: new WeakSet(),
 
-    _lastMultiSelectedTabRef = null;
+    _lastMultiSelectedTabRef: null,
 
-    _clearMultiSelectionLocked = false;
+    _clearMultiSelectionLocked: false,
 
-    _clearMultiSelectionLockedOnce = false;
+    _clearMultiSelectionLockedOnce: false,
 
-    _multiSelectChangeStarted = false;
+    _multiSelectChangeStarted: false,
 
-    _multiSelectChangeAdditions = new Set();
+    _multiSelectChangeAdditions: new Set(),
 
-    _multiSelectChangeRemovals = new Set();
+    _multiSelectChangeRemovals: new Set(),
 
-    _multiSelectChangeSelected = false;
+    _multiSelectChangeSelected: false,
 
     /**
      * Tab close requests are ignored if the window is closing anyway,
      * e.g. when holding Ctrl+W.
      */
-    _windowIsClosing = false;
+    _windowIsClosing: false,
 
-    preloadedBrowser = null;
+    preloadedBrowser: null,
 
     /**
      * This defines a proxy which allows us to access browsers by
      * index without actually creating a full array of browsers.
      */
-    browsers = new Proxy([], {
+    browsers: new Proxy([], {
       has: (target, name) => {
         if (typeof name == "string" && Number.isInteger(parseInt(name))) {
           return name in gBrowser.tabs;
@@ -359,77 +320,174 @@
         }
         return target[name];
       },
-    });
+    }),
 
     /**
      * List of browsers whose docshells must be active in order for print preview
      * to work.
      */
-    _printPreviewBrowsers = new Set();
+    _printPreviewBrowsers: new Set(),
 
-    _switcher = null;
+    _switcher: null,
 
-    _soundPlayingAttrRemovalTimer = 0;
+    _soundPlayingAttrRemovalTimer: 0,
 
-    _hoverTabTimer = null;
+    _hoverTabTimer: null,
+
+    get tabContainer() {
+      delete this.tabContainer;
+      return (this.tabContainer = document.getElementById("tabbrowser-tabs"));
+    },
 
     get tabs() {
       return this.tabContainer.allTabs;
-    }
+    },
 
     get tabGroups() {
       return this.tabContainer.allGroups;
-    }
+    },
 
-    get tabsInCollapsedTabGroups() {
-      return this.tabGroups
-        .filter(tabGroup => tabGroup.collapsed)
-        .flatMap(tabGroup => tabGroup.tabs)
-        .filter(tab => !tab.hidden && !tab.closing);
-    }
+    get tabGroupMenu() {
+      delete this.tabGroupMenu;
+      return (this.tabGroupMenu = document.getElementById("tab-group-editor"));
+    },
+
+    get tabbox() {
+      delete this.tabbox;
+      return (this.tabbox = document.getElementById("tabbrowser-tabbox"));
+    },
+
+    get tabpanels() {
+      delete this.tabpanels;
+      return (this.tabpanels = document.getElementById("tabbrowser-tabpanels"));
+    },
+
+    get verticalPinnedTabsContainer() {
+      return (this.verticalPinnedTabsContainer = document.getElementById(
+        "vertical-pinned-tabs-container"
+      ));
+    },
 
     addEventListener(...args) {
       this.tabpanels.addEventListener(...args);
-    }
+    },
 
     removeEventListener(...args) {
       this.tabpanels.removeEventListener(...args);
-    }
+    },
 
     dispatchEvent(...args) {
       return this.tabpanels.dispatchEvent(...args);
-    }
+    },
 
-    /**
-     * Returns all tabs in the current window, including hidden tabs and tabs
-     * in collapsed groups, but excluding closing tabs and the Firefox View tab.
-     */
-    get openTabs() {
-      return this.tabContainer.openTabs;
-    }
-
-    /**
-     * Same as `openTabs` but excluding hidden tabs.
-     */
-    get nonHiddenTabs() {
-      return this.tabContainer.nonHiddenTabs;
-    }
-
-    /**
-     * Same as `openTabs` but excluding hidden tabs and tabs in collapsed groups.
-     */
     get visibleTabs() {
       return this.tabContainer.visibleTabs;
-    }
+    },
 
-    get pinnedTabCount() {
+    /**
+     * Returns the number of tabs in the current window, including hidden tabs
+     * and tabs in collapsed groups, but excluding the Firefox View tab.
+     */
+    get openTabCount() {
+      let count = this.tabs.length - this._removingTabs.size;
+      if (FirefoxViewHandler.tab) {
+        count--;
+      }
+      return count;
+    },
+
+    getDuplicateTabsToClose(aTab) {
+      // One would think that a set is better, but it would need to copy all
+      // the strings instead of just keeping references to the nsIURI objects,
+      // and the array is presumed to be small anyways.
+      let keys = [];
+      let keyForTab = tab => {
+        let uri = tab.linkedBrowser?.currentURI;
+        if (!uri) {
+          return null;
+        }
+        return {
+          uri,
+          userContextId: tab.userContextId,
+        };
+      };
+      let keyEquals = (a, b) => {
+        return a.userContextId == b.userContextId && a.uri.equals(b.uri);
+      };
+      if (aTab.multiselected) {
+        for (let tab of this.selectedTabs) {
+          let key = keyForTab(tab);
+          if (key) {
+            keys.push(key);
+          }
+        }
+      } else {
+        let key = keyForTab(aTab);
+        if (key) {
+          keys.push(key);
+        }
+      }
+
+      if (!keys.length) {
+        return [];
+      }
+
+      let duplicateTabs = [];
+      for (let tab of this.tabs) {
+        if (tab == aTab || tab.pinned) {
+          continue;
+        }
+        if (aTab.multiselected && tab.multiselected) {
+          continue;
+        }
+        let key = keyForTab(tab);
+        if (key && keys.some(k => keyEquals(k, key))) {
+          duplicateTabs.push(tab);
+        }
+      }
+
+      return duplicateTabs;
+    },
+
+    getAllDuplicateTabsToClose() {
+      let lastSeenTabs = this.tabs.toSorted(
+        (a, b) => b.lastSeenActive - a.lastSeenActive
+      );
+      let duplicateTabs = [];
+      let keys = [];
+      for (let tab of lastSeenTabs) {
+        const uri = tab.linkedBrowser?.currentURI;
+        if (!uri) {
+          // Can't tell if it's a duplicate without a URI.
+          // Safest to leave it be.
+          continue;
+        }
+
+        const key = {
+          uri,
+          userContextId: tab.userContextId,
+        };
+        if (
+          !tab.pinned &&
+          keys.some(
+            k => k.userContextId == key.userContextId && k.uri.equals(key.uri)
+          )
+        ) {
+          duplicateTabs.push(tab);
+        }
+        keys.push(key);
+      }
+      return duplicateTabs;
+    },
+
+    get _numPinnedTabs() {
       for (var i = 0; i < this.tabs.length; i++) {
         if (!this.tabs[i].pinned) {
           break;
         }
       }
       return i;
-    }
+    },
 
     set selectedTab(val) {
       if (
@@ -441,15 +499,15 @@
       }
       // Update the tab
       this.tabbox.selectedTab = val;
-    }
+    },
 
     get selectedTab() {
       return this._selectedTab;
-    }
+    },
 
     get selectedBrowser() {
       return this._selectedBrowser;
-    }
+    },
 
     _setupInitialBrowserAndTab() {
       // See browser.js for the meaning of window.arguments.
@@ -462,21 +520,6 @@
 
       if (!openWindowInfo && window.arguments && window.arguments[11]) {
         openWindowInfo = window.arguments[11];
-      }
-
-      let extraOptions;
-      if (window.arguments?.[1] instanceof Ci.nsIPropertyBag2) {
-        extraOptions = window.arguments[1];
-      }
-
-      // If our opener provided a remoteType which was responsible for creating
-      // this pop-up window, we'll fall back to using that remote type when no
-      // other remote type is available.
-      let triggeringRemoteType;
-      if (extraOptions?.hasKey("triggeringRemoteType")) {
-        triggeringRemoteType = extraOptions.getPropertyAsACString(
-          "triggeringRemoteType"
-        );
       }
 
       let tabArgument = gBrowserInit.getTabToAdopt();
@@ -506,7 +549,7 @@
       } else if (openWindowInfo) {
         userContextId = openWindowInfo.originAttributes.userContextId;
         if (openWindowInfo.isRemote) {
-          remoteType = triggeringRemoteType ?? E10SUtils.DEFAULT_REMOTE_TYPE;
+          remoteType = E10SUtils.DEFAULT_REMOTE_TYPE;
         } else {
           remoteType = E10SUtils.NOT_REMOTE;
         }
@@ -525,7 +568,7 @@
             uriToLoad,
             gMultiProcessBrowser,
             gFissionBrowser,
-            triggeringRemoteType ?? E10SUtils.DEFAULT_REMOTE_TYPE,
+            E10SUtils.DEFAULT_REMOTE_TYPE,
             null,
             oa
           );
@@ -535,13 +578,6 @@
           // initialization. We can't delay setting up the browser here, as that
           // would mean that `gBrowser.selectedBrowser` might not always exist,
           // which is the current assumption.
-
-          if (Cu.isInAutomation) {
-            ChromeUtils.releaseAssert(
-              !triggeringRemoteType,
-              "Unexpected triggeringRemoteType with no uriToLoad"
-            );
-          }
 
           // In this case we default to the privileged about process as that's
           // the best guess we can make, and we'll likely need it eventually.
@@ -611,7 +647,7 @@
         filter,
         Ci.nsIWebProgress.NOTIFY_ALL
       );
-    }
+    },
 
     /**
      * BEGIN FORWARDED BROWSER PROPERTIES.  IF YOU ADD A PROPERTY TO THE BROWSER ELEMENT
@@ -619,124 +655,120 @@
      */
     get canGoBack() {
       return this.selectedBrowser.canGoBack;
-    }
-
-    get canGoBackIgnoringUserInteraction() {
-      return this.selectedBrowser.canGoBackIgnoringUserInteraction;
-    }
+    },
 
     get canGoForward() {
       return this.selectedBrowser.canGoForward;
-    }
+    },
 
     goBack(requireUserInteraction) {
       return this.selectedBrowser.goBack(requireUserInteraction);
-    }
+    },
 
     goForward(requireUserInteraction) {
       return this.selectedBrowser.goForward(requireUserInteraction);
-    }
+    },
 
     reload() {
       return this.selectedBrowser.reload();
-    }
+    },
 
     reloadWithFlags(aFlags) {
       return this.selectedBrowser.reloadWithFlags(aFlags);
-    }
+    },
 
     stop() {
       return this.selectedBrowser.stop();
-    }
+    },
 
     /**
      * throws exception for unknown schemes
      */
     loadURI(uri, params) {
       return this.selectedBrowser.loadURI(uri, params);
-    }
+    },
     /**
      * throws exception for unknown schemes
      */
     fixupAndLoadURIString(uriString, params) {
       return this.selectedBrowser.fixupAndLoadURIString(uriString, params);
-    }
+    },
 
     gotoIndex(aIndex) {
       return this.selectedBrowser.gotoIndex(aIndex);
-    }
+    },
 
     get currentURI() {
       return this.selectedBrowser.currentURI;
-    }
+    },
 
     get finder() {
       return this.selectedBrowser.finder;
-    }
+    },
 
     get docShell() {
       return this.selectedBrowser.docShell;
-    }
+    },
 
     get webNavigation() {
       return this.selectedBrowser.webNavigation;
-    }
+    },
 
     get webProgress() {
       return this.selectedBrowser.webProgress;
-    }
+    },
 
     get contentWindow() {
       return this.selectedBrowser.contentWindow;
-    }
+    },
 
     get sessionHistory() {
       return this.selectedBrowser.sessionHistory;
-    }
+    },
 
     get contentDocument() {
       return this.selectedBrowser.contentDocument;
-    }
+    },
 
     get contentTitle() {
       return this.selectedBrowser.contentTitle;
-    }
+    },
 
     get contentPrincipal() {
       return this.selectedBrowser.contentPrincipal;
-    }
+    },
 
     get securityUI() {
       return this.selectedBrowser.securityUI;
-    }
+    },
 
     set fullZoom(val) {
       this.selectedBrowser.fullZoom = val;
-    }
+    },
 
     get fullZoom() {
       return this.selectedBrowser.fullZoom;
-    }
+    },
 
     set textZoom(val) {
       this.selectedBrowser.textZoom = val;
-    }
+    },
 
     get textZoom() {
       return this.selectedBrowser.textZoom;
-    }
+    },
 
     get isSyntheticDocument() {
       return this.selectedBrowser.isSyntheticDocument;
-    }
+    },
 
     set userTypedValue(val) {
       this.selectedBrowser.userTypedValue = val;
-    }
+    },
 
     get userTypedValue() {
       return this.selectedBrowser.userTypedValue;
-    }
+    },
 
     _setFindbarData() {
       // Ensure we know what the find bar key is in the content process:
@@ -757,18 +789,18 @@
           metaKey: mods.includes("meta"),
         });
       }
-    }
+    },
 
     isFindBarInitialized(aTab) {
       return (aTab || this.selectedTab)._findBar != undefined;
-    }
+    },
 
     /**
      * Get the already constructed findbar
      */
     getCachedFindBar(aTab = this.selectedTab) {
       return aTab._findBar;
-    }
+    },
 
     /**
      * Get the findbar, and create it if it doesn't exist.
@@ -785,7 +817,7 @@
         aTab._pendingFindBar = this._createFindBar(aTab);
       }
       return aTab._pendingFindBar;
-    }
+    },
 
     /**
      * Create a findbar instance.
@@ -814,17 +846,17 @@
       aTab.dispatchEvent(event);
 
       return findBar;
-    }
+    },
 
     _appendStatusPanel() {
       this.selectedBrowser.insertAdjacentElement("afterend", StatusPanel.panel);
-    }
+    },
 
     _updateTabBarForPinnedTabs() {
       this.tabContainer._unlockTabSizing();
-      this.tabContainer._handleTabSelect(true);
+      this.tabContainer._positionPinnedTabs();
       this.tabContainer._updateCloseButtons();
-    }
+    },
 
     _notifyPinnedStatus(aTab) {
       // browsingContext is expected to not be defined on discarded tabs.
@@ -835,41 +867,50 @@
       let event = document.createEvent("Events");
       event.initEvent(aTab.pinned ? "TabPinned" : "TabUnpinned", true, false);
       aTab.dispatchEvent(event);
-    }
+    },
 
     pinTab(aTab) {
-      if (aTab.pinned || aTab == FirefoxViewHandler.tab) {
+      if (aTab.pinned) {
         return;
       }
 
       this.showTab(aTab);
-      this.#handleTabMove(aTab, () =>
-        this.pinnedTabsContainer.appendChild(aTab)
-      );
-
+      if (this.tabContainer.verticalMode) {
+        let wasFocused = document.activeElement == this.selectedTab;
+        let oldPosition = aTab._tPos;
+        this.verticalPinnedTabsContainer.appendChild(aTab);
+        this._updateAfterMoveTabTo(aTab, oldPosition, wasFocused);
+      } else {
+        this.moveTabTo(aTab, this._numPinnedTabs);
+      }
       aTab.setAttribute("pinned", "true");
       this._updateTabBarForPinnedTabs();
       this._notifyPinnedStatus(aTab);
-    }
+    },
 
     unpinTab(aTab) {
       if (!aTab.pinned) {
         return;
       }
 
-      this.#handleTabMove(aTab, () => {
+      if (this.tabContainer.verticalMode) {
+        let wasFocused = document.activeElement == this.selectedTab;
+        let oldPosition = aTab._tPos;
         // we remove this attribute first, so that allTabs represents
-        // the moving of a tab from the pinned tabs container
+        // the moving of a tab from the vertical pinned tabs container
         // and back into arrowscrollbox.
         aTab.removeAttribute("pinned");
         this.tabContainer.arrowScrollbox.prepend(aTab);
-      });
-
+        this._updateAfterMoveTabTo(aTab, oldPosition, wasFocused);
+      } else {
+        this.moveTabTo(aTab, this._numPinnedTabs - 1);
+        aTab.removeAttribute("pinned");
+      }
       aTab.style.marginInlineStart = "";
       aTab._pinnedUnscrollable = false;
       this._updateTabBarForPinnedTabs();
       this._notifyPinnedStatus(aTab);
-    }
+    },
 
     previewTab(aTab, aCallback) {
       let currentTab = this.selectedTab;
@@ -882,11 +923,55 @@
         this.selectedTab = currentTab;
         this._previewMode = false;
       }
-    }
+    },
+
+    syncThrobberAnimations(aTab) {
+      aTab.ownerGlobal.promiseDocumentFlushed(() => {
+        if (!aTab.container) {
+          return;
+        }
+
+        const animations = Array.from(
+          aTab.container.getElementsByTagName("tab")
+        )
+          .filter(tab => tab.hasAttribute("busy"))
+          .flatMap(tab => tab.throbber?.getAnimations({ subtree: true }) ?? [])
+          .filter(
+            anim =>
+              CSSAnimation.isInstance(anim) &&
+              (anim.animationName === "tab-throbber-animation" ||
+                anim.animationName === "tab-throbber-animation-rtl") &&
+              anim.playState === "running"
+          );
+
+        // Synchronize with the oldest running animation, if any.
+        const firstStartTime = Math.min(
+          ...animations.map(anim =>
+            anim.startTime === null ? Infinity : anim.startTime
+          )
+        );
+        if (firstStartTime === Infinity) {
+          return;
+        }
+        requestAnimationFrame(() => {
+          for (let animation of animations) {
+            // If |animation| has been cancelled since this rAF callback
+            // was scheduled we don't want to set its startTime since
+            // that would restart it. We check for a cancelled animation
+            // by looking for a null currentTime rather than checking
+            // the playState, since reading the playState of
+            // a CSSAnimation object will flush style.
+            if (animation.currentTime !== null) {
+              animation.startTime = firstStartTime;
+            }
+          }
+        });
+      });
+    },
 
     getBrowserAtIndex(aIndex) {
       return this.browsers[aIndex];
-    }
+    },
 
     getBrowserForOuterWindowID(aID) {
       for (let b of this.browsers) {
@@ -896,19 +981,19 @@
       }
 
       return null;
-    }
+    },
 
     getTabForBrowser(aBrowser) {
       return this._tabForBrowser.get(aBrowser);
-    }
+    },
 
     getPanel(aBrowser) {
       return this.getBrowserContainer(aBrowser).parentNode;
-    }
+    },
 
     getBrowserContainer(aBrowser) {
       return (aBrowser || this.selectedBrowser).parentNode.parentNode;
-    }
+    },
 
     getTabNotificationDeck() {
       if (!this._tabNotificationDeck) {
@@ -921,9 +1006,9 @@
         );
       }
       return this._tabNotificationDeck;
-    }
+    },
 
-    _nextNotificationBoxId = 0;
+    _nextNotificationBoxId: 0,
     getNotificationBox(aBrowser) {
       let browser = aBrowser || this.selectedBrowser;
       if (!browser._notificationBox) {
@@ -937,15 +1022,15 @@
           if (browser == this.selectedBrowser) {
             this._updateVisibleNotificationBox(browser);
           }
-        }, this._notificationEnableDelay);
+        });
       }
       return browser._notificationBox;
-    }
+    },
 
     readNotificationBox(aBrowser) {
       let browser = aBrowser || this.selectedBrowser;
       return browser._notificationBox || null;
-    }
+    },
 
     _updateVisibleNotificationBox(aBrowser) {
       if (!this._tabNotificationDeck) {
@@ -956,7 +1041,7 @@
       this.getTabNotificationDeck().selectedViewName = notificationBox
         ? notificationBox.stack.getAttribute("name")
         : "";
-    }
+    },
 
     getTabDialogBox(aBrowser) {
       if (!aBrowser) {
@@ -966,7 +1051,7 @@
         aBrowser.tabDialogBox = new TabDialogBox(aBrowser);
       }
       return aBrowser.tabDialogBox;
-    }
+    },
 
     getTabFromAudioEvent(aEvent) {
       if (!aEvent.isTrusted) {
@@ -976,7 +1061,7 @@
       var browser = aEvent.originalTarget;
       var tab = this.getTabForBrowser(browser);
       return tab;
-    }
+    },
 
     _callProgressListeners(
       aBrowser,
@@ -1015,7 +1100,7 @@
       }
 
       return rv;
-    }
+    },
 
     /**
      * Sets an icon for the tab if the URI is defined in FAVICON_DEFAULTS.
@@ -1024,7 +1109,7 @@
       if (aURI && aURI.spec in FAVICON_DEFAULTS) {
         this.setIcon(aTab, FAVICON_DEFAULTS[aURI.spec]);
       }
-    }
+    },
 
     setIcon(
       aTab,
@@ -1077,14 +1162,14 @@
         aIconURL,
         aOriginalURL,
       ]);
-    }
+    },
 
     getIcon(aTab) {
       let browser = aTab ? this.getBrowserForTab(aTab) : this.selectedBrowser;
       return browser.mIconURL;
-    }
+    },
 
-    setPageInfo(tab, aURL, aDescription, aPreviewImage) {
+    setPageInfo(aURL, aDescription, aPreviewImage) {
       if (aURL) {
         let pageInfo = {
           url: aURL,
@@ -1093,10 +1178,7 @@
         };
         PlacesUtils.history.update(pageInfo).catch(console.error);
       }
-      if (tab) {
-        tab.description = aDescription;
-      }
-    }
+    },
 
     getWindowTitleForBrowser(aBrowser) {
       let docElement = document.documentElement;
@@ -1105,17 +1187,7 @@
         docElement.getAttribute("privatebrowsingmode") == "temporary"
           ? "Private"
           : "Default";
-
-      if (
-        SelectableProfileService?.isEnabled &&
-        SelectableProfileService.currentProfile
-      ) {
-        dataSuffix += "WithProfile";
-      }
-      let defaultTitle = docElement.dataset["title" + dataSuffix].replace(
-        "PROFILENAME",
-        () => SelectableProfileService.currentProfile.name.replace(/\0/g, "")
-      );
+      let defaultTitle = docElement.dataset["title" + dataSuffix];
 
       if (
         !this._shouldExposeContentTitle ||
@@ -1167,24 +1239,18 @@
         // meaning to `replace`.
         // See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/replace#specifying_a_string_as_a_parameter
         // and the documentation for functions for more info about this.
-        return docElement.dataset["contentTitle" + dataSuffix]
-          .replace("CONTENTTITLE", () => title)
-          .replace(
-            "PROFILENAME",
-            () =>
-              SelectableProfileService?.currentProfile?.name.replace(
-                /\0/g,
-                ""
-              ) ?? ""
-          );
+        return docElement.dataset["contentTitle" + dataSuffix].replace(
+          "CONTENTTITLE",
+          () => title
+        );
       }
 
       return defaultTitle;
-    }
+    },
 
     updateTitlebar() {
       document.title = this.getWindowTitleForBrowser(this.selectedBrowser);
-    }
+    },
 
     updateCurrentBrowser(aForceUpdate) {
       let newBrowser = this.getBrowserAtIndex(this.tabContainer.selectedIndex);
@@ -1199,9 +1265,8 @@
 
       let newTab = this.getTabForBrowser(newBrowser);
 
-      let timerId;
       if (!aForceUpdate) {
-        timerId = Glean.browserTabswitch.update.start();
+        TelemetryStopwatch.start("FX_TAB_SWITCH_UPDATE_MS");
 
         if (gMultiProcessBrowser) {
           this._asyncTabSwitching = true;
@@ -1381,6 +1446,8 @@
         this._tabAttrModified(oldTab, ["selected"]);
         this._tabAttrModified(newTab, ["selected"]);
 
+        this.readNotificationBox(newBrowser)?.shown();
+
         this._startMultiSelectChange();
         this._multiSelectChangeSelected = true;
         this.clearMultiSelectedTabs();
@@ -1425,9 +1492,9 @@
       }
 
       if (!aForceUpdate) {
-        Glean.browserTabswitch.update.stopAndAccumulate(timerId);
+        TelemetryStopwatch.finish("FX_TAB_SWITCH_UPDATE_MS");
       }
-    }
+    },
 
     _adjustFocusBeforeTabSwitch(oldTab, newTab) {
       if (this._previewMode) {
@@ -1472,7 +1539,7 @@
           document.activeElement.blur();
         }
       }
-    }
+    },
 
     _adjustFocusAfterTabSwitch(newTab) {
       // Don't steal focus from the tab bar.
@@ -1594,7 +1661,7 @@
       }
 
       fm.setFocus(newBrowser, focusFlags);
-    }
+    },
 
     _tabAttrModified(aTab, aChanged) {
       if (aTab.closing) {
@@ -1609,7 +1676,7 @@
         },
       });
       aTab.dispatchEvent(event);
-    }
+    },
 
     resetBrowserSharing(aBrowser) {
       let tab = this.getTabForBrowser(aBrowser);
@@ -1623,7 +1690,7 @@
       if (aBrowser == this.selectedBrowser) {
         gPermissionPanel.updateSharingIndicator();
       }
-    }
+    },
 
     updateBrowserSharing(aBrowser, aState) {
       let tab = this.getTabForBrowser(aBrowser);
@@ -1651,7 +1718,7 @@
       if (aBrowser == this.selectedBrowser) {
         gPermissionPanel.updateSharingIndicator();
       }
-    }
+    },
 
     getTabSharingState(aTab) {
       // Normalize the state object for consumers (ie.extensions).
@@ -1664,7 +1731,7 @@
         microphone: !!state.microphone,
         screen: state.screen && state.screen.replace("Paused", ""),
       };
-    }
+    },
 
     setInitialTabTitle(aTab, aTitle, aOptions = {}) {
       // Convert some non-content title (actually a url) to human readable title
@@ -1679,9 +1746,9 @@
 
         this._setTabLabel(aTab, aTitle, aOptions);
       }
-    }
+    },
 
-    _dataURLRegEx = /^data:[^,]+;base64,/i;
+    _dataURLRegEx: /^data:[^,]+;base64,/i,
 
     // Regex to test if a string (potential tab label) consists of only non-
     // printable characters. We consider Unicode categories Separator
@@ -1696,8 +1763,8 @@
     // We also ignore combining marks, as in the absence of a printable base
     // character they are unlikely to be usefully rendered, and may well be
     // clipped away entirely.
-    _nonPrintingRegEx =
-      /^[\p{Z}\p{C}\p{M}\u{115f}\u{1160}\u{2800}\u{3164}\u{ffa0}]*$/u;
+    _nonPrintingRegEx:
+      /^[\p{Z}\p{C}\p{M}\u{115f}\u{1160}\u{2800}\u{3164}\u{ffa0}]*$/u,
 
     setTabTitle(aTab) {
       var browser = this.getBrowserForTab(aTab);
@@ -1763,7 +1830,7 @@
       }
 
       return this._setTabLabel(aTab, title, { isContentTitle, isURL });
-    }
+    },
 
     // While an auth prompt from a base domain different than the current sites is open, we do not want to show the tab title of the current site,
     // but of the origin that is requesting authentication.
@@ -1771,7 +1838,7 @@
     // See bug 791594 for reference.
     setTabLabelForAuthPrompts(aTab, aLabel) {
       return this._setTabLabel(aTab, aLabel);
-    }
+    },
 
     _setTabLabel(aTab, aLabel, { beforeTabOpen, isContentTitle, isURL } = {}) {
       if (!aLabel || aLabel.includes("about:reader?")) {
@@ -1824,7 +1891,7 @@
       }
 
       return true;
-    }
+    },
 
     loadTabs(
       aURIs,
@@ -1833,10 +1900,8 @@
         allowThirdPartyFixup,
         inBackground,
         newIndex,
-        elementIndex,
         postDatas,
         replace,
-        tabGroup,
         targetTab,
         triggeringPrincipal,
         csp,
@@ -1864,9 +1929,6 @@
       var firstTabAdded = null;
       var targetTabIndex = -1;
 
-      if (typeof elementIndex == "number") {
-        newIndex = this.#elementIndexToTabIndex(elementIndex);
-      }
       if (typeof newIndex != "number") {
         newIndex = -1;
       }
@@ -1883,11 +1945,6 @@
       }
 
       if (replace) {
-        if (this.isTabGroupLabel(targetTab)) {
-          throw new Error(
-            "Replacing a tab group label with a tab is not supported"
-          );
-        }
         let browser;
         if (targetTab) {
           browser = this.getBrowserForTab(targetTab);
@@ -1930,10 +1987,9 @@
           bulkOrderedOpen: multiple,
           csp,
           fromExternal,
-          tabGroup,
         };
         if (newIndex > -1) {
-          params.tabIndex = newIndex;
+          params.index = newIndex;
         }
         firstTabAdded = this.addTab(aURIs[0], params);
         if (newIndex > -1) {
@@ -1953,10 +2009,9 @@
           bulkOrderedOpen: true,
           csp,
           fromExternal,
-          tabGroup,
         };
         if (targetTabIndex > -1) {
-          params.tabIndex = ++tabNum;
+          params.index = ++tabNum;
         }
         this.addTab(aURIs[i], params);
       }
@@ -1964,7 +2019,7 @@
       if (firstTabAdded && !inBackground) {
         this.selectedTab = firstTabAdded;
       }
-    }
+    },
 
     updateBrowserRemoteness(aBrowser, { newFrameloader, remoteType } = {}) {
       let isRemote = aBrowser.getAttribute("remote") == "true";
@@ -2002,6 +2057,8 @@
       let evt = document.createEvent("Events");
       evt.initEvent("BeforeTabRemotenessChange", true, false);
       tab.dispatchEvent(evt);
+
+      let wasActive = document.activeElement == aBrowser;
 
       // Unhook our progress listener.
       let filter = this._tabFilters.get(tab);
@@ -2094,6 +2151,13 @@
         // process so the browser can no longer be considered to be
         // crashed.
         tab.removeAttribute("crashed");
+        // we call updatetabIndicatorAttr here, rather than _tabAttrModified, so as
+        // to be consistent with how "crashed" attribute changes are handled elsewhere
+        this.tabContainer.updateTabIndicatorAttr(tab);
+      }
+
+      if (wasActive) {
+        aBrowser.focus();
       }
 
       // If the findbar has been initialised, reset its browser reference.
@@ -2106,7 +2170,7 @@
       tab.dispatchEvent(evt);
 
       return true;
-    }
+    },
 
     updateBrowserRemotenessByURL(aBrowser, aURL, aOptions = {}) {
       if (!gMultiProcessBrowser) {
@@ -2135,7 +2199,7 @@
       }
 
       return false;
-    }
+    },
 
     createBrowser({
       isPreloadBrowser,
@@ -2243,7 +2307,7 @@
       }
 
       return b;
-    }
+    },
 
     _createLazyBrowser(aTab) {
       let browser = aTab.linkedBrowser;
@@ -2360,7 +2424,7 @@
           enumerable: true,
         });
       }
-    }
+    },
 
     _insertBrowser(aTab, aInsertedOnTabCreation) {
       "use strict";
@@ -2471,7 +2535,7 @@
         });
         aTab.dispatchEvent(evt);
       }
-    }
+    },
 
     _mayDiscardBrowser(aTab, aForceDiscard) {
       let browser = aTab.linkedBrowser;
@@ -2490,7 +2554,7 @@
       }
 
       return true;
-    }
+    },
 
     discardBrowser(aTab, aForceDiscard) {
       "use strict";
@@ -2516,12 +2580,6 @@
       };
 
       SessionStore.resetBrowserToLazyState(aTab);
-      // Indicate that this tab was explicitly unloaded (i.e. not
-      // from a session restore) in case we want to style that
-      // differently.
-      if (aForceDiscard) {
-        aTab.toggleAttribute("discarded", true);
-      }
 
       // Remove the tab's filter and progress listener.
       let filter = this._tabFilters.get(aTab);
@@ -2568,7 +2626,7 @@
       let evt = new CustomEvent("TabBrowserDiscarded", { bubbles: true });
       aTab.dispatchEvent(evt);
       return true;
-    }
+    },
 
     /**
      * Loads a tab with a default null principal unless specified
@@ -2586,47 +2644,35 @@
         );
       }
       return this.addTab(aURI, params);
-    }
+    },
 
     addAdjacentNewTab(tab) {
       Services.obs.notifyObservers(
         {
           wrappedJSObject: new Promise(resolve => {
             this.selectedTab = this.addTrustedTab(BROWSER_NEW_TAB_URL, {
-              tabIndex: tab._tPos + 1,
+              index: tab._tPos + 1,
               userContextId: tab.userContextId,
-              tabGroup: tab.group,
-              focusUrlBar: true,
             });
             resolve(this.selectedBrowser);
           }),
         },
         "browser-open-newtab-start"
       );
-    }
+    },
 
     /**
      * Must only be used sparingly for content that came from Chrome context
      * If in doubt use addWebTab
-     * @param {string} aURI
-     * @param {object} [options]
-     * @see this.addTab options
-     * @returns {MozTabbrowserTab|null}
      */
-    addTrustedTab(aURI, options = {}) {
-      options.triggeringPrincipal =
+    addTrustedTab(aURI, params = {}) {
+      params.triggeringPrincipal =
         Services.scriptSecurityManager.getSystemPrincipal();
-      return this.addTab(aURI, options);
-    }
+      return this.addTab(aURI, params);
+    },
 
     /**
-     * @param {string} uriString
-     * @param {object} options
-     * @param {MozTabbrowserTabGroup} [options.tabGroup]
-     *   A related tab group where this tab should be added, when applicable.
-     *   When present, the tab is expected to reside in this tab group. When
-     *   absent, the tab is expected to be a standalone tab.
-     * @returns {MozTabbrowserTab|null}
+     * @returns {object}
      *    The new tab. The return value will be null if the tab couldn't be
      *    created; this shouldn't normally happen, and an error will be logged
      *    to the console if it does.
@@ -2646,8 +2692,7 @@
         forceAllowDataURI,
         fromExternal,
         inBackground = true,
-        elementIndex,
-        tabIndex,
+        index,
         lazyTabTitle,
         name,
         noInitialLabel,
@@ -2664,7 +2709,6 @@
         initialBrowsingContextGroupId,
         skipAnimation,
         skipBackgroundNotify,
-        tabGroup,
         triggeringPrincipal,
         userContextId,
         csp,
@@ -2672,7 +2716,7 @@
         insertTab = true,
         globalHistoryOptions,
         triggeringRemoteType,
-        schemelessInput,
+        wasSchemelessInput,
         hasValidUserGestureActivation = false,
         textDirectiveUserActivation = false,
       } = {}
@@ -2691,6 +2735,12 @@
 
       // If we're opening a foreground tab, set the owner by default.
       ownerTab ??= inBackground ? null : this.selectedTab;
+
+      // Don't use document.l10n.setAttributes because the FTL file is loaded
+      // lazily and we won't be able to resolve the string.
+      document
+        .getElementById("History:UndoCloseTab")
+        .setAttribute("data-l10n-args", JSON.stringify({ tabCount: 1 }));
 
       // if we're adding tabs, we're past interrupt mode, ditch the owner
       if (this.selectedTab.owner) {
@@ -2749,15 +2799,13 @@
           skipBackgroundNotify,
         });
         if (insertTab) {
-          // Insert the tab into the tab container in the correct position.
-          this.#insertTabAtIndex(t, {
-            elementIndex,
-            tabIndex,
+          // insert the tab into the tab container in the correct position
+          this._insertTabAtIndex(t, {
+            index,
             ownerTab,
             openerTab,
             pinned,
             bulkOrderedOpen,
-            tabGroup: tabGroup ?? openerTab?.group,
           });
         }
 
@@ -2773,7 +2821,6 @@
           initialBrowsingContextGroupId,
           openWindowInfo,
           skipLoad,
-          triggeringRemoteType,
         }));
 
         if (focusUrlBar) {
@@ -2790,7 +2837,6 @@
             this.UrlbarProviderOpenTabs.registerOpenTab(
               lazyBrowserURI.spec,
               t.userContextId,
-              tabGroup?.id,
               PrivateBrowsingUtils.isWindowPrivate(window)
             );
             b.registeredOpenURI = lazyBrowserURI;
@@ -2860,7 +2906,7 @@
           csp,
           globalHistoryOptions,
           triggeringRemoteType,
-          schemelessInput,
+          wasSchemelessInput,
           hasValidUserGestureActivation:
             hasValidUserGestureActivation ||
             !!openWindowInfo?.hasValidUserGestureActivation,
@@ -2905,39 +2951,23 @@
         this.selectedTab = t;
       }
       return t;
-    }
-
-    #elementIndexToTabIndex(elementIndex) {
-      if (elementIndex < 0) {
-        return -1;
-      }
-      if (elementIndex >= this.tabContainer.ariaFocusableItems.length) {
-        return this.tabs.length;
-      }
-      let element = this.tabContainer.ariaFocusableItems[elementIndex];
-      if (this.isTabGroupLabel(element)) {
-        element = element.group.tabs[0];
-      }
-      return element._tPos;
-    }
+    },
 
     /**
      * @param {string} id
      * @param {string} color
      * @param {boolean} collapsed
      * @param {string} [label=]
-     * @param {boolean} [isAdoptingGroup=false]
      * @returns {MozTabbrowserTabGroup}
      */
-    _createTabGroup(id, color, collapsed, label = "", isAdoptingGroup = false) {
+    _createTabGroup(id, color, collapsed, label = "") {
       let group = document.createXULElement("tab-group", { is: "tab-group" });
       group.id = id;
       group.collapsed = collapsed;
       group.color = color;
       group.label = label;
-      group.wasCreatedByAdoption = isAdoptingGroup;
       return group;
-    }
+    },
 
     /**
      * Adds a new tab group.
@@ -2945,10 +2975,6 @@
      * @param {object[]} tabs
      *   The set of tabs to include in the group.
      * @param {object} [options]
-     * @param {string} [options.id]
-     *   Optionally assign an ID to the tab group. Useful when rebuilding an
-     *   existing group e.g. when restoring. A pseudorandom string will be
-     *   generated if not set.
      * @param {string} [options.color]
      *   Color for the group label. See tabgroup-menu.js for possible values.
      *   If no color specified, will attempt to assign an unused group color.
@@ -2958,32 +2984,8 @@
      *   An optional argument that accepts a single tab, which, if passed, will
      *   cause the group to be inserted just before this tab in the tab strip. By
      *   default, the group will be created at the end of the tab strip.
-     * @param {boolean} [options.isAdoptingGroup]
-     *   Whether the tab group was created because a tab group with the same
-     *   properties is being adopted from a different window.
-     * @param {boolean} [options.isUserTriggered]
-     *   Should be true if this group is being created in response to an
-     *   explicit request from the user (as opposed to a group being created
-     *   for technical reasons, such as when an already existing group
-     *   switches windows).
-     *   Causes the group create UI to be displayed and telemetry events to be fired.
-     * @param {string} [options.telemetryUserCreateSource]
-     *   The means by which the tab group was created.
-     *   @see TabMetrics.METRIC_SOURCE for possible values.
-     *   Defaults to "unknown".
      */
-    addTabGroup(
-      tabs,
-      {
-        id = null,
-        color = null,
-        label = "",
-        insertBefore = null,
-        isAdoptingGroup = false,
-        isUserTriggered = false,
-        telemetryUserCreateSource = "unknown",
-      } = {}
-    ) {
+    addTabGroup(tabs, { color = null, label = "", insertBefore = null } = {}) {
       if (!tabs?.length) {
         throw new Error("Cannot create tab group with zero tabs");
       }
@@ -2992,130 +2994,34 @@
         color = this.tabGroupMenu.nextUnusedColor;
       }
 
-      if (!id) {
-        // Note: If this changes, make sure to also update the
-        // getExtTabGroupIdForInternalTabGroupId implementation in
-        // browser/components/extensions/parent/ext-browser.js.
-        // See: Bug 1960104 - Improve tab group ID generation in addTabGroup
-        id = `${Date.now()}-${Math.round(Math.random() * 100)}`;
-      }
-      let group = this._createTabGroup(
-        id,
-        color,
-        false,
-        label,
-        isAdoptingGroup
-      );
+      let id = `${Date.now()}-${Math.round(Math.random() * 100)}`;
+      let group = this._createTabGroup(id, color, false, label);
       this.tabContainer.insertBefore(
         group,
         insertBefore?.group ?? insertBefore
       );
       group.addTabs(tabs);
 
-      // Bail out if the group is empty at this point. This can happen if all
-      // provided tabs are pinned and therefore cannot be grouped.
-      if (!group.tabs.length) {
-        group.remove();
-        return null;
-      }
-
-      if (isUserTriggered) {
-        group.dispatchEvent(
-          new CustomEvent("TabGroupCreateByUser", {
-            bubbles: true,
-            detail: {
-              telemetryUserCreateSource,
-            },
-          })
-        );
-      }
-
-      // Fixes bug1953801 and bug1954689
-      // Ensure that the tab state cache is updated immediately after creating
-      // a group. This is necessary because we consider group creation a
-      // deliberate user action indicating the tab has importance for the user.
-      // Without this, it is not possible to save and close a tab group with
-      // a short lifetime.
-      group.tabs.forEach(tab => {
-        this.TabStateFlusher.flush(tab.linkedBrowser);
-      });
-
+      group.dispatchEvent(new CustomEvent("TabGroupCreate", { bubbles: true }));
       return group;
-    }
+    },
 
     /**
      * Removes the tab group. This has the effect of closing all the tabs
      * in the group.
      *
+     *
      * @param {MozTabbrowserTabGroup} [group]
      *   The tab group to remove.
      * @param {object} [options]
      *   Options to use when removing tabs. @see removeTabs for more info.
-     * @param {boolean} [options.isUserTriggered=false]
-     *   Should be true if this group is being removed by an explicit
-     *   request from the user (as opposed to a group being removed
-     *   for technical reasons, such as when an already existing group
-     *   switches windows). This causes telemetry events to fire.
-     * @param {string} [options.telemetrySource="unknown"]
-     *   The means by which the tab group was removed.
-     *   @see TabMetrics.METRIC_SOURCE for possible values.
-     *   Defaults to "unknown".
      */
-    async removeTabGroup(
-      group,
-      options = {
-        isUserTriggered: false,
-        telemetrySource: this.TabMetrics.METRIC_SOURCE.UNKNOWN,
-      }
-    ) {
+    removeTabGroup(group, options = {}) {
       if (this.tabGroupMenu.panel.state != "closed") {
         this.tabGroupMenu.panel.hidePopup(options.animate);
       }
-
-      if (!options.skipPermitUnload) {
-        // Process permit unload handlers and allow user cancel
-        let cancel = await this.runBeforeUnloadForTabs(group.tabs);
-        if (cancel) {
-          if (SessionStore.getSavedTabGroup(group.id)) {
-            // If this group is currently saved, it's being removed as part of a
-            // save & close operation. We need to forget the saved group
-            // if the close is canceled.
-            SessionStore.forgetSavedTabGroup(group.id);
-          }
-          return;
-        }
-        options.skipPermitUnload = true;
-      }
-
-      if (group.tabs.length == this.tabs.length) {
-        // explicit calls to removeTabGroup are not expected to save groups.
-        // if removing this group closes a window, we need to tell the window
-        // not to save the group.
-        group.saveOnWindowClose = false;
-      }
-
-      // This needs to be fired before tabs are removed because session store
-      // needs to respond to this while tabs are still part of the group
-      group.dispatchEvent(
-        new CustomEvent("TabGroupRemoveRequested", {
-          bubbles: true,
-          detail: {
-            skipSessionStore: options.skipSessionStore,
-            isUserTriggered: options.isUserTriggered,
-            telemetrySource: options.telemetrySource,
-          },
-        })
-      );
-
-      // Skip session store on a per-tab basis since these tabs will get
-      // recorded as part of a group
-      options.skipSessionStore = true;
-
-      // tell removeTabs not to subprocess groups since we're removing a group.
-      options.skipGroupCheck = true;
-
       this.removeTabs(group.tabs, options);
-    }
+    },
 
     /**
      * Removes a tab from a group. This has no effect on tabs that are not
@@ -3128,84 +3034,39 @@
         return;
       }
 
-      this.#handleTabMove(tab, () =>
-        gBrowser.tabContainer.insertBefore(tab, tab.group.nextElementSibling)
+      let oldPosition = tab._tPos;
+      let wasFocused = document.activeElement == this.selectedTab;
+      let adjacentTab = gBrowser.tabContainer.findNextTab(
+        tab.group.tabs.at(-1)
       );
-    }
 
-    /**
-     * @param {MozTabbrowserTabGroup} group
-     * @param {object} [options]
-     * @param {number} [options.elementIndex]
-     * @param {number} [options.tabIndex]
-     * @param {boolean} [options.selectTab]
-     * @returns {MozTabbrowserTabGroup}
-     */
-    adoptTabGroup(group, { elementIndex, tabIndex, selectTab } = {}) {
+      gBrowser.tabContainer.insertBefore(tab, adjacentTab);
+
+      this._updateAfterMoveTabTo(tab, oldPosition, wasFocused);
+    },
+
+    adoptTabGroup(group, index) {
       if (group.ownerDocument == document) {
-        return group;
+        return;
       }
-      group.removedByAdoption = true;
-      group.saveOnWindowClose = false;
 
-      let oldSelectedTab = selectTab && group.ownerGlobal.gBrowser.selectedTab;
       let newTabs = [];
-
-      // bug1969925 adopting a tab group will cause the window to close if it
-      // is the only thing on the tab strip
-      // In this case, the `TabUngrouped` event will not fire, so we have to do it manually
-      let noOtherTabsInWindow = group.ownerGlobal.gBrowser.nonHiddenTabs.every(
-        t => t.group == group
-      );
-
       for (let tab of group.tabs) {
-        if (noOtherTabsInWindow) {
-          group.dispatchEvent(
-            new CustomEvent("TabUngrouped", {
-              bubbles: true,
-              detail: tab,
-            })
-          );
-        }
-        let adoptedTab = this.adoptTab(tab, {
-          elementIndex,
-          tabIndex,
-          selectTab: tab === oldSelectedTab,
-        });
-        newTabs.push(adoptedTab);
-        // Put next tab after current one.
-        elementIndex = undefined;
-        tabIndex = adoptedTab._tPos + 1;
+        newTabs.push(this.adoptTab(tab, index));
       }
 
-      return this.addTabGroup(newTabs, {
-        id: group.id,
-        label: group.label,
-        color: group.color,
-        insertBefore: newTabs[0],
-        isAdoptingGroup: true,
-      });
-    }
+      this.addTabGroup(newTabs, { label: group.label, color: group.color });
+    },
 
-    getAllTabGroups({ sortByLastSeenActive = false } = {}) {
-      let groups = BrowserWindowTracker.getOrderedWindows({
-        private: PrivateBrowsingUtils.isWindowPrivate(window),
-      }).reduce(
-        (acc, thisWindow) => acc.concat(thisWindow.gBrowser.tabGroups),
+    getAllTabGroups() {
+      return BrowserWindowTracker.orderedWindows.reduce(
+        (acc, window) => acc.concat(window.gBrowser.tabGroups),
         []
       );
-      if (sortByLastSeenActive) {
-        groups.sort(
-          (group1, group2) => group2.lastSeenActive - group1.lastSeenActive
-        );
-      }
-      return groups;
-    }
+    },
 
     getTabGroupById(id) {
-      for (const win of BrowserWindowTracker.getOrderedWindows({
-        private: PrivateBrowsingUtils.isWindowPrivate(window),
-      })) {
+      for (const win of BrowserWindowTracker.orderedWindows) {
         for (const group of win.gBrowser.tabGroups) {
           if (group.id === id) {
             return group;
@@ -3213,7 +3074,7 @@
         }
       }
       return null;
-    }
+    },
 
     _determineURIToLoad(uriString, createLazyBrowser) {
       uriString = uriString || "about:blank";
@@ -3232,12 +3093,8 @@
 
       let uriIsAboutBlank = uriString == "about:blank";
       return { uri: aURIObject, uriIsAboutBlank, lazyBrowserURI, uriString };
-    }
+    },
 
-    /**
-     * @param {object} options
-     * @returns {MozTabbrowserTab}
-     */
     _createTab({
       uriString,
       userContextId,
@@ -3306,7 +3163,7 @@
       }
 
       return t;
-    }
+    },
 
     _createBrowserForTab(
       tab,
@@ -3322,15 +3179,8 @@
         initialBrowsingContextGroupId,
         openWindowInfo,
         skipLoad,
-        triggeringRemoteType,
       }
     ) {
-      // If we don't have a preferred remote type (or it is `NOT_REMOTE`), and
-      // we have a remote triggering remote type, use that instead.
-      if (!preferredRemoteType && triggeringRemoteType) {
-        preferredRemoteType = triggeringRemoteType;
-      }
-
       // If we don't have a preferred remote type, and we have a remote
       // opener, use the opener's remote type.
       if (!preferredRemoteType && openerBrowser) {
@@ -3410,7 +3260,7 @@
       this.setDefaultIcon(tab, uri);
 
       return { browser: b, usingPreloadedContent };
-    }
+    },
 
     _kickOffBrowserLoad(
       browser,
@@ -3434,7 +3284,7 @@
         csp,
         globalHistoryOptions,
         triggeringRemoteType,
-        schemelessInput,
+        wasSchemelessInput,
         hasValidUserGestureActivation,
         textDirectiveUserActivation,
       }
@@ -3500,7 +3350,7 @@
             csp,
             globalHistoryOptions,
             triggeringRemoteType,
-            schemelessInput,
+            wasSchemelessInput,
             hasValidUserGestureActivation,
             textDirectiveUserActivation,
           });
@@ -3508,7 +3358,7 @@
           console.error(ex);
         }
       }
-    }
+    },
 
     /**
      * @typedef {object} TabGroupWorkingData
@@ -3534,6 +3384,7 @@
       let tabsFragment = document.createDocumentFragment();
       let tabToSelect = null;
       let hiddenTabs = new Map();
+      let shouldUpdateForPinnedTabs = false;
       /** @type {Map<TabGroupStateData['id'], TabGroupWorkingData>} */
       let tabGroupWorkingData = new Map();
 
@@ -3626,9 +3477,21 @@
         tabs.push(tab);
 
         if (tabData.pinned) {
-          this.pinTab(tab);
-          // Then ensure all the tab open/pinning information is sent.
-          this._fireTabOpen(tab, {});
+          // Calling `pinTab` calls `moveTabTo`, which assumes the tab is
+          // inserted in the DOM. If the tab is not yet in the DOM,
+          // just insert it in the right place from the start.
+          if (!tab.parentNode) {
+            tab._tPos = this._numPinnedTabs;
+            this.tabContainer.insertBefore(tab, this.tabs[this._numPinnedTabs]);
+            tab.toggleAttribute("pinned", true);
+            this.tabContainer._invalidateCachedTabs();
+            // Then ensure all the tab open/pinning information is sent.
+            this._fireTabOpen(tab, {});
+            this._notifyPinnedStatus(tab);
+            // Once we're done adding all tabs, _updateTabBarForPinnedTabs
+            // needs calling:
+            shouldUpdateForPinnedTabs = true;
+          }
         } else if (tabData.groupId) {
           let { groupId } = tabData;
           const tabGroup = tabGroupWorkingData.get(groupId);
@@ -3683,6 +3546,9 @@
       }
 
       this.tabContainer._invalidateCachedTabs();
+      if (shouldUpdateForPinnedTabs) {
+        this._updateTabBarForPinnedTabs();
+      }
 
       // We need to wait until after all tabs have been appended to the DOM
       // to remove the old selected tab.
@@ -3719,22 +3585,27 @@
       }
 
       return tabs;
-    }
+    },
 
     moveTabsToStart(contextTab) {
       let tabs = contextTab.multiselected ? this.selectedTabs : [contextTab];
       // Walk the array in reverse order so the tabs are kept in order.
       for (let i = tabs.length - 1; i >= 0; i--) {
-        this.moveTabToStart(tabs[i]);
+        let tab = tabs[i];
+        if (tab._tPos > 0) {
+          this.moveTabTo(tab, 0);
+        }
       }
-    }
+    },
 
     moveTabsToEnd(contextTab) {
       let tabs = contextTab.multiselected ? this.selectedTabs : [contextTab];
       for (let tab of tabs) {
-        this.moveTabToEnd(tab);
+        if (tab._tPos < this.tabs.length - 1) {
+          this.moveTabTo(tab, this.tabs.length - 1);
+        }
       }
-    }
+    },
 
     warnAboutClosingTabs(tabsToClose, aCloseTabs) {
       // We want to warn about closing duplicates even if there was only a
@@ -3821,7 +3692,7 @@
           args: { tabCount: tabsToClose },
         },
         { id: "tabbrowser-confirm-close-tabs-button" },
-        { id: "tabbrowser-ask-close-tabs-checkbox" },
+        { id: "tabbrowser-confirm-close-tabs-checkbox" },
       ]);
       let flags =
         ps.BUTTON_TITLE_IS_STRING * ps.BUTTON_POS_0 +
@@ -3852,30 +3723,14 @@
       }
 
       return reallyClose;
-    }
+    },
 
     /**
-     * This determines where the tab should be inserted within the tabContainer,
-     * and inserts it.
-     *
-     * @param {MozTabbrowserTab} tab
-     * @param {object} [options]
-     * @param {number} [options.elementIndex]
-     * @param {number} [options.tabIndex]
-     * @param {MozTabbrowserTabGroup} [options.tabGroup]
-     *   A related tab group where this tab should be added, when applicable.
+     * This determines where the tab should be inserted within the tabContainer
      */
-    #insertTabAtIndex(
+    _insertTabAtIndex(
       tab,
-      {
-        tabIndex,
-        elementIndex,
-        ownerTab,
-        openerTab,
-        pinned,
-        bulkOrderedOpen,
-        tabGroup,
-      } = {}
+      { index, ownerTab, openerTab, pinned, bulkOrderedOpen } = {}
     ) {
       // If this new tab is owned by another, assert that relationship
       if (ownerTab) {
@@ -3883,9 +3738,9 @@
       }
 
       // Ensure we have an index if one was not provided.
-      if (typeof elementIndex != "number" && typeof tabIndex != "number") {
+      if (typeof index != "number") {
         // Move the new tab after another tab if needed, to the end otherwise.
-        elementIndex = Infinity;
+        index = Infinity;
         if (
           !bulkOrderedOpen &&
           ((openerTab &&
@@ -3897,20 +3752,10 @@
           let lastRelatedTab =
             openerTab && this._lastRelatedTabMap.get(openerTab);
           let previousTab = lastRelatedTab || openerTab || this.selectedTab;
-          if (!tabGroup) {
-            tabGroup = previousTab.group;
-          }
-          if (
-            Services.prefs.getBoolPref(
-              "browser.tabs.insertAfterCurrentExceptPinned"
-            ) &&
-            previousTab.pinned
-          ) {
-            elementIndex = Infinity;
-          } else if (previousTab.visible) {
-            elementIndex = previousTab.elementIndex + 1;
+          if (previousTab.visible) {
+            index = previousTab._tPos + 1;
           } else if (previousTab == FirefoxViewHandler.tab) {
-            elementIndex = 0;
+            index = 0;
           }
 
           if (lastRelatedTab) {
@@ -3924,69 +3769,33 @@
           }
         }
       }
-
-      let allItems;
-      let index;
-      if (typeof elementIndex == "number") {
-        allItems = this.tabContainer.ariaFocusableItems;
-        index = elementIndex;
-      } else {
-        allItems = this.tabs;
-        index = tabIndex;
-      }
       // Ensure index is within bounds.
-      if (tab.pinned) {
+      if (pinned) {
         index = Math.max(index, 0);
-        index = Math.min(index, this.pinnedTabCount);
+        index = Math.min(index, this._numPinnedTabs);
       } else {
-        index = Math.max(index, this.pinnedTabCount);
-        index = Math.min(index, allItems.length);
+        index = Math.max(index, this._numPinnedTabs);
+        index = Math.min(index, this.tabs.length);
       }
-      /** @type {MozTabbrowserTab|undefined} */
-      let itemAfter = allItems.at(index);
 
+      let tabAfter = this.tabs[index] || null;
+      this.tabContainer._invalidateCachedTabs();
       // Prevent a flash of unstyled content by setting up the tab content
       // and inherited attributes before appending it (see Bug 1592054):
       tab.initialize();
-
-      this.tabContainer._invalidateCachedTabs();
-
-      if (tabGroup) {
-        if (this.isTab(itemAfter) && itemAfter.group == tabGroup) {
-          // Place at the front of, or between tabs in, the same tab group
-          this.tabContainer.insertBefore(tab, itemAfter);
-        } else {
-          // Place tab at the end of the contextual tab group because one of:
-          // 1) no `itemAfter` so `tab` should be the last tab in the tab strip
-          // 2) `itemAfter` is in a different tab group
-          tabGroup.appendChild(tab);
-        }
-      } else if (
-        (this.isTab(itemAfter) && itemAfter.group?.tabs[0] == itemAfter) ||
-        this.isTabGroupLabel(itemAfter)
-      ) {
-        // If there is ambiguity around whether or not a tab should be inserted
-        // into a group (i.e. because the new tab is being inserted on the
-        // edges of the group), prefer not to insert the tab into the group.
-        //
-        // We only need to handle the case where the tab is being inserted at
-        // the starting boundary of a group because `insertBefore` called on
-        // the tab just after a tab group will not add it to the group by
-        // default.
-        this.tabContainer.insertBefore(tab, itemAfter.group);
+      this.tabContainer.insertBefore(tab, tabAfter);
+      if (tabAfter) {
+        this._updateTabsAfterInsert();
       } else {
-        // Place ungrouped tab before `itemAfter` by default
-        this.tabContainer.insertBefore(tab, itemAfter);
+        tab._tPos = index;
       }
-
-      this._updateTabsAfterInsert();
 
       if (pinned) {
         this._updateTabBarForPinnedTabs();
       }
 
       TabBarVisibility.update();
-    }
+    },
 
     /**
      * Dispatch a new tab event. This should be called when things are in a
@@ -4000,24 +3809,20 @@
         detail: eventDetail || {},
       });
       tab.dispatchEvent(evt);
-    }
+    },
 
-    /**
-     * @param {MozTabbrowserTab} aTab
-     * @returns {MozTabbrowserTab[]}
-     */
-    _getTabsToTheStartFrom(aTab) {
+    getTabsToTheStartFrom(aTab) {
       let tabsToStart = [];
       if (!aTab.visible) {
         return tabsToStart;
       }
-      let tabs = this.openTabs;
+      let tabs = this.visibleTabs;
       for (let i = 0; i < tabs.length; ++i) {
         if (tabs[i] == aTab) {
           break;
         }
-        // Ignore pinned and hidden tabs.
-        if (tabs[i].pinned || tabs[i].hidden) {
+        // Ignore pinned tabs.
+        if (tabs[i].pinned) {
           continue;
         }
         // In a multi-select context, select all unselected tabs
@@ -4028,24 +3833,20 @@
         tabsToStart.push(tabs[i]);
       }
       return tabsToStart;
-    }
+    },
 
-    /**
-     * @param {MozTabbrowserTab} aTab
-     * @returns {MozTabbrowserTab[]}
-     */
-    _getTabsToTheEndFrom(aTab) {
+    getTabsToTheEndFrom(aTab) {
       let tabsToEnd = [];
       if (!aTab.visible) {
         return tabsToEnd;
       }
-      let tabs = this.openTabs;
+      let tabs = this.visibleTabs;
       for (let i = tabs.length - 1; i >= 0; --i) {
         if (tabs[i] == aTab) {
           break;
         }
-        // Ignore pinned and hidden tabs.
-        if (tabs[i].pinned || tabs[i].hidden) {
+        // Ignore pinned tabs.
+        if (tabs[i].pinned) {
           continue;
         }
         // In a multi-select context, select all unselected tabs
@@ -4056,102 +3857,17 @@
         tabsToEnd.push(tabs[i]);
       }
       return tabsToEnd;
-    }
+    },
 
-    getDuplicateTabsToClose(aTab) {
-      // One would think that a set is better, but it would need to copy all
-      // the strings instead of just keeping references to the nsIURI objects,
-      // and the array is presumed to be small anyways.
-      let keys = [];
-      let keyForTab = tab => {
-        let uri = tab.linkedBrowser?.currentURI;
-        if (!uri) {
-          return null;
-        }
-        return {
-          uri,
-          userContextId: tab.userContextId,
-        };
-      };
-      let keyEquals = (a, b) => {
-        return a.userContextId == b.userContextId && a.uri.equals(b.uri);
-      };
-      if (aTab.multiselected) {
-        for (let tab of this.selectedTabs) {
-          let key = keyForTab(tab);
-          if (key) {
-            keys.push(key);
-          }
-        }
-      } else {
-        let key = keyForTab(aTab);
-        if (key) {
-          keys.push(key);
-        }
-      }
-
-      if (!keys.length) {
-        return [];
-      }
-
-      let duplicateTabs = [];
-      for (let tab of this.tabs) {
-        if (tab == aTab || tab.pinned) {
-          continue;
-        }
-        if (aTab.multiselected && tab.multiselected) {
-          continue;
-        }
-        let key = keyForTab(tab);
-        if (key && keys.some(k => keyEquals(k, key))) {
-          duplicateTabs.push(tab);
-        }
-      }
-
-      return duplicateTabs;
-    }
-
-    getAllDuplicateTabsToClose() {
-      let lastSeenTabs = this.tabs.toSorted(
-        (a, b) => b.lastSeenActive - a.lastSeenActive
-      );
-      let duplicateTabs = [];
-      let keys = [];
-      for (let tab of lastSeenTabs) {
-        const uri = tab.linkedBrowser?.currentURI;
-        if (!uri) {
-          // Can't tell if it's a duplicate without a URI.
-          // Safest to leave it be.
-          continue;
-        }
-
-        const key = {
-          uri,
-          userContextId: tab.userContextId,
-        };
-        if (
-          !tab.pinned &&
-          keys.some(
-            k => k.userContextId == key.userContextId && k.uri.equals(key.uri)
-          )
-        ) {
-          duplicateTabs.push(tab);
-        }
-        keys.push(key);
-      }
-      return duplicateTabs;
-    }
-
-    removeDuplicateTabs(aTab, options) {
+    removeDuplicateTabs(aTab) {
       this._removeDuplicateTabs(
         aTab,
         this.getDuplicateTabsToClose(aTab),
-        this.closingTabsEnum.DUPLICATES,
-        options
+        this.closingTabsEnum.DUPLICATES
       );
-    }
+    },
 
-    _removeDuplicateTabs(aConfirmationAnchor, tabs, aCloseTabs, options) {
+    _removeDuplicateTabs(aConfirmationAnchor, tabs, aCloseTabs) {
       if (!tabs.length) {
         return;
       }
@@ -4160,13 +3876,13 @@
         return;
       }
 
-      this.removeTabs(tabs, options);
+      this.removeTabs(tabs);
       ConfirmationHint.show(
         aConfirmationAnchor,
         "confirmation-hint-duplicate-tabs-closed",
         { l10nArgs: { tabCount: tabs.length } }
       );
-    }
+    },
 
     removeAllDuplicateTabs() {
       // I would like to have the caller provide this target,
@@ -4177,53 +3893,51 @@
         this.getAllDuplicateTabsToClose(),
         this.closingTabsEnum.ALL_DUPLICATES
       );
-    }
+    },
 
     /**
      * In a multi-select context, the tabs (except pinned tabs) that are located to the
      * left of the leftmost selected tab will be removed.
      */
-    removeTabsToTheStartFrom(aTab, options) {
-      let tabs = this._getTabsToTheStartFrom(aTab);
+    removeTabsToTheStartFrom(aTab) {
+      let tabs = this.getTabsToTheStartFrom(aTab);
       if (
         !this.warnAboutClosingTabs(tabs.length, this.closingTabsEnum.TO_START)
       ) {
         return;
       }
 
-      this.removeTabs(tabs, options);
-    }
+      this.removeTabs(tabs);
+    },
 
     /**
      * In a multi-select context, the tabs (except pinned tabs) that are located to the
      * right of the rightmost selected tab will be removed.
      */
-    removeTabsToTheEndFrom(aTab, options) {
-      let tabs = this._getTabsToTheEndFrom(aTab);
+    removeTabsToTheEndFrom(aTab) {
+      let tabs = this.getTabsToTheEndFrom(aTab);
       if (
         !this.warnAboutClosingTabs(tabs.length, this.closingTabsEnum.TO_END)
       ) {
         return;
       }
 
-      this.removeTabs(tabs, options);
-    }
+      this.removeTabs(tabs);
+    },
 
     /**
-     * Remove all tabs but `aTab`. By default, in a multi-select context, all
+     * Remove all tabs but aTab. By default, in a multi-select context, all
      * unpinned and unselected tabs are removed. Otherwise all unpinned tabs
      * except aTab are removed. This behavior can be changed using the the bool
      * flags below.
      *
-     * @param {MozTabbrowserTab} aTab
-     *   The tab we will skip removing
-     * @param {object} [aParams]
-     *   An optional set of parameters that will be passed to the
-     *   `removeTabs` function.
-     * @param {boolean} [aParams.skipWarnAboutClosingTabs=false]
-     *   Skip showing the tab close warning prompt.
-     * @param {boolean} [aParams.skipPinnedOrSelectedTabs=true]
-     *   Skip closing tabs that are selected or pinned.
+     * @param   aTab The tab we will skip removing
+     * @param   aParams An optional set of parameters that will be passed to the
+     *          removeTabs function.
+     * @param   {boolean} [aParams.skipWarnAboutClosingTabs=false] Skip showing
+     *          the tab close warning prompt.
+     * @param   {boolean} [aParams.skipPinnedOrSelectedTabs=true] Skip closing
+     *          tabs that are selected or pinned.
      */
     removeAllTabsBut(aTab, aParams = {}) {
       let {
@@ -4231,22 +3945,21 @@
         skipPinnedOrSelectedTabs = true,
       } = aParams;
 
-      /** @type {function(MozTabbrowserTab):boolean} */
       let filterFn;
 
       // If enabled also filter by selected or pinned state.
       if (skipPinnedOrSelectedTabs) {
         if (aTab?.multiselected) {
-          filterFn = tab => !tab.multiselected && !tab.pinned && !tab.hidden;
+          filterFn = tab => !tab.multiselected && !tab.pinned;
         } else {
-          filterFn = tab => tab != aTab && !tab.pinned && !tab.hidden;
+          filterFn = tab => tab != aTab && !tab.pinned;
         }
       } else {
         // Exclude just aTab from being removed.
         filterFn = tab => tab != aTab;
       }
 
-      let tabsToRemove = this.openTabs.filter(filterFn);
+      let tabsToRemove = this.visibleTabs.filter(filterFn);
 
       // If enabled show the tab close warning.
       if (
@@ -4260,9 +3973,9 @@
       }
 
       this.removeTabs(tabsToRemove, aParams);
-    }
+    },
 
-    removeMultiSelectedTabs({ isUserTriggered, telemetrySource } = {}) {
+    removeMultiSelectedTabs() {
       let selectedTabs = this.selectedTabs;
       if (
         !this.warnAboutClosingTabs(
@@ -4273,12 +3986,12 @@
         return;
       }
 
-      this.removeTabs(selectedTabs, { isUserTriggered, telemetrySource });
-    }
+      this.removeTabs(selectedTabs);
+    },
 
     /**
      * @typedef {object} _startRemoveTabsReturnValue
-     * @property {Promise<void>} beforeUnloadComplete
+     * @property {Promise} beforeUnloadComplete
      *   A promise that is resolved once all the beforeunload handlers have been
      *   called.
      * @property {object[]} tabsWithBeforeUnloadPrompt
@@ -4317,24 +4030,18 @@
         skipPermitUnload,
         skipRemoves,
         skipSessionStore,
-        isUserTriggered,
-        telemetrySource,
       }
     ) {
       // Note: if you change any of the unload algorithm, consider also
       // changing `runBeforeUnloadForTabs` above.
-      /** @type {MozTabbrowserTab[]} */
       let tabsWithBeforeUnloadPrompt = [];
-      /** @type {MozTabbrowserTab[]} */
       let tabsWithoutBeforeUnload = [];
-      /** @type {Promise<void>[]} */
       let beforeUnloadPromises = [];
-      /** @type {MozTabbrowserTab|undefined} */
       let lastToClose;
 
       for (let tab of tabs) {
         if (!skipRemoves) {
-          tab._closedInMultiselection = true;
+          tab._closedInGroup = true;
         }
         if (!skipRemoves && tab.selected) {
           lastToClose = tab;
@@ -4343,7 +4050,7 @@
             this._getSwitcher().warmupTab(toBlurTo);
           }
         } else if (!skipPermitUnload && this._hasBeforeUnload(tab)) {
-          let timerId = Glean.browserTabclose.permitUnloadTime.start();
+          TelemetryStopwatch.start("FX_TAB_CLOSE_PERMIT_UNLOAD_TIME_MS", tab);
           // We need to block while calling permitUnload() because it
           // processes the event queue and may lead to another removeTab()
           // call before permitUnload() returns.
@@ -4355,8 +4062,9 @@
             tab.linkedBrowser.asyncPermitUnload("dontUnload").then(
               ({ permitUnload }) => {
                 tab._pendingPermitUnload = false;
-                Glean.browserTabclose.permitUnloadTime.stopAndAccumulate(
-                  timerId
+                TelemetryStopwatch.finish(
+                  "FX_TAB_CLOSE_PERMIT_UNLOAD_TIME_MS",
+                  tab
                 );
                 if (tab.closing) {
                   // The tab was closed by the user while we were in permitUnload, don't
@@ -4379,8 +4087,9 @@
               err => {
                 console.error("error while calling asyncPermitUnload", err);
                 tab._pendingPermitUnload = false;
-                Glean.browserTabclose.permitUnloadTime.stopAndAccumulate(
-                  timerId
+                TelemetryStopwatch.finish(
+                  "FX_TAB_CLOSE_PERMIT_UNLOAD_TIME_MS",
+                  tab
                 );
               }
             )
@@ -4401,8 +4110,6 @@
             prewarmed: true,
             skipPermitUnload,
             skipSessionStore,
-            isUserTriggered,
-            telemetrySource,
           });
         }
       }
@@ -4412,7 +4119,7 @@
         tabsWithBeforeUnloadPrompt,
         lastToClose,
       };
-    }
+    },
 
     /**
      * Runs the before unload handler for the provided tabs, waiting for them
@@ -4457,50 +4164,12 @@
         console.error(e);
       }
       return false;
-    }
-
-    /**
-     * Given an array of tabs, returns a tuple [groups, leftoverTabs] such that:
-     *  - groups contains all groups whose tabs are a subset of the initial array
-     *  - leftoverTabs contains the remaining tabs
-     * @param {Array} tabs list of tabs
-     * @returns {Array} a tuple where the first element is an array of groups
-     *                  and the second is an array of tabs
-     */
-    #separateWholeGroups(tabs) {
-      /**
-       * Map of tab group to surviving tabs in the group.
-       * If any of the `tabs` to be removed belong to a tab group, keep track
-       * of how many tabs in the tab group will be left after removing `tabs`.
-       * For any tab group with 0 surviving tabs, we can know that that tab
-       * group will be removed as a consequence of removing these `tabs`.
-       * @type {Map<MozTabbrowserTabGroup, Set<MozTabbrowserTab>>}
-       */
-      let tabGroupSurvivingTabs = new Map();
-      let wholeGroups = [];
-      for (let tab of tabs) {
-        if (tab.group) {
-          if (!tabGroupSurvivingTabs.has(tab.group)) {
-            tabGroupSurvivingTabs.set(tab.group, new Set(tab.group.tabs));
-          }
-          tabGroupSurvivingTabs.get(tab.group).delete(tab);
-        }
-      }
-
-      for (let [tabGroup, survivingTabs] of tabGroupSurvivingTabs.entries()) {
-        if (!survivingTabs.size) {
-          wholeGroups.push(tabGroup);
-          tabs = tabs.filter(t => !tabGroup.tabs.includes(t));
-        }
-      }
-
-      return [wholeGroups, tabs];
-    }
+    },
 
     /**
      * Removes multiple tabs from the tab browser.
      *
-     * @param {MozTabbrowserTab[]} tabs
+     * @param {object[]} tabs
      *   The set of tabs to remove.
      * @param {object} [options]
      * @param {boolean} [options.animate]
@@ -4512,10 +4181,6 @@
      *   using it in tandem with `runBeforeUnloadForTabs`.
      * @param {boolean}  [options.skipSessionStore]
      *   If true, don't record the closed tabs in SessionStore.
-     * @param {boolean} [options.skipGroupCheck]
-     *   Skip separate processing of whole tab groups from the set of tabs.
-     *   Used by removeTabGroup.
-     * TODO add docs
      */
     removeTabs(
       tabs,
@@ -4524,9 +4189,6 @@
         suppressWarnAboutClosingWindow = false,
         skipPermitUnload = false,
         skipSessionStore = false,
-        skipGroupCheck = false,
-        isUserTriggered = false,
-        telemetrySource,
       } = {}
     ) {
       // When 'closeWindowWithLastTab' pref is enabled, closing all tabs
@@ -4543,31 +4205,11 @@
         return;
       }
 
-      if (!skipSessionStore) {
-        SessionStore.resetLastClosedTabCount(window);
-      }
+      SessionStore.resetLastClosedTabCount(window);
       this._clearMultiSelectionLocked = true;
 
       // Guarantee that _clearMultiSelectionLocked lock gets released.
       try {
-        // If selection includes entire groups, we might want to save them
-        if (!skipGroupCheck) {
-          let [groups, leftoverTabs] = this.#separateWholeGroups(tabs);
-          groups.forEach(group => {
-            if (!skipSessionStore) {
-              group.save();
-            }
-            this.removeTabGroup(group, {
-              animate,
-              skipSessionStore,
-              skipPermitUnload,
-              isUserTriggered,
-              telemetrySource,
-            });
-          });
-          tabs = leftoverTabs;
-        }
-
         let { beforeUnloadComplete, tabsWithBeforeUnloadPrompt, lastToClose } =
           this._startRemoveTabs(tabs, {
             animate,
@@ -4575,8 +4217,6 @@
             skipPermitUnload,
             skipRemoves: false,
             skipSessionStore,
-            isUserTriggered,
-            telemetrySource,
           });
 
         // Wait for all the beforeunload events to have been processed by content processes.
@@ -4600,8 +4240,6 @@
           prewarmed: true,
           skipPermitUnload,
           skipSessionStore,
-          isUserTriggered,
-          telemetrySource,
         };
 
         // Now run again sequentially the beforeunload listeners that will result in a prompt.
@@ -4609,7 +4247,7 @@
           this.removeTab(tab, aParams);
           if (!tab.closing) {
             // If we abort the closing of the tab.
-            tab._closedInMultiselection = false;
+            tab._closedInGroup = false;
           }
         }
 
@@ -4624,11 +4262,19 @@
 
       this._clearMultiSelectionLocked = false;
       this._avoidSingleSelectedTab();
-    }
+      // Don't use document.l10n.setAttributes because the FTL file is loaded
+      // lazily and we won't be able to resolve the string.
+      document.getElementById("History:UndoCloseTab").setAttribute(
+        "data-l10n-args",
+        JSON.stringify({
+          tabCount: SessionStore.getLastClosedTabCount(window),
+        })
+      );
+    },
 
     removeCurrentTab(aParams) {
       this.removeTab(this.selectedTab, aParams);
-    }
+    },
 
     removeTab(
       aTab,
@@ -4639,8 +4285,6 @@
         closeWindowWithLastTab,
         prewarmed,
         skipSessionStore,
-        isUserTriggered,
-        telemetrySource,
       } = {}
     ) {
       if (UserInteraction.running("browser.tabs.opening", window)) {
@@ -4649,11 +4293,14 @@
 
       // Telemetry stopwatches may already be running if removeTab gets
       // called again for an already closing tab.
-      if (!aTab._closeTimeAnimTimerId && !aTab._closeTimeNoAnimTimerId) {
+      if (
+        !TelemetryStopwatch.running("FX_TAB_CLOSE_TIME_ANIM_MS", aTab) &&
+        !TelemetryStopwatch.running("FX_TAB_CLOSE_TIME_NO_ANIM_MS", aTab)
+      ) {
         // Speculatevely start both stopwatches now. We'll cancel one of
         // the two later depending on whether we're animating.
-        aTab._closeTimeAnimTimerId = Glean.browserTabclose.timeAnim.start();
-        aTab._closeTimeNoAnimTimerId = Glean.browserTabclose.timeNoAnim.start();
+        TelemetryStopwatch.start("FX_TAB_CLOSE_TIME_ANIM_MS", aTab);
+        TelemetryStopwatch.start("FX_TAB_CLOSE_TIME_NO_ANIM_MS", aTab);
       }
 
       // Handle requests for synchronously removing an already
@@ -4678,14 +4325,10 @@
           closeWindowWithLastTab,
           prewarmed,
           skipSessionStore,
-          isUserTriggered,
-          telemetrySource,
         })
       ) {
-        Glean.browserTabclose.timeAnim.cancel(aTab._closeTimeAnimTimerId);
-        aTab._closeTimeAnimTimerId = null;
-        Glean.browserTabclose.timeNoAnim.cancel(aTab._closeTimeNoAnimTimerId);
-        aTab._closeTimeNoAnimTimerId = null;
+        TelemetryStopwatch.cancel("FX_TAB_CLOSE_TIME_ANIM_MS", aTab);
+        TelemetryStopwatch.cancel("FX_TAB_CLOSE_TIME_NO_ANIM_MS", aTab);
         return;
       }
 
@@ -4717,15 +4360,13 @@
         tabWidth == 0 /* fade-in transition hasn't moved yet */
       ) {
         // We're not animating, so we can cancel the animation stopwatch.
-        Glean.browserTabclose.timeAnim.cancel(aTab._closeTimeAnimTimerId);
-        aTab._closeTimeAnimTimerId = null;
+        TelemetryStopwatch.cancel("FX_TAB_CLOSE_TIME_ANIM_MS", aTab);
         this._endRemoveTab(aTab);
         return;
       }
 
       // We're animating, so we can cancel the non-animation stopwatch.
-      Glean.browserTabclose.timeNoAnim.cancel(aTab._closeTimeNoAnimTimerId);
-      aTab._closeTimeNoAnimTimerId = null;
+      TelemetryStopwatch.cancel("FX_TAB_CLOSE_TIME_NO_ANIM_MS", aTab);
 
       aTab.style.maxWidth = ""; // ensure that fade-out transition happens
       aTab.removeAttribute("fadein");
@@ -4748,7 +4389,7 @@
         aTab,
         this
       );
-    }
+    },
 
     _hasBeforeUnload(aTab) {
       let browser = aTab.linkedBrowser;
@@ -4756,7 +4397,7 @@
         return browser.hasBeforeUnload;
       }
       return false;
-    }
+    },
 
     _beginRemoveTab(
       aTab,
@@ -4767,8 +4408,6 @@
         skipPermitUnload,
         prewarmed,
         skipSessionStore = false,
-        isUserTriggered,
-        telemetrySource,
       } = {}
     ) {
       if (aTab.closing || this._windowIsClosing) {
@@ -4790,7 +4429,7 @@
           }
         }
 
-        let timerId = Glean.browserTabclose.permitUnloadTime.start();
+        TelemetryStopwatch.start("FX_TAB_CLOSE_PERMIT_UNLOAD_TIME_MS", aTab);
 
         // We need to block while calling permitUnload() because it
         // processes the event queue and may lead to another removeTab()
@@ -4799,7 +4438,7 @@
         let { permitUnload } = browser.permitUnload();
         aTab._pendingPermitUnload = false;
 
-        Glean.browserTabclose.permitUnloadTime.stopAndAccumulate(timerId);
+        TelemetryStopwatch.finish("FX_TAB_CLOSE_PERMIT_UNLOAD_TIME_MS", aTab);
 
         // If we were closed during onbeforeunload, we return false now
         // so we don't (try to) close the same tab again. Of course, we
@@ -4808,8 +4447,6 @@
           return false;
         }
       }
-
-      this.tabContainer._invalidateCachedVisibleTabs();
 
       // this._switcher would normally cover removing a tab from this
       // cache, but we may not have one at this time.
@@ -4829,11 +4466,7 @@
 
       var closeWindow = false;
       var newTab = false;
-      if (
-        aTab.visible &&
-        this.visibleTabs.length == 1 &&
-        !this.tabsInCollapsedTabGroups.length
-      ) {
+      if (aTab.visible && this.visibleTabs.length == 1) {
         closeWindow =
           closeWindowWithLastTab != null
             ? closeWindowWithLastTab
@@ -4920,12 +4553,7 @@
       // inspect the tab that's about to close.
       let evt = new CustomEvent("TabClose", {
         bubbles: true,
-        detail: {
-          adoptedBy: adoptedByTab,
-          skipSessionStore,
-          isUserTriggered,
-          telemetrySource,
-        },
+        detail: { adoptedBy: adoptedByTab, skipSessionStore },
       });
       aTab.dispatchEvent(evt);
 
@@ -4964,7 +4592,6 @@
         this.UrlbarProviderOpenTabs.unregisterOpenTab(
           browser.registeredOpenURI.spec,
           userContextId,
-          aTab.group?.id,
           PrivateBrowsingUtils.isWindowPrivate(window)
         );
         delete browser.registeredOpenURI;
@@ -4974,7 +4601,7 @@
       browser.removeAttribute("primary");
 
       return true;
-    }
+    },
 
     _endRemoveTab(aTab) {
       if (!aTab || !aTab._endRemoveArgs) {
@@ -5028,6 +4655,8 @@
         browser.destroy();
       }
 
+      var wasPinned = aTab.pinned;
+
       // Remove the tab ...
       aTab.remove();
       this.tabContainer._invalidateCachedTabs();
@@ -5038,6 +4667,10 @@
       }
 
       if (!this._windowIsClosing) {
+        if (wasPinned) {
+          this.tabContainer._positionPinnedTabs();
+        }
+
         // update tab close buttons state
         this.tabContainer._updateCloseButtons();
 
@@ -5085,18 +4718,16 @@
       // closeWindow might wait an arbitrary length of time if we're supposed
       // to warn about closing the window, so we'll just stop the tab close
       // stopwatches here instead.
-      if (aTab._closeTimeAnimTimerId) {
-        Glean.browserTabclose.timeAnim.stopAndAccumulate(
-          aTab._closeTimeAnimTimerId
-        );
-        aTab._closeTimeAnimTimerId = null;
-      }
-      if (aTab._closeTimeNoAnimTimerId) {
-        Glean.browserTabclose.timeNoAnim.stopAndAccumulate(
-          aTab._closeTimeNoAnimTimerId
-        );
-        aTab._closeTimeNoAnimTimerId = null;
-      }
+      TelemetryStopwatch.finish(
+        "FX_TAB_CLOSE_TIME_ANIM_MS",
+        aTab,
+        true /* aCanceledOkay */
+      );
+      TelemetryStopwatch.finish(
+        "FX_TAB_CLOSE_TIME_NO_ANIM_MS",
+        aTab,
+        true /* aCanceledOkay */
+      );
 
       if (aCloseWindow) {
         this._windowIsClosing = closeWindow(
@@ -5105,8 +4736,7 @@
           "close-last-tab"
         );
       }
-    }
-
+    },
     /**
      * Closes all tabs matching the list of nsURIs.
      * This does not close any tabs that have a beforeUnload prompt.
@@ -5156,55 +4786,7 @@
         }
       }
       return closedCount;
-    }
-
-    async explicitUnloadTabs(tabs) {
-      let unloadBlocked = await this.runBeforeUnloadForTabs(tabs);
-      if (unloadBlocked) {
-        return;
-      }
-      let unloadSelectedTab = false;
-      let allTabsUnloaded = false;
-      if (tabs.some(tab => tab.selected)) {
-        // Unloading the currently selected tab.
-        // Need to select a different one before unloading.
-        // Avoid selecting any tab we're unloading now or
-        // any tab that is already unloaded.
-        unloadSelectedTab = true;
-        const tabsToExclude = tabs.concat(
-          this.tabContainer.allTabs.filter(tab => !tab.linkedPanel)
-        );
-        let newTab = this._findTabToBlurTo(this.selectedTab, tabsToExclude);
-        if (newTab) {
-          this.selectedTab = newTab;
-        } else {
-          allTabsUnloaded = true;
-          // all tabs are unloaded - show Firefox View if it's present, otherwise open a new tab
-          if (FirefoxViewHandler.tab || FirefoxViewHandler.button) {
-            FirefoxViewHandler.openTab("opentabs");
-          } else {
-            this.selectedTab = this.addTrustedTab(BROWSER_NEW_TAB_URL, {
-              skipAnimation: true,
-            });
-          }
-        }
-      }
-      let memoryUsageBeforeUnload = await getTotalMemoryUsage();
-      let timeBeforeUnload = performance.now();
-      let numberOfTabsUnloaded = 0;
-      for (let tab of tabs) {
-        numberOfTabsUnloaded += this.discardBrowser(tab, true) ? 1 : 0;
-      }
-      let timeElapsed = Math.floor(performance.now() - timeBeforeUnload);
-      Glean.browserEngagement.tabExplicitUnload.record({
-        unload_selected_tab: unloadSelectedTab,
-        all_tabs_unloaded: allTabsUnloaded,
-        tabs_unloaded: numberOfTabsUnloaded,
-        memory_before: memoryUsageBeforeUnload,
-        memory_after: await getTotalMemoryUsage(),
-        time_to_unload_in_ms: timeElapsed,
-      });
-    }
+    },
 
     /**
      * Handles opening a new tab with mouse middleclick.
@@ -5228,13 +4810,13 @@
         event.stopPropagation();
         event.preventDefault();
       }
-    }
+    },
 
     /**
      * Finds the tab that we will blur to if we blur aTab.
-     * @param   {MozTabbrowserTab} aTab
+     * @param   aTab
      *          The tab we would blur
-     * @param   {MozTabbrowserTab[]} [aExcludeTabs=[]]
+     * @param   aExcludeTabs
      *          Tabs to exclude from our search (i.e., because they are being
      *          closed along with aTab)
      */
@@ -5280,34 +4862,12 @@
         });
       }
 
-      if (tab) {
-        return tab;
-      }
-
-      // If no qualifying visible tab was found, see if there is a tab in
-      // a collapsed tab group that could be selected.
-      let eligibleTabs = new Set(this.tabsInCollapsedTabGroups).difference(
-        excludeTabs
-      );
-
-      tab = this.tabContainer.findNextTab(aTab, {
-        direction: 1,
-        filter: _tab => eligibleTabs.has(_tab),
-      });
-
-      if (!tab) {
-        tab = this.tabContainer.findNextTab(aTab, {
-          direction: -1,
-          filter: _tab => eligibleTabs.has(_tab),
-        });
-      }
-
       return tab;
-    }
+    },
 
     _blurTab(aTab) {
       this.selectedTab = this._findTabToBlurTo(aTab);
-    }
+    },
 
     /**
      * @returns {boolean}
@@ -5432,10 +4992,6 @@
 
       SitePermissions.copyTemporaryPermissions(otherBrowser, ourBrowser);
 
-      // Add a reference to the original registeredOpenURI to the closing
-      // tab so that events operating on the tab before close can reference it.
-      aOtherTab._originalRegisteredOpenURI = otherBrowser.registeredOpenURI;
-
       // If the other tab is pending (i.e. has not been restored, yet)
       // then do not switch docShells but retrieve the other tab's state
       // and apply it to our tab.
@@ -5474,7 +5030,6 @@
         this.UrlbarProviderOpenTabs.unregisterOpenTab(
           otherBrowser.registeredOpenURI.spec,
           userContextId,
-          aOtherTab.group?.id,
           PrivateBrowsingUtils.isWindowPrivate(window)
         );
         delete otherBrowser.registeredOpenURI;
@@ -5517,7 +5072,7 @@
       }
 
       return true;
-    }
+    },
 
     swapBrowsers(aOurTab, aOtherTab) {
       let otherBrowser = aOtherTab.linkedBrowser;
@@ -5544,7 +5099,7 @@
       const notifyAll = Ci.nsIWebProgress.NOTIFY_ALL;
       filter.addProgressListener(tabListener, notifyAll);
       otherBrowser.webProgress.addProgressListener(filter, notifyAll);
-    }
+    },
 
     _swapBrowserDocShells(aOurTab, aOtherBrowser, aStateFlags) {
       // aOurTab's browser needs to be inserted now if it hasn't already.
@@ -5611,7 +5166,7 @@
       const notifyAll = Ci.nsIWebProgress.NOTIFY_ALL;
       filter.addProgressListener(tabListener, notifyAll);
       ourBrowser.webProgress.addProgressListener(filter, notifyAll);
-    }
+    },
 
     _swapRegisteredOpenURIs(aOurBrowser, aOtherBrowser) {
       // Swap the registeredOpenURI properties of the two browsers
@@ -5624,11 +5179,11 @@
       if (tmp) {
         aOtherBrowser.registeredOpenURI = tmp;
       }
-    }
+    },
 
     reloadMultiSelectedTabs() {
       this.reloadTabs(this.selectedTabs);
-    }
+    },
 
     reloadTabs(tabs) {
       for (let tab of tabs) {
@@ -5638,7 +5193,7 @@
           // ignore failure to reload so others will be reloaded
         }
       }
-    }
+    },
 
     reloadTab(aTab) {
       let browser = this.getBrowserForTab(aTab);
@@ -5650,7 +5205,7 @@
       gIdentityHandler.hidePopup();
       gPermissionPanel.hidePopup();
       browser.reload();
-    }
+    },
 
     addProgressListener(aListener) {
       if (arguments.length != 1) {
@@ -5664,27 +5219,27 @@
       }
 
       this.mProgressListeners.push(aListener);
-    }
+    },
 
     removeProgressListener(aListener) {
       this.mProgressListeners = this.mProgressListeners.filter(
         l => l != aListener
       );
-    }
+    },
 
     addTabsProgressListener(aListener) {
       this.mTabsProgressListeners.push(aListener);
-    }
+    },
 
     removeTabsProgressListener(aListener) {
       this.mTabsProgressListeners = this.mTabsProgressListeners.filter(
         l => l != aListener
       );
-    }
+    },
 
     getBrowserForTab(aTab) {
       return aTab.linkedBrowser;
-    }
+    },
 
     showTab(aTab) {
       if (!aTab.hidden || aTab == FirefoxViewHandler.tab) {
@@ -5702,7 +5257,7 @@
       event.initEvent("TabShow", true, false);
       aTab.dispatchEvent(event);
       SessionStore.deleteCustomTabValue(aTab, "hiddenBy");
-    }
+    },
 
     hideTab(aTab, aSource) {
       if (
@@ -5734,7 +5289,7 @@
       if (aSource) {
         SessionStore.setCustomTabValue(aTab, "hiddenBy", aSource);
       }
-    }
+    },
 
     selectTabAtIndex(aIndex, aEvent) {
       let tabs = this.visibleTabs;
@@ -5757,20 +5312,16 @@
         aEvent.preventDefault();
         aEvent.stopPropagation();
       }
-    }
+    },
 
     /**
      * Moves a tab to a new browser window, unless it's already the only tab
      * in the current window, in which case this will do nothing.
-     *
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup|MozTabbrowserTabGroup.labelElement} aTab
      */
     replaceTabWithWindow(aTab, aOptions) {
       if (this.tabs.length == 1) {
         return null;
       }
-      // TODO bug 1967925: Consider handling the case where aTab is a tab group
-      // and also the only tab group in its window.
 
       var options = "chrome,dialog=no,all";
       for (var name in aOptions) {
@@ -5783,7 +5334,7 @@
 
       // Play the tab closing animation to give immediate feedback while
       // waiting for the new window to appear.
-      if (!gReduceMotion && this.isTab(aTab)) {
+      if (!gReduceMotion) {
         aTab.style.maxWidth = ""; // ensure that fade-out transition happens
         aTab.removeAttribute("fadein");
       }
@@ -5795,7 +5346,7 @@
         options,
         aTab
       );
-    }
+    },
 
     /**
      * Move contextTab (or selected tabs in a mutli-select context)
@@ -5803,11 +5354,6 @@
      * in the current window, in which case this will do nothing.
      */
     replaceTabsWithWindow(contextTab, aOptions = {}) {
-      if (this.isTabGroupLabel(contextTab)) {
-        // TODO bug 1967937: Pass contextTab.group instead.
-        return this.replaceTabWithWindow(contextTab, aOptions);
-      }
-
       let tabs;
       if (contextTab.multiselected) {
         tabs = this.selectedTabs;
@@ -5846,17 +5392,17 @@
       win.addEventListener(
         "before-initial-tab-adopted",
         () => {
-          let tabIndex = 0;
+          let index = 0;
           for (let tab of tabs) {
             if (tab !== selectedTab) {
-              const newTab = win.gBrowser.adoptTab(tab, { tabIndex });
+              const newTab = win.gBrowser.adoptTab(tab, index);
               if (!newTab) {
                 // The adoption failed. Restore "fadein" and don't increase the index.
                 tab.setAttribute("fadein", "true");
                 continue;
               }
             }
-            ++tabIndex;
+            ++index;
           }
           // Restore tab selection
           let winVisibleTabs = win.gBrowser.visibleTabs;
@@ -5870,44 +5416,7 @@
         { once: true }
       );
       return win;
-    }
-
-    /**
-     * Moves group to a new window.
-     *
-     * @param {MozTabbrowserTabGroup} group
-     *   The tab group to move.
-     */
-    replaceGroupWithWindow(group) {
-      return this.replaceTabWithWindow(group);
-    }
-
-    /**
-     * @param {Element} element
-     * @returns {boolean}
-     *   `true` if element is a `<tab>`
-     */
-    isTab(element) {
-      return !!(element?.tagName == "tab");
-    }
-
-    /**
-     * @param {Element} element
-     * @returns {boolean}
-     *   `true` if element is a `<tab-group>`
-     */
-    isTabGroup(element) {
-      return !!(element?.tagName == "tab-group");
-    }
-
-    /**
-     * @param {Element} element
-     * @returns {boolean}
-     *   `true` if element is the `<label>` in a `<tab-group>`
-     */
-    isTabGroupLabel(element) {
-      return !!element?.classList?.contains("tab-group-label");
-    }
+    },
 
     _updateTabsAfterInsert() {
       for (let i = 0; i < this.tabs.length; i++) {
@@ -5931,215 +5440,45 @@
       // tab switcher will set the visually selected tab once the tab switch
       // has completed.
       this.selectedTab._selected = true;
-    }
+    },
 
-    /**
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} element
-     *   The tab or tab group to move. Also accepts a tab group label as a
-     *   stand-in for its group.
-     * @param {object} [options]
-     * @param {number} [options.tabIndex]
-     *   The desired position, expressed as the index within the `tabs` array.
-     * @param {number} [options.elementIndex]
-     *   The desired position, expressed as the index within the
-     *   `MozTabbrowserTabs::ariaFocusableItems` array.
-     * @param {boolean} [options.forceUngrouped=false]
-     *   Force `element` to move into position as a standalone tab, overriding
-     *   any possibility of entering a tab group. For example, setting `true`
-     *   ensures that a pinned tab will not accidentally be placed inside of
-     *   a tab group, since pinned tabs are presently not allowed in tab groups.
-     * @property {boolean} [options.isUserTriggered=false]
-     *   Should be true if there was an explicit action/request from the user
-     *   (as opposed to some action being taken internally or for technical
-     *   bookkeeping reasons alone) to move the tab. This causes telemetry
-     *   events to fire.
-     * @property {string} [options.telemetrySource="unknown"]
-     *   The system, surface, or control the user used to move the tab.
-     *   @see TabMetrics.METRIC_SOURCE for possible values.
-     *   Defaults to "unknown".
-     */
-    moveTabTo(
-      element,
-      {
-        elementIndex,
-        tabIndex,
-        forceUngrouped = false,
-        isUserTriggered = false,
-        telemetrySource = this.TabMetrics.METRIC_SOURCE.UNKNOWN,
-      } = {}
-    ) {
-      if (typeof elementIndex == "number") {
-        tabIndex = this.#elementIndexToTabIndex(elementIndex);
-      }
-
-      // Don't allow mixing pinned and unpinned tabs.
-      if (this.isTab(element) && element.pinned) {
-        tabIndex = Math.min(tabIndex, this.pinnedTabCount - 1);
-      } else {
-        tabIndex = Math.max(tabIndex, this.pinnedTabCount);
-      }
-
-      // Return early if the tab is already in the right spot.
-      if (
-        this.isTab(element) &&
-        element._tPos == tabIndex &&
-        !(element.group && forceUngrouped)
-      ) {
+    moveTabTo(aTab, aIndex, aKeepRelatedTabs) {
+      var oldPosition = aTab._tPos;
+      if (oldPosition == aIndex) {
         return;
       }
 
-      // When asked to move a tab group label, we need to move the whole group
-      // instead.
-      if (this.isTabGroupLabel(element)) {
-        element = element.group;
-      }
-      if (this.isTabGroup(element)) {
-        forceUngrouped = true;
-      }
-
-      this.#handleTabMove(
-        element,
-        () => {
-          let neighbor = this.tabs[tabIndex];
-          if (forceUngrouped && neighbor?.group) {
-            neighbor = neighbor.group;
-          }
-          if (neighbor && this.isTab(element) && tabIndex > element._tPos) {
-            neighbor.after(element);
-          } else {
-            this.tabContainer.insertBefore(element, neighbor);
-          }
-        },
-        { isUserTriggered, telemetrySource }
-      );
-    }
-
-    /**
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} element
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
-     * @param {TabMetricsContext} [metricsContext]
-     */
-    moveTabBefore(element, targetElement, metricsContext) {
-      this.#moveTabNextTo(element, targetElement, true, metricsContext);
-    }
-
-    /**
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup[]} elements
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
-     * @param {TabMetricsContext} [metricsContext]
-     */
-    moveTabsBefore(elements, targetElement, metricsContext) {
-      this.#moveTabsNextTo(elements, targetElement, true, metricsContext);
-    }
-
-    /**
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} element
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
-     * @param {TabMetricsContext} [metricsContext]
-     */
-    moveTabAfter(element, targetElement, metricsContext) {
-      this.#moveTabNextTo(element, targetElement, false, metricsContext);
-    }
-
-    /**
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup[]} elements
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
-     * @param {TabMetricsContext} [metricsContext]
-     */
-    moveTabsAfter(elements, targetElement, metricsContext) {
-      this.#moveTabsNextTo(elements, targetElement, false, metricsContext);
-    }
-
-    /**
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} element
-     *   The tab or tab group to move. Also accepts a tab group label as a
-     *   stand-in for its group.
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
-     * @param {boolean} [moveBefore=false]
-     * @param {TabMetricsContext} [metricsContext]
-     */
-    #moveTabNextTo(element, targetElement, moveBefore = false, metricsContext) {
-      if (this.isTabGroupLabel(targetElement)) {
-        targetElement = targetElement.group;
-        if (!moveBefore) {
-          targetElement = targetElement.tabs[0];
-          moveBefore = true;
-        }
-      }
-      if (this.isTabGroupLabel(element)) {
-        element = element.group;
-        if (targetElement?.group) {
-          targetElement = targetElement.group;
-        }
-      }
-
       // Don't allow mixing pinned and unpinned tabs.
-      if (element.pinned && !targetElement?.pinned) {
-        targetElement = this.tabs[this.pinnedTabCount - 1];
-        moveBefore = false;
-      } else if (!element.pinned && targetElement && targetElement.pinned) {
-        targetElement = this.tabs[this.pinnedTabCount];
-        moveBefore = true;
+      if (aTab.pinned) {
+        aIndex = Math.min(aIndex, this._numPinnedTabs - 1);
+      } else {
+        aIndex = Math.max(aIndex, this._numPinnedTabs);
+      }
+      if (oldPosition == aIndex) {
+        return;
       }
 
-      let getContainer = () =>
-        element.pinned
-          ? this.tabContainer.pinnedTabsContainer
-          : this.tabContainer;
-
-      this.#handleTabMove(
-        element,
-        () => {
-          if (moveBefore) {
-            getContainer().insertBefore(element, targetElement);
-          } else if (targetElement) {
-            targetElement.after(element);
-          } else {
-            getContainer().appendChild(element);
-          }
-        },
-        metricsContext
-      );
-    }
-
-    /**
-     * @param {MozTabbrowserTab[]} elements
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} targetElement
-     * @param {boolean} [moveBefore=false]
-     * @param {TabMetricsContext} [metricsContext]
-     */
-    #moveTabsNextTo(
-      elements,
-      targetElement,
-      moveBefore = false,
-      metricsContext
-    ) {
-      this.#moveTabNextTo(
-        elements[0],
-        targetElement,
-        moveBefore,
-        metricsContext
-      );
-      for (let i = 1; i < elements.length; i++) {
-        this.#moveTabNextTo(
-          elements[i],
-          elements[i - 1],
-          false,
-          metricsContext
-        );
+      if (!aKeepRelatedTabs) {
+        this._lastRelatedTabMap = new WeakMap();
       }
-    }
 
-    /**
-     *
-     * @param {MozTabbrowserTab} aTab
-     * @param {MozTabbrowserTabGroup} aGroup
-     * @param {TabMetricsContext} [metricsContext]
-     */
-    moveTabToGroup(aTab, aGroup, metricsContext) {
-      if (!this.isTab(aTab)) {
-        throw new Error("Can only move a tab into a tab group");
+      let wasFocused = document.activeElement == this.selectedTab;
+
+      let neighbor = this.tabs[aIndex];
+      if (aIndex < aTab._tPos) {
+        neighbor.before(aTab);
+      } else if (!neighbor) {
+        // Put the tab after the neighbor, as once we remove the tab from its current position,
+        // the indexing of the tabs will shift.
+        aTab.parentElement.append(aTab);
+      } else {
+        neighbor.after(aTab);
       }
+
+      this._updateAfterMoveTabTo(aTab, oldPosition, wasFocused);
+    },
+
+    moveTabToGroup(aTab, aGroup) {
       if (aTab.pinned) {
         return;
       }
@@ -6147,144 +5486,59 @@
         return;
       }
 
-      aGroup.collapsed = false;
-      this.#handleTabMove(aTab, () => aGroup.appendChild(aTab), metricsContext);
-      this.removeFromMultiSelectedTabs(aTab);
-      this.tabContainer._notifyBackgroundTab(aTab);
-    }
-
-    /**
-     * @typedef {object} TabMoveState
-     * @property {number} tabIndex
-     * @property {number} [elementIndex]
-     * @property {string} [tabGroupId]
-     */
-
-    /**
-     * @param {MozTabbrowserTab} tab
-     * @returns {TabMoveState|undefined}
-     */
-    #getTabMoveState(tab) {
-      if (!this.isTab(tab)) {
-        return undefined;
-      }
-
-      let state = {
-        tabIndex: tab._tPos,
-      };
-      if (tab.visible) {
-        state.elementIndex = tab.elementIndex;
-      }
-      if (tab.group) {
-        state.tabGroupId = tab.group.id;
-      }
-      return state;
-    }
-
-    /**
-     * @param {MozTabbrowserTab} tab
-     * @param {TabMoveState} [previousTabState]
-     * @param {TabMoveState} [currentTabState]
-     * @param {TabMetricsContext} [metricsContext]
-     */
-    #notifyOnTabMove(tab, previousTabState, currentTabState, metricsContext) {
-      if (!this.isTab(tab) || !previousTabState || !currentTabState) {
-        return;
-      }
-
-      let changedPosition =
-        previousTabState.tabIndex != currentTabState.tabIndex;
-      let changedTabGroup =
-        previousTabState.tabGroupId != currentTabState.tabGroupId;
-
-      if (changedPosition || changedTabGroup) {
-        tab.dispatchEvent(
-          new CustomEvent("TabMove", {
-            bubbles: true,
-            detail: {
-              previousTabState,
-              currentTabState,
-              isUserTriggered: metricsContext?.isUserTriggered ?? false,
-              telemetrySource:
-                metricsContext?.telemetrySource ??
-                this.TabMetrics.METRIC_SOURCE.UNKNOWN,
-            },
-          })
-        );
-      }
-    }
-
-    /**
-     * @param {MozTabbrowserTab|MozTabbrowserTabGroup} element
-     * @param {function():void} moveActionCallback
-     * @param {TabMetricsContext} [metricsContext]
-     */
-    #handleTabMove(element, moveActionCallback, metricsContext) {
-      let tabs;
-      if (this.isTab(element)) {
-        tabs = [element];
-      } else if (this.isTabGroup(element)) {
-        tabs = element.tabs;
-      } else {
-        throw new Error("Can only move a tab or tab group within the tab bar");
-      }
-
+      let oldPosition = aTab._tPos;
       let wasFocused = document.activeElement == this.selectedTab;
-      let previousTabStates = tabs.map(tab => this.#getTabMoveState(tab));
+      aGroup.appendChild(aTab);
 
-      moveActionCallback();
+      this._updateAfterMoveTabTo(aTab, oldPosition, wasFocused);
+    },
 
-      // Clear tabs cache after moving nodes because the order of tabs may have
-      // changed.
+    _updateAfterMoveTabTo(aTab, oldPosition, wasFocused = null) {
+      // We want to clear _allTabs after moving nodes because the order of
+      // vertical tabs may have changed.
       this.tabContainer._invalidateCachedTabs();
-      this._lastRelatedTabMap = new WeakMap();
+
       this._updateTabsAfterInsert();
 
       if (wasFocused) {
         this.selectedTab.focus();
       }
 
-      // When a tab group with multiple tabs is moved forwards, emit TabMove in
-      // the reverse order, so that the index in previousTabState values are
-      // still accurate until the event is dispatched. If we were to start with
-      // the front tab, then logically that tab moves, and all following tabs
-      // would shift, which would invalidate the index in previousTabState.
-      let reverseEvents =
-        tabs.length > 1 && tabs[0]._tPos > previousTabStates[0].tabIndex;
+      this.tabContainer._handleTabSelect(true);
 
-      for (let i = 0; i < tabs.length; i++) {
-        let ii = reverseEvents ? tabs.length - i - 1 : i;
-        let tab = tabs[ii];
-        if (tab.selected) {
-          this.tabContainer._handleTabSelect(true);
-        }
-
-        let currentTabState = this.#getTabMoveState(tab);
-        this.#notifyOnTabMove(
-          tab,
-          previousTabStates[ii],
-          currentTabState,
-          metricsContext
-        );
+      if (aTab.pinned) {
+        this.tabContainer._positionPinnedTabs();
       }
-
-      let currentFirst = this.#getTabMoveState(tabs[0]);
-      if (
-        this.isTabGroup(element) &&
-        previousTabStates[0].tabIndex != currentFirst.tabIndex
-      ) {
-        let event = new CustomEvent("TabGroupMoved", { bubbles: true });
-        element.dispatchEvent(event);
+      // Pinning/unpinning vertical tabs, and moving tabs into tab groups, both bypass moveTabTo.
+      // We still want to check whether its worth dispatching an event.
+      if (oldPosition == aTab._tPos) {
+        return;
       }
-    }
+      var evt = document.createEvent("UIEvents");
+      evt.initUIEvent("TabMove", true, false, window, oldPosition);
+      aTab.dispatchEvent(evt);
+    },
+
+    moveTabForward() {
+      let nextTab = this.tabContainer.findNextTab(this.selectedTab, {
+        direction: 1,
+        filter: tab => tab.visible,
+      });
+
+      if (nextTab) {
+        this.moveTabTo(this.selectedTab, nextTab._tPos);
+      } else if (this.arrowKeysShouldWrap) {
+        this.moveTabToStart();
+      }
+    },
 
     /**
-     * Adopts a tab from another browser window, and inserts it at the given index.
+     * Adopts a tab from another browser window, and inserts it at aIndex
      *
      * @returns {object}
      *    The new tab in the current window, null if the tab couldn't be adopted.
      */
-    adoptTab(aTab, { elementIndex, tabIndex, selectTab = false } = {}) {
+    adoptTab(aTab, aIndex, aSelectTab) {
       // Swap the dropped tab with a new one we create and then close
       // it in the other window (making it seem to have moved between
       // windows). We also ensure that the tab we create to swap into has
@@ -6292,29 +5546,17 @@
       // This makes sure we don't get a short-lived process for the new tab.
       let linkedBrowser = aTab.linkedBrowser;
       let createLazyBrowser = !aTab.linkedPanel;
-      let index;
-      let nextElement;
-      if (typeof elementIndex == "number") {
-        index = elementIndex;
-        nextElement = this.tabContainer.ariaFocusableItems.at(elementIndex);
-      } else {
-        index = tabIndex;
-        nextElement = this.tabs.at(tabIndex);
-      }
-      let tabInGroup = !!aTab.group;
       let params = {
         eventDetail: { adoptedTab: aTab },
         preferredRemoteType: linkedBrowser.remoteType,
         initialBrowsingContextGroupId: linkedBrowser.browsingContext?.group.id,
         skipAnimation: true,
-        elementIndex,
-        tabIndex,
-        tabGroup: this.isTab(nextElement) && nextElement.group,
+        index: aIndex,
         createLazyBrowser,
       };
 
-      let numPinned = this.pinnedTabCount;
-      if (index < numPinned || (aTab.pinned && index == numPinned)) {
+      let numPinned = this._numPinnedTabs;
+      if (aIndex < numPinned || (aTab.pinned && aIndex == numPinned)) {
         params.pinned = true;
       }
 
@@ -6325,7 +5567,7 @@
       let newTab = this.addWebTab("about:blank", params);
       let newBrowser = this.getBrowserForTab(newTab);
 
-      aTab.container.finishAnimateTabMove();
+      aTab.container._finishAnimateTabMove();
 
       if (!createLazyBrowser) {
         // Stop the about:blank load.
@@ -6338,89 +5580,50 @@
         return null;
       }
 
-      if (selectTab) {
+      if (aSelectTab) {
         this.selectedTab = newTab;
       }
 
-      if (tabInGroup) {
-        Glean.tabgroup.tabInteractions.remove_other_window.add();
-      }
-
       return newTab;
-    }
-
-    moveTabForward() {
-      let { selectedTab } = this;
-      let nextTab = this.tabContainer.findNextTab(selectedTab, {
-        direction: DIRECTION_FORWARD,
-        filter: tab => !tab.hidden && selectedTab.pinned == tab.pinned,
-      });
-      if (nextTab) {
-        this.#handleTabMove(selectedTab, () => {
-          if (!selectedTab.group && nextTab.group) {
-            if (nextTab.group.collapsed) {
-              // Skip over collapsed tab group.
-              nextTab.group.after(selectedTab);
-            } else {
-              // Enter first position of tab group.
-              nextTab.group.insertBefore(selectedTab, nextTab);
-            }
-          } else if (selectedTab.group != nextTab.group) {
-            // Standalone tab after tab group.
-            selectedTab.group.after(selectedTab);
-          } else {
-            nextTab.after(selectedTab);
-          }
-        });
-      } else if (selectedTab.group) {
-        // selectedTab is the last tab and is grouped.
-        // remove it from its group.
-        selectedTab.group.after(selectedTab);
-      }
-    }
+    },
 
     moveTabBackward() {
-      let { selectedTab } = this;
-
-      let previousTab = this.tabContainer.findNextTab(selectedTab, {
-        direction: DIRECTION_BACKWARD,
-        filter: tab => !tab.hidden && selectedTab.pinned == tab.pinned,
+      let previousTab = this.tabContainer.findNextTab(this.selectedTab, {
+        direction: -1,
+        filter: tab => tab.visible,
       });
 
       if (previousTab) {
-        this.#handleTabMove(selectedTab, () => {
-          if (!selectedTab.group && previousTab.group) {
-            if (previousTab.group.collapsed) {
-              // Skip over collapsed tab group.
-              previousTab.group.before(selectedTab);
-            } else {
-              // Enter last position of tab group.
-              previousTab.group.append(selectedTab);
-            }
-          } else if (selectedTab.group != previousTab.group) {
-            // Standalone tab before tab group.
-            selectedTab.group.before(selectedTab);
-          } else {
-            previousTab.before(selectedTab);
-          }
-        });
-      } else if (selectedTab.group) {
-        // selectedTab is the first tab and is grouped.
-        // remove it from its group.
-        selectedTab.group.before(selectedTab);
+        this.moveTabTo(this.selectedTab, previousTab._tPos);
+      } else if (this.arrowKeysShouldWrap) {
+        this.moveTabToEnd();
       }
-    }
+    },
 
-    moveTabToStart(aTab = this.selectedTab) {
-      this.moveTabTo(aTab, { tabIndex: 0, forceUngrouped: true });
-    }
+    moveTabToStart() {
+      let tabPos = this.selectedTab._tPos;
+      if (tabPos > 0) {
+        this.moveTabTo(this.selectedTab, 0);
+      }
+    },
 
-    moveTabToEnd(aTab = this.selectedTab) {
-      this.moveTabTo(aTab, {
-        tabIndex: this.tabs.length - 1,
-        forceUngrouped: true,
-      });
-    }
+    moveTabToEnd() {
+      let tabPos = this.selectedTab._tPos;
+      if (tabPos < this.browsers.length - 1) {
+        this.moveTabTo(this.selectedTab, this.browsers.length - 1);
+      }
+    },
+
+    moveTabOver(aEvent) {
+      if (
+        (!RTL_UI && aEvent.keyCode == KeyEvent.DOM_VK_RIGHT) ||
+        (RTL_UI && aEvent.keyCode == KeyEvent.DOM_VK_LEFT)
+      ) {
+        this.moveTabForward();
+      } else {
+        this.moveTabBackward();
+      }
+    },
 
     /**
      * @param   aTab
@@ -6431,18 +5634,14 @@
      *          The new index of the tab
      */
     duplicateTab(aTab, aRestoreTabImmediately, aOptions) {
-      let newTab = SessionStore.duplicateTab(
+      return SessionStore.duplicateTab(
         window,
         aTab,
         0,
         aRestoreTabImmediately,
         aOptions
       );
-      if (aTab.group) {
-        Glean.tabgroup.tabInteractions.duplicate.add();
-      }
-      return newTab;
-    }
+    },
 
     /**
      * Update accessible names of close buttons in the (multi) selected tabs
@@ -6455,7 +5654,7 @@
           tabCount,
         });
       });
-    }
+    },
 
     addToMultiSelectedTabs(aTab) {
       if (aTab.multiselected) {
@@ -6473,7 +5672,7 @@
       }
 
       this._updateMultiselectedTabCloseButtonTooltip();
-    }
+    },
 
     /**
      * Adds two given tabs and all tabs between them into the (multi) selected tabs collection
@@ -6497,7 +5696,7 @@
       }
 
       this._updateMultiselectedTabCloseButtonTooltip();
-    }
+    },
 
     removeFromMultiSelectedTabs(aTab) {
       if (!aTab.multiselected) {
@@ -6519,7 +5718,7 @@
       document.l10n.setArgs(aTab.querySelector(".tab-close-button"), {
         tabCount: 1,
       });
-    }
+    },
 
     clearMultiSelectedTabs() {
       if (this._clearMultiSelectionLocked) {
@@ -6538,7 +5737,7 @@
         this.removeFromMultiSelectedTabs(tab);
       }
       this._lastMultiSelectedTabRef = null;
-    }
+    },
 
     selectAllTabs() {
       let visibleTabs = this.visibleTabs;
@@ -6546,24 +5745,24 @@
         visibleTabs[0],
         visibleTabs[visibleTabs.length - 1]
       );
-    }
+    },
 
     allTabsSelected() {
       return (
         this.visibleTabs.length == 1 ||
         this.visibleTabs.every(t => t.multiselected)
       );
-    }
+    },
 
     lockClearMultiSelectionOnce() {
       this._clearMultiSelectionLockedOnce = true;
       this._clearMultiSelectionLocked = true;
-    }
+    },
 
     unlockClearMultiSelection() {
       this._clearMultiSelectionLockedOnce = false;
       this._clearMultiSelectionLocked = false;
-    }
+    },
 
     /**
      * Remove a tab from the multiselection if it's the only one left there.
@@ -6595,7 +5794,7 @@
       if (this.multiSelectedTabsCount == 1) {
         this.clearMultiSelectedTabs();
       }
-    }
+    },
 
     _switchToNextMultiSelectedTab() {
       this._clearMultiSelectionLocked = true;
@@ -6616,7 +5815,7 @@
       }
 
       this._clearMultiSelectionLocked = false;
-    }
+    },
 
     set selectedTabs(tabs) {
       this.clearMultiSelectedTabs();
@@ -6626,7 +5825,7 @@
           this.addToMultiSelectedTabs(tab);
         }
       }
-    }
+    },
 
     get selectedTabs() {
       let { selectedTab, _multiSelectedTabsSet } = this;
@@ -6641,13 +5840,13 @@
         tabs.push(selectedTab);
       }
       return tabs.sort((a, b) => a._tPos > b._tPos);
-    }
+    },
 
     get multiSelectedTabsCount() {
       return ChromeUtils.nondeterministicGetWeakSetKeys(
         this._multiSelectedTabsSet
       ).filter(this._mayTabBeMultiselected).length;
-    }
+    },
 
     get lastMultiSelectedTab() {
       let tab = this._lastMultiSelectedTabRef
@@ -6659,22 +5858,22 @@
       let selectedTab = this.selectedTab;
       this.lastMultiSelectedTab = selectedTab;
       return selectedTab;
-    }
+    },
 
     set lastMultiSelectedTab(aTab) {
       this._lastMultiSelectedTabRef = Cu.getWeakReference(aTab);
-    }
+    },
 
     _mayTabBeMultiselected(aTab) {
       return aTab.visible;
-    }
+    },
 
     _startMultiSelectChange() {
       if (!this._multiSelectChangeStarted) {
         this._multiSelectChangeStarted = true;
         Promise.resolve().then(() => this._endMultiSelectChange());
       }
-    }
+    },
 
     _endMultiSelectChange() {
       let noticeable = false;
@@ -6701,7 +5900,7 @@
           new CustomEvent("TabMultiSelect", { bubbles: true })
         );
       }
-    }
+    },
 
     toggleMuteAudioOnMultiSelectedTabs(aTab) {
       let tabMuted = aTab.linkedBrowser.audioMuted;
@@ -6711,19 +5910,19 @@
       for (let tab of tabsToToggle) {
         tab.toggleMuteAudio();
       }
-    }
+    },
 
     resumeDelayedMediaOnMultiSelectedTabs() {
       for (let tab of this.selectedTabs) {
         tab.resumeDelayedMedia();
       }
-    }
+    },
 
     pinMultiSelectedTabs() {
       for (let tab of this.selectedTabs) {
         this.pinTab(tab);
       }
-    }
+    },
 
     unpinMultiSelectedTabs() {
       // The selectedTabs getter returns the tabs
@@ -6734,7 +5933,7 @@
         let tab = selectedTabs[i];
         this.unpinTab(tab);
       }
-    }
+    },
 
     activateBrowserForPrintPreview(aBrowser) {
       this._printPreviewBrowsers.add(aBrowser);
@@ -6742,7 +5941,7 @@
         this._switcher.activateBrowserForPrintPreview(aBrowser);
       }
       aBrowser.docShellIsActive = true;
-    }
+    },
 
     deactivatePrintPreviewBrowsers() {
       let browsers = this._printPreviewBrowsers;
@@ -6750,7 +5949,7 @@
       for (let browser of browsers) {
         browser.docShellIsActive = this.shouldActivateDocShell(browser);
       }
-    }
+    },
 
     /**
      * Returns true if a given browser's docshell should be active.
@@ -6764,20 +5963,20 @@
         this._printPreviewBrowsers.has(aBrowser) ||
         this.PictureInPicture.isOriginatingBrowser(aBrowser)
       );
-    }
+    },
 
     _getSwitcher() {
       if (!this._switcher) {
         this._switcher = new this.AsyncTabSwitcher(this);
       }
       return this._switcher;
-    }
+    },
 
     warmupTab(aTab) {
       if (gMultiProcessBrowser) {
         this._getSwitcher().warmupTab(aTab);
       }
-    }
+    },
 
     /**
      * _maybeRequestReplyFromRemoteContent may call
@@ -6805,7 +6004,7 @@
         return true;
       }
       return false;
-    }
+    },
 
     _handleKeyDownEvent(aEvent) {
       if (!aEvent.isTrusted) {
@@ -6846,7 +6045,7 @@
           }
           aEvent.preventDefault();
       }
-    }
+    },
 
     toggleCaretBrowsing() {
       const kPrefShortcutEnabled =
@@ -6914,7 +6113,7 @@
       try {
         Services.prefs.setBoolPref(kPrefCaretBrowsingOn, !browseWithCaretOn);
       } catch (ex) {}
-    }
+    },
 
     _handleKeyPressEvent(aEvent) {
       if (!aEvent.isTrusted) {
@@ -6945,32 +6144,18 @@
 
         case ShortcutUtils.NEXT_TAB:
           if (AppConstants.platform == "macosx") {
-            this.tabContainer.advanceSelectedTab(DIRECTION_FORWARD, true);
+            this.tabContainer.advanceSelectedTab(1, true);
             aEvent.preventDefault();
           }
           break;
         case ShortcutUtils.PREVIOUS_TAB:
           if (AppConstants.platform == "macosx") {
-            this.tabContainer.advanceSelectedTab(DIRECTION_BACKWARD, true);
+            this.tabContainer.advanceSelectedTab(-1, true);
             aEvent.preventDefault();
           }
           break;
       }
-    }
-
-    /**
-     *
-     * @param {MozTabbrowserTab} tab
-     */
-    #isFirstOrLastInTabGroup(tab) {
-      if (tab.group) {
-        let groupTabs = tab.group.tabs;
-        if (groupTabs.at(0) == tab || groupTabs.at(-1) == tab) {
-          return true;
-        }
-      }
-      return false;
-    }
+    },
 
     getTabPids(tab) {
       if (!tab.linkedBrowser) {
@@ -6984,77 +6169,42 @@
       );
       let pids = contentPid ? [contentPid] : [];
       return pids.concat(framePids.sort());
-    }
+    },
 
-    /**
-     * @param {MozTabbrowserTab} tab
-     * @param {boolean} [includeLabel=true]
-     *   Include the tab's title/full label in the tooltip. Defaults to true,
-     *   Can be disabled for contexts where including the title in the tooltip
-     *   string would be duplicative would already available information,
-     *   e.g. accessibility descriptions.
-     * @returns {string}
-     */
     getTabTooltip(tab, includeLabel = true) {
       let labelArray = [];
       if (includeLabel) {
         labelArray.push(tab._fullLabel || tab.getAttribute("label"));
       }
-      if (this.showPidAndActiveness) {
+      if (
+        Services.prefs.getBoolPref(
+          "browser.tabs.tooltipsShowPidAndActiveness",
+          false
+        )
+      ) {
         const pids = this.getTabPids(tab);
-        let debugStringArray = [];
         if (pids.length) {
           let pidLabel = pids.length > 1 ? "pids" : "pid";
-          debugStringArray.push(`(${pidLabel} ${pids.join(", ")})`);
+          labelArray.push(`(${pidLabel} ${pids.join(", ")})`);
         }
 
         if (tab.linkedBrowser.docShellIsActive) {
-          debugStringArray.push("[A]");
-        }
-
-        if (debugStringArray.length) {
-          labelArray.push(debugStringArray.join(" "));
+          labelArray.push("[A]");
         }
       }
 
-      // Add a line to the tooltip with additional tab context (e.g. container
-      // membership, tab group membership) when applicable.
-      let containerName = tab.userContextId
-        ? ContextualIdentityService.getUserContextLabel(tab.userContextId)
-        : "";
-      let tabGroupName = this.#isFirstOrLastInTabGroup(tab)
-        ? tab.group.name ||
-          this.tabLocalization.formatValueSync("tab-group-name-default")
-        : "";
-
-      if (containerName || tabGroupName) {
-        let tabContextString;
-        if (containerName && tabGroupName) {
-          tabContextString = this.tabLocalization.formatValueSync(
-            "tabbrowser-tab-tooltip-tab-group-container",
-            {
-              tabGroupName,
-              containerName,
-            }
-          );
-        } else if (tabGroupName) {
-          tabContextString = this.tabLocalization.formatValueSync(
-            "tabbrowser-tab-tooltip-tab-group",
-            {
-              tabGroupName,
-            }
-          );
-        } else {
-          tabContextString = this.tabLocalization.formatValueSync(
-            "tabbrowser-tab-tooltip-container",
-            {
-              containerName,
-            }
-          );
-        }
-        labelArray.push(tabContextString);
+      let label = labelArray.join(" ");
+      if (tab.userContextId) {
+        const containerName = ContextualIdentityService.getUserContextLabel(
+          tab.userContextId
+        );
+        label = this.tabLocalization.formatValueSync(
+          "tabbrowser-container-tab-title",
+          { title: label, containerName }
+        );
       }
 
+      labelArray = [label];
       if (tab.soundPlaying) {
         let audioPlayingString = this.tabLocalization.formatValueSync(
           "tabbrowser-tab-audio-playing-description"
@@ -7062,19 +6212,14 @@
         labelArray.push(audioPlayingString);
       }
       return labelArray.join("\n");
-    }
+    },
 
     createTooltip(event) {
       event.stopPropagation();
       let tab = event.target.triggerNode?.closest("tab");
       if (!tab) {
-        if (event.target.triggerNode?.getRootNode()?.host?.closest("tab")) {
-          // Check if triggerNode is within shadowRoot of moz-button
-          tab = event.target.triggerNode?.getRootNode().host.closest("tab");
-        } else {
-          event.preventDefault();
-          return;
-        }
+        event.preventDefault();
+        return;
       }
 
       const tooltip = event.target;
@@ -7083,7 +6228,7 @@
       const tabCount = this.selectedTabs.includes(tab)
         ? this.selectedTabs.length
         : 1;
-      if (tab._overPlayingIcon || tab._overAudioButton) {
+      if (tab._overPlayingIcon) {
         let l10nId;
         const l10nArgs = { tabCount };
         if (tab.selected) {
@@ -7111,7 +6256,7 @@
         }
         tooltip.label = this.getTabTooltip(tab, true);
       }
-    }
+    },
 
     handleEvent(aEvent) {
       switch (aEvent.type) {
@@ -7133,69 +6278,23 @@
           aEvent.preventDefault();
           break;
         }
-        case "visibilitychange": {
+        case "visibilitychange":
           const inactive = document.hidden;
           if (!this._switcher) {
             this.selectedBrowser.preserveLayers(inactive);
             this.selectedBrowser.docShellIsActive = !inactive;
           }
           break;
-        }
-        case "TabGroupCreateByUser":
+        case "TabGroupCreate":
           this.tabGroupMenu.openCreateModal(aEvent.target);
           break;
-        case "TabGrouped": {
-          let tab = aEvent.detail;
-          let uri =
-            tab.linkedBrowser?.registeredOpenURI ||
-            tab._originalRegisteredOpenURI;
-          if (uri) {
-            this.UrlbarProviderOpenTabs.unregisterOpenTab(
-              uri.spec,
-              tab.userContextId,
-              null,
-              PrivateBrowsingUtils.isWindowPrivate(window)
-            );
-            this.UrlbarProviderOpenTabs.registerOpenTab(
-              uri.spec,
-              tab.userContextId,
-              tab.group?.id,
-              PrivateBrowsingUtils.isWindowPrivate(window)
-            );
-          }
-          break;
-        }
-        case "TabUngrouped": {
-          let tab = aEvent.detail;
-          let uri =
-            tab.linkedBrowser?.registeredOpenURI ||
-            tab._originalRegisteredOpenURI;
-          if (uri) {
-            // By the time the tab makes it to us it is already ungrouped, but
-            // the original group is preserved in the event target.
-            let originalGroup = aEvent.target;
-            this.UrlbarProviderOpenTabs.unregisterOpenTab(
-              uri.spec,
-              tab.userContextId,
-              originalGroup.id,
-              PrivateBrowsingUtils.isWindowPrivate(window)
-            );
-            this.UrlbarProviderOpenTabs.registerOpenTab(
-              uri.spec,
-              tab.userContextId,
-              null,
-              PrivateBrowsingUtils.isWindowPrivate(window)
-            );
-          }
-          break;
-        }
         case "activate":
         // Intentional fallthrough
         case "deactivate":
           this.selectedTab.updateLastSeenActive();
           break;
       }
-    }
+    },
 
     observe(aSubject, aTopic) {
       switch (aTopic) {
@@ -7209,7 +6308,7 @@
           break;
         }
       }
-    }
+    },
 
     refreshBlocked(actor, browser, data) {
       // The data object is expected to contain the following properties:
@@ -7250,7 +6349,7 @@
           buttons
         );
       }
-    }
+    },
 
     _generateUniquePanelID() {
       if (!this._uniquePanelIDCounter) {
@@ -7263,7 +6362,7 @@
       // window ID. We switched to a monotonic counter as Date.now() lead
       // to random failures because of colliding IDs.
       return "panel-" + outerID + "-" + ++this._uniquePanelIDCounter;
-    }
+    },
 
     destroy() {
       this.tabContainer.destroy();
@@ -7276,7 +6375,6 @@
           this.UrlbarProviderOpenTabs.unregisterOpenTab(
             browser.registeredOpenURI.spec,
             userContextId,
-            tab.group?.id,
             PrivateBrowsingUtils.isWindowPrivate(window)
           );
           delete browser.registeredOpenURI;
@@ -7313,7 +6411,7 @@
           this._switcher.destroy();
         }
       }
-    }
+    },
 
     _setupEventListeners() {
       this.tabpanels.addEventListener("select", event => {
@@ -7675,6 +6773,8 @@
         evt.initEvent("BeforeTabRemotenessChange", true, false);
         tab.dispatchEvent(evt);
 
+        let wasActive = document.activeElement == browser;
+
         // Unhook our progress listener.
         let filter = this._tabFilters.get(tab);
         let oldListener = this._tabListeners.get(tab);
@@ -7741,6 +6841,11 @@
             // process so the browser can no longer be considered to be
             // crashed.
             tab.removeAttribute("crashed");
+            gBrowser.tabContainer.updateTabIndicatorAttr(tab);
+          }
+
+          if (wasActive) {
+            browser.focus();
           }
 
           if (this.isFindBarInitialized(tab)) {
@@ -7762,10 +6867,11 @@
         if (!tab) {
           return;
         }
+
         const { url, description, previewImageURL } = event.detail;
-        this.setPageInfo(tab, url, description, previewImageURL);
+        this.setPageInfo(url, description, previewImageURL);
       });
-    }
+    },
 
     translateTabContextMenu() {
       if (this._tabContextMenuTranslated) {
@@ -7781,7 +6887,7 @@
           el.removeAttribute("data-lazy-l10n-id");
         });
       this._tabContextMenuTranslated = true;
-    }
+    },
 
     setSuccessor(aTab, successorTab) {
       if (aTab.ownerGlobal != window) {
@@ -7803,7 +6909,7 @@
         }
         successorTab.predecessors.add(aTab);
       }
-    }
+    },
 
     /**
      * For all tabs with aTab as a successor, set the successor to aOtherTab
@@ -7815,7 +6921,7 @@
           this.setSuccessor(predecessor, aOtherTab);
         }
       }
-    }
+    },
 
     /**
      * Get the triggering principal for the last navigation in the session history.
@@ -7832,11 +6938,11 @@
       let currentEntry = sessionHistory.getEntryAtIndex(sessionHistory.index);
       let triggeringPrincipal = currentEntry?.triggeringPrincipal;
       return triggeringPrincipal;
-    }
+    },
 
     clearRelatedTabs() {
       this._lastRelatedTabMap = new WeakMap();
-    }
+    },
   };
 
   /**
@@ -8064,6 +7170,7 @@
           delete this.mBrowser.initialPageLoadedFromUserAction;
           // If the browser is loading it must not be crashed anymore
           this.mTab.removeAttribute("crashed");
+          gBrowser.tabContainer.updateTabIndicatorAttr(this.mTab);
         }
 
         if (this._shouldShowProgress(aRequest)) {
@@ -8075,6 +7182,7 @@
             this.mTab.setAttribute("busy", "true");
             gBrowser._tabAttrModified(this.mTab, ["busy"]);
             this.mTab._notselectedsinceload = !this.mTab.selected;
+            gBrowser.syncThrobberAnimations(this.mTab);
           }
 
           if (this.mTab.selected) {
@@ -8334,7 +7442,6 @@
           gBrowser.UrlbarProviderOpenTabs.unregisterOpenTab(
             uri.spec,
             userContextId,
-            this.mTab.group?.id,
             PrivateBrowsingUtils.isWindowPrivate(window)
           );
           delete this.mBrowser.registeredOpenURI;
@@ -8343,7 +7450,6 @@
           gBrowser.UrlbarProviderOpenTabs.registerOpenTab(
             aLocation.spec,
             userContextId,
-            this.mTab.group?.id,
             PrivateBrowsingUtils.isWindowPrivate(window)
           );
           this.mBrowser.registeredOpenURI = aLocation;
@@ -8776,67 +7882,56 @@ var TabBarVisibility = {
   _initialUpdateDone: false,
 
   update(force = false) {
-    let isPopup = !window.toolbar.visible;
-    let isTaskbarTab = document.documentElement.hasAttribute("taskbartab");
-    let isSingleTabWindow = isPopup || isTaskbarTab;
-
-    let hasVerticalTabs =
-      !isSingleTabWindow &&
-      Services.prefs.getBoolPref("sidebar.verticalTabs", false);
-
-    // When `gBrowser` has not been initialized, we're opening a new window and
-    // assume only a single tab is loading.
-    let hasSingleTab = !gBrowser || gBrowser.visibleTabs.length == 1;
-
-    // To prevent tabs being lost, hiding the tabs toolbar should only work
-    // when only a single tab is visible or tabs are displayed elsewhere.
-    let hideTabsToolbar =
-      (isSingleTabWindow && hasSingleTab) || hasVerticalTabs;
-
-    // We only want a non-customized titlebar for popups. It should not be the
-    // case, but if a popup window contains more than one tab we re-enable
-    // titlebar customization and display tabs.
-    CustomTitlebar.allowedBy("non-popup", !(isPopup && hasSingleTab));
-
-    // Update the browser chrome.
-
-    let tabsToolbar = document.getElementById("TabsToolbar");
+    let toolbar = document.getElementById("TabsToolbar");
     let navbar = document.getElementById("nav-bar");
+    let hideTabstrip = false;
+    let isPopup = !window.toolbar.visible;
+    let isVerticalTabs = Services.prefs.getBoolPref(
+      "sidebar.verticalTabs",
+      false
+    );
+    let nonPopupWithVerticalTabs = !isPopup && isVerticalTabs;
+    if (
+      !gBrowser /* gBrowser isn't initialized yet */ ||
+      gBrowser.visibleTabs.length == 1
+    ) {
+      hideTabstrip = isPopup;
+    }
 
-    gNavToolbox.toggleAttribute("tabs-hidden", hideTabsToolbar);
+    if (nonPopupWithVerticalTabs) {
+      // TabsInTitlebar decides if we can draw within the titlebar area.
+      // In vertical tabs mode, the toolbar with the horizontal tabstrip gets hidden
+      // and the navbar becomes a titlebar. This makes TabsInTitlebar a bit of a misnomer.
+      // We'll fix this in Bug 1921034.
+      hideTabstrip = true;
+      TabsInTitlebar.allowedBy("tabs-visible", true);
+    } else {
+      TabsInTitlebar.allowedBy("tabs-visible", !hideTabstrip);
+    }
+
+    navbar.toggleAttribute("tabs-hidden", hideTabstrip);
     // Should the nav-bar look and function like a titlebar?
     navbar.classList.toggle(
       "browser-titlebar",
-      CustomTitlebar.enabled && hideTabsToolbar
+      TabsInTitlebar.enabled && hideTabstrip
     );
 
-    document
-      .getElementById("browser")
-      .classList.toggle(
-        "browser-toolbox-background",
-        CustomTitlebar.enabled && hasVerticalTabs
-      );
-
     if (
-      hideTabsToolbar == tabsToolbar.collapsed &&
+      hideTabstrip == toolbar.collapsed &&
       !force &&
       this._initialUpdateDone
     ) {
-      // No further updates needed, `TabsToolbar` already matches the expected
-      // visibilty.
+      // no further updates needed, toolbar.collapsed already matches hideTabstrip
       return;
     }
     this._initialUpdateDone = true;
 
-    tabsToolbar.collapsed = hideTabsToolbar;
+    toolbar.collapsed = hideTabstrip;
 
-    // Stylize close menu items based on tab visibility. When a window will only
-    // ever have a single tab, only show the option to close the tab, and
-    // simplify the text since we don't need to disambiguate from closing the window.
-    document.getElementById("menu_closeWindow").hidden = hideTabsToolbar;
+    document.getElementById("menu_closeWindow").hidden = hideTabstrip;
     document.l10n.setAttributes(
       document.getElementById("menu_close"),
-      hideTabsToolbar
+      hideTabstrip
         ? "tabbrowser-menuitem-close"
         : "tabbrowser-menuitem-close-tab"
     );
@@ -8859,21 +7954,18 @@ var TabContextMenu = {
     });
   },
   updateContextMenu(aPopupMenu) {
-    let triggerTab =
+    let tab =
       aPopupMenu.triggerNode &&
       (aPopupMenu.triggerNode.tab || aPopupMenu.triggerNode.closest("tab"));
-    this.contextTab = triggerTab || gBrowser.selectedTab;
-    this.contextTab.addEventListener("TabAttrModified", this);
-    aPopupMenu.addEventListener("popuphidden", this);
 
-    this.multiselected = this.contextTab.multiselected;
-    this.contextTabs = this.multiselected
-      ? gBrowser.selectedTabs
-      : [this.contextTab];
+    this.contextTab = tab || gBrowser.selectedTab;
+    this.contextTab.addEventListener("TabAttrModified", this);
+    aPopupMenu.addEventListener("popuphiding", this);
 
     let disabled = gBrowser.tabs.length == 1;
+    let multiselectionContext = this.contextTab.multiselected;
     let tabCountInfo = JSON.stringify({
-      tabCount: this.contextTabs.length,
+      tabCount: (multiselectionContext && gBrowser.multiSelectedTabsCount) || 1,
     });
 
     var menuItems = aPopupMenu.getElementsByAttribute(
@@ -8903,13 +7995,8 @@ var TabContextMenu = {
     );
 
     // Session store
-    let closedCount = SessionStore.getLastClosedTabCount(window);
-    document
-      .getElementById("History:UndoCloseTab")
-      .setAttribute("disabled", closedCount == 0);
-    document.l10n.setArgs(document.getElementById("context_undoCloseTab"), {
-      tabCount: closedCount,
-    });
+    document.getElementById("context_undoCloseTab").disabled =
+      SessionStore.getClosedTabCount() == 0;
 
     // Show/hide fullscreen context menu items and set the
     // autohide item's checked state to mirror the autohide pref.
@@ -8926,25 +8013,33 @@ var TabContextMenu = {
     let contextUngroupTab = document.getElementById("context_ungroupTab");
 
     if (gBrowser._tabGroupsEnabled) {
-      let selectedGroupCount = new Set(
-        // The filter removes the "null" group for ungrouped tabs.
-        this.contextTabs.map(t => t.group).filter(g => g)
-      ).size;
-
-      let availableGroupsToMoveTo = gBrowser.getAllTabGroups({
-        sortByLastSeenActive: true,
-      });
-
-      // Determine whether or not the "current" tab group should appear in the
-      // "move tab to group" context menu.
-      if (selectedGroupCount == 1) {
-        let groupToFilter = this.contextTabs[0].group;
-        if (groupToFilter && this.contextTabs.every(t => t.group)) {
-          availableGroupsToMoveTo = availableGroupsToMoveTo.filter(
-            group => group !== groupToFilter
-          );
-        }
+      let selectedGroupCount = 0;
+      if (multiselectionContext) {
+        selectedGroupCount = new Set(
+          // the filter is necessary to remove the "null" group
+          gBrowser.selectedTabs.map(t => t.group).filter(g => g)
+        ).size;
+      } else if (this.contextTab.group) {
+        selectedGroupCount = 1;
       }
+
+      // Determine whether or not the "current" tab group should appear in the move context menu
+      let availableGroupsToMoveTo = gBrowser
+        .getAllTabGroups()
+        .sort((a, b) => a.createdDate - b.createdDate);
+
+      let groupToFilter;
+      if (multiselectionContext && selectedGroupCount == 1) {
+        groupToFilter = gBrowser.selectedTabs[0].group;
+      } else if (gBrowser.selectedTabs.length == 1) {
+        groupToFilter = this.contextTab.group;
+      }
+      if (groupToFilter) {
+        availableGroupsToMoveTo = availableGroupsToMoveTo.filter(
+          group => group !== groupToFilter
+        );
+      }
+
       if (!availableGroupsToMoveTo.length) {
         contextMoveTabToGroup.hidden = true;
         contextMoveTabToNewGroup.hidden = false;
@@ -8966,8 +8061,7 @@ var TabContextMenu = {
             document.l10n.setAttributes(item, "tab-context-unnamed-group");
           }
 
-          item.classList.add("menuitem-iconic");
-          item.classList.add("tab-group-icon");
+          item.classList.add("menuitem-iconic", "tab-contextmenu-group-icon");
           item.style.setProperty(
             "--tab-group-color",
             group.style.getPropertyValue("--tab-group-color")
@@ -8975,10 +8069,6 @@ var TabContextMenu = {
           item.style.setProperty(
             "--tab-group-color-invert",
             group.style.getPropertyValue("--tab-group-color-invert")
-          );
-          item.style.setProperty(
-            "--tab-group-color-pale",
-            group.style.getPropertyValue("--tab-group-color-pale")
           );
           submenu.appendChild(item);
         });
@@ -8996,61 +8086,41 @@ var TabContextMenu = {
     }
 
     // Only one of Reload_Tab/Reload_Selected_Tabs should be visible.
-    document.getElementById("context_reloadTab").hidden = this.multiselected;
+    document.getElementById("context_reloadTab").hidden = multiselectionContext;
     document.getElementById("context_reloadSelectedTabs").hidden =
-      !this.multiselected;
-    let unloadTabItem = document.getElementById("context_unloadTab");
-    if (gBrowser._unloadTabInContextMenu) {
-      // linkedPanel is false if the tab is already unloaded
-      // Cannot unload about: pages, etc., so skip browsers that are not remote
-      let unloadableTabs = this.contextTabs.filter(
-        t => t.linkedPanel && t.linkedBrowser?.isRemoteBrowser
-      );
-      unloadTabItem.hidden = unloadableTabs.length === 0;
-      unloadTabItem.setAttribute(
-        "data-l10n-args",
-        JSON.stringify({ tabCount: unloadableTabs.length })
-      );
-    } else {
-      unloadTabItem.hidden = true;
-    }
+      !multiselectionContext;
 
     // Show Play Tab menu item if the tab has attribute activemedia-blocked
     document.getElementById("context_playTab").hidden = !(
-      this.contextTab.activeMediaBlocked && !this.multiselected
+      this.contextTab.activeMediaBlocked && !multiselectionContext
     );
     document.getElementById("context_playSelectedTabs").hidden = !(
-      this.contextTab.activeMediaBlocked && this.multiselected
+      this.contextTab.activeMediaBlocked && multiselectionContext
     );
 
     // Only one of pin/unpin/multiselect-pin/multiselect-unpin should be visible
     let contextPinTab = document.getElementById("context_pinTab");
-    contextPinTab.hidden = this.contextTab.pinned || this.multiselected;
+    contextPinTab.hidden = this.contextTab.pinned || multiselectionContext;
     let contextUnpinTab = document.getElementById("context_unpinTab");
-    contextUnpinTab.hidden = !this.contextTab.pinned || this.multiselected;
+    contextUnpinTab.hidden = !this.contextTab.pinned || multiselectionContext;
     let contextPinSelectedTabs = document.getElementById(
       "context_pinSelectedTabs"
     );
     contextPinSelectedTabs.hidden =
-      this.contextTab.pinned || !this.multiselected;
+      this.contextTab.pinned || !multiselectionContext;
     let contextUnpinSelectedTabs = document.getElementById(
       "context_unpinSelectedTabs"
     );
     contextUnpinSelectedTabs.hidden =
-      !this.contextTab.pinned || !this.multiselected;
+      !this.contextTab.pinned || !multiselectionContext;
 
     // Move Tab items
     let contextMoveTabOptions = document.getElementById(
       "context_moveTabOptions"
     );
-    // gBrowser.visibleTabs excludes tabs in collapsed groups,
-    // which we want to include in calculations for Move Tab items
-    let visibleOrCollapsedTabs = gBrowser.tabs.filter(
-      t => t.isOpen && !t.hidden
-    );
-    let allTabsSelected = visibleOrCollapsedTabs.every(t => t.multiselected);
     contextMoveTabOptions.setAttribute("data-l10n-args", tabCountInfo);
-    contextMoveTabOptions.disabled = this.contextTab.hidden || allTabsSelected;
+    contextMoveTabOptions.disabled =
+      this.contextTab.hidden || gBrowser.allTabsSelected();
     let selectedTabs = gBrowser.selectedTabs;
     let contextMoveTabToEnd = document.getElementById("context_moveToEnd");
     let allSelectedTabsAdjacent = selectedTabs.every(
@@ -9060,9 +8130,11 @@ var TabContextMenu = {
           : true;
       }
     );
-
-    let lastVisibleTab = visibleOrCollapsedTabs.at(-1);
-    let lastTabToMove = this.contextTabs.at(-1);
+    let contextTabIsSelected = this.contextTab.multiselected;
+    let visibleTabs = gBrowser.visibleTabs;
+    let lastVisibleTab = visibleTabs[visibleTabs.length - 1];
+    let tabsToMove = contextTabIsSelected ? selectedTabs : [this.contextTab];
+    let lastTabToMove = tabsToMove[tabsToMove.length - 1];
 
     let isLastPinnedTab = false;
     if (lastTabToMove.pinned) {
@@ -9071,22 +8143,21 @@ var TabContextMenu = {
     }
     contextMoveTabToEnd.disabled =
       (lastTabToMove == lastVisibleTab || isLastPinnedTab) &&
-      !lastTabToMove.group &&
       allSelectedTabsAdjacent;
     let contextMoveTabToStart = document.getElementById("context_moveToStart");
     let isFirstTab =
-      !this.contextTabs[0].group &&
-      (this.contextTabs[0] == visibleOrCollapsedTabs[0] ||
-        this.contextTabs[0] == visibleOrCollapsedTabs[gBrowser.pinnedTabCount]);
+      tabsToMove[0] == visibleTabs[0] ||
+      tabsToMove[0] == visibleTabs[gBrowser._numPinnedTabs];
     contextMoveTabToStart.disabled = isFirstTab && allSelectedTabsAdjacent;
 
     document.getElementById("context_openTabInWindow").disabled =
       this.contextTab.hasAttribute("customizemode");
 
     // Only one of "Duplicate Tab"/"Duplicate Tabs" should be visible.
-    document.getElementById("context_duplicateTab").hidden = this.multiselected;
+    document.getElementById("context_duplicateTab").hidden =
+      multiselectionContext;
     document.getElementById("context_duplicateTabs").hidden =
-      !this.multiselected;
+      !multiselectionContext;
 
     let closeTabsToTheStartItem = document.getElementById(
       "context_closeTabsToTheStart"
@@ -9114,21 +8185,17 @@ var TabContextMenu = {
 
     // Disable "Close Tabs to the Left/Right" if there are no tabs
     // preceding/following it.
-    let noTabsToStart = !gBrowser._getTabsToTheStartFrom(this.contextTab)
-      .length;
+    let noTabsToStart = !gBrowser.getTabsToTheStartFrom(this.contextTab).length;
     closeTabsToTheStartItem.disabled = noTabsToStart;
 
-    let noTabsToEnd = !gBrowser._getTabsToTheEndFrom(this.contextTab).length;
+    let noTabsToEnd = !gBrowser.getTabsToTheEndFrom(this.contextTab).length;
     closeTabsToTheEndItem.disabled = noTabsToEnd;
 
     // Disable "Close other Tabs" if there are no unpinned tabs.
-    let unpinnedTabsToClose = this.multiselected
-      ? gBrowser.openTabs.filter(
-          t => !t.multiselected && !t.pinned && !t.hidden
-        ).length
-      : gBrowser.openTabs.filter(
-          t => t != this.contextTab && !t.pinned && !t.hidden
-        ).length;
+    let unpinnedTabsToClose = multiselectionContext
+      ? gBrowser.visibleTabs.filter(t => !t.multiselected && !t.pinned).length
+      : gBrowser.visibleTabs.filter(t => t != this.contextTab && !t.pinned)
+          .length;
     let closeOtherTabsItem = document.getElementById("context_closeOtherTabs");
     closeOtherTabsItem.disabled = unpinnedTabsToClose < 1;
 
@@ -9157,13 +8224,13 @@ var TabContextMenu = {
     // Hide "Bookmark Tab…" for multiselection.
     // Update its state if visible.
     let bookmarkTab = document.getElementById("context_bookmarkTab");
-    bookmarkTab.hidden = this.multiselected;
+    bookmarkTab.hidden = multiselectionContext;
 
     // Show "Bookmark Selected Tabs" in a multiselect context and hide it otherwise.
     let bookmarkMultiSelectedTabs = document.getElementById(
       "context_bookmarkSelectedTabs"
     );
-    bookmarkMultiSelectedTabs.hidden = !this.multiselected;
+    bookmarkMultiSelectedTabs.hidden = !multiselectionContext;
 
     let toggleMute = document.getElementById("context_toggleMuteTab");
     let toggleMultiSelectMute = document.getElementById(
@@ -9171,8 +8238,8 @@ var TabContextMenu = {
     );
 
     // Only one of mute_unmute_tab/mute_unmute_selected_tabs should be visible
-    toggleMute.hidden = this.multiselected;
-    toggleMultiSelectMute.hidden = !this.multiselected;
+    toggleMute.hidden = multiselectionContext;
+    toggleMultiSelectMute.hidden = !multiselectionContext;
 
     const isMuted = this.contextTab.hasAttribute("muted");
     document.l10n.setAttributes(
@@ -9203,7 +8270,7 @@ var TabContextMenu = {
       PrivateBrowsingUtils.isWindowPrivate(window);
     reopenInContainer.disabled = this.contextTab.hidden;
 
-    SharingUtils.updateShareURLMenuItem(
+    gShareUtils.updateShareURLMenuItem(
       this.contextTab.linkedBrowser,
       document.getElementById("context_sendTabToDevice")
     );
@@ -9211,20 +8278,17 @@ var TabContextMenu = {
 
   handleEvent(aEvent) {
     switch (aEvent.type) {
-      case "popuphidden":
+      case "popuphiding":
         if (aEvent.target.id == "tabContextMenu") {
           this.contextTab.removeEventListener("TabAttrModified", this);
-          this.contextTab = null;
-          this.contextTabs = null;
         }
         break;
-      case "TabAttrModified": {
+      case "TabAttrModified":
         let tab = aEvent.target;
         this._updateToggleMuteMenuItems(tab, attr =>
           aEvent.detail.changed.includes(attr)
         );
         break;
-      }
     }
   },
 
@@ -9235,21 +8299,22 @@ var TabContextMenu = {
     });
   },
   duplicateSelectedTabs() {
-    let newIndex = this.contextTabs.at(-1)._tPos + 1;
-    for (let tab of this.contextTabs) {
+    let tabsToDuplicate = gBrowser.selectedTabs;
+    let newIndex = tabsToDuplicate[tabsToDuplicate.length - 1]._tPos + 1;
+    for (let tab of tabsToDuplicate) {
       let newTab = SessionStore.duplicateTab(window, tab);
-      if (tab.group) {
-        Glean.tabgroup.tabInteractions.duplicate.add();
-      }
-      gBrowser.moveTabTo(newTab, { tabIndex: newIndex++ });
+      gBrowser.moveTabTo(newTab, newIndex++);
     }
   },
   reopenInContainer(event) {
     let userContextId = parseInt(
       event.target.getAttribute("data-usercontextid")
     );
+    let reopenedTabs = this.contextTab.multiselected
+      ? gBrowser.selectedTabs
+      : [this.contextTab];
 
-    for (let tab of this.contextTabs) {
+    for (let tab of reopenedTabs) {
       if (tab.getAttribute("usercontextid") == userContextId) {
         continue;
       }
@@ -9293,7 +8358,7 @@ var TabContextMenu = {
       let newTab = gBrowser.addTab(tab.linkedBrowser.currentURI.spec, {
         userContextId,
         pinned: tab.pinned,
-        tabIndex: tab._tPos + 1,
+        index: tab._tPos + 1,
         triggeringPrincipal,
       });
 
@@ -9308,59 +8373,32 @@ var TabContextMenu = {
 
   closeContextTabs() {
     if (this.contextTab.multiselected) {
-      gBrowser.removeMultiSelectedTabs(
-        gBrowser.TabMetrics.userTriggeredContext(
-          gBrowser.TabMetrics.METRIC_SOURCE.TAB_STRIP
-        )
-      );
+      gBrowser.removeMultiSelectedTabs();
     } else {
-      gBrowser.removeTab(this.contextTab, {
-        animate: true,
-        ...gBrowser.TabMetrics.userTriggeredContext(
-          gBrowser.TabMetrics.METRIC_SOURCE.TAB_STRIP
-        ),
-      });
+      gBrowser.removeTab(this.contextTab, { animate: true });
     }
-  },
-
-  explicitUnloadTabs() {
-    gBrowser.explicitUnloadTabs(this.contextTabs);
   },
 
   moveTabsToNewGroup() {
-    let insertBefore = this.contextTab;
-    if (insertBefore._tPos < gBrowser.pinnedTabCount) {
-      insertBefore = gBrowser.tabs[gBrowser.pinnedTabCount];
-    }
-    gBrowser.addTabGroup(this.contextTabs, {
-      insertBefore,
-      isUserTriggered: true,
-      telemetryUserCreateSource: "tab_menu",
-    });
-    gBrowser.selectedTab = this.contextTabs[0];
-
-    // When using the tab context menu to create a group from the all tabs
-    // panel, make sure we close that panel so that it doesn't obscure the tab
-    // group creation panel.
-    gTabsPanel.hideAllTabsPanel();
+    gBrowser.addTabGroup(
+      this.contextTab.multiselected ? gBrowser.selectedTabs : [this.contextTab],
+      { insertBefore: this.contextTab }
+    );
   },
 
-  /**
-   * @param {MozTabbrowserTabGroup} group
-   */
   moveTabsToGroup(group) {
     group.addTabs(
-      this.contextTabs,
-      gBrowser.TabMetrics.userTriggeredContext(
-        gBrowser.TabMetrics.METRIC_SOURCE.TAB_MENU
-      )
+      this.contextTab.multiselected ? gBrowser.selectedTabs : [this.contextTab]
     );
-    group.ownerGlobal.focus();
   },
 
   ungroupTabs() {
-    for (let i = this.contextTabs.length - 1; i >= 0; i--) {
-      gBrowser.ungroupTab(this.contextTabs[i]);
+    if (this.contextTab.multiselected) {
+      for (let tab of gBrowser.selectedTabs) {
+        gBrowser.ungroupTab(tab);
+      }
+    } else {
+      gBrowser.ungroupTab(this.contextTab);
     }
   },
 };

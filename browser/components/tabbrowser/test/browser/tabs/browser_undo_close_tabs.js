@@ -56,15 +56,12 @@ add_task(async function withMultiSelectedTabs() {
   for (let tabId of [2, 3, 4]) {
     let browser = gBrowser.tabs[tabId].linkedBrowser;
     await ContentTask.spawn(browser, tabId, async aTabId => {
-      await ContentTaskUtils.waitForCondition(
-        () => {
-          return (
-            content?.document?.readyState == "complete" &&
-            content?.document?.location.href == "https://example.com/" + aTabId
-          );
-        },
-        "waiting for tab " + aTabId + " to load"
-      );
+      await ContentTaskUtils.waitForCondition(() => {
+        return (
+          content?.document?.readyState == "complete" &&
+          content?.document?.location.href == "https://example.com/" + aTabId
+        );
+      }, "waiting for tab " + aTabId + " to load");
     });
   }
 
@@ -161,15 +158,12 @@ add_task(async function withCloseTabsToTheRight() {
   for (let tabId of [2, 3, 4]) {
     let browser = gBrowser.tabs[tabId].linkedBrowser;
     ContentTask.spawn(browser, tabId, async aTabId => {
-      await ContentTaskUtils.waitForCondition(
-        () => {
-          return (
-            content?.document?.readyState == "complete" &&
-            content?.document?.location.href == "https://example.com/" + aTabId
-          );
-        },
-        "waiting for tab " + aTabId + " to load"
-      );
+      await ContentTaskUtils.waitForCondition(() => {
+        return (
+          content?.document?.readyState == "complete" &&
+          content?.document?.location.href == "https://example.com/" + aTabId
+        );
+      }, "waiting for tab " + aTabId + " to load");
     });
   }
 

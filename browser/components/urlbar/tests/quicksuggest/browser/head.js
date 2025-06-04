@@ -14,7 +14,6 @@ ChromeUtils.defineESModuleGetters(this, {
   CONTEXTUAL_SERVICES_PING_TYPES:
     "resource:///modules/PartnerLinkAttribution.sys.mjs",
   QuickSuggest: "resource:///modules/QuickSuggest.sys.mjs",
-  Region: "resource://gre/modules/Region.sys.mjs",
   TelemetryTestUtils: "resource://testing-common/TelemetryTestUtils.sys.mjs",
   UrlbarProviderQuickSuggest:
     "resource:///modules/UrlbarProviderQuickSuggest.sys.mjs",
@@ -81,7 +80,7 @@ async function updateTopSites(condition, searchShortcuts = false) {
 }
 
 /**
- * Call this in your setup task if you use `doQuickSuggestPingTest()`.
+ * Call this in your setup task if you use `doTelemetryTest()`.
  *
  * @param {object} options
  *   Options
@@ -92,7 +91,7 @@ async function updateTopSites(condition, searchShortcuts = false) {
  * @param {Array} options.config
  *   See `QuickSuggestTestUtils.ensureQuickSuggestInit()`.
  */
-async function initQuickSuggestPingTest({
+async function setUpTelemetryTest({
   remoteSettingsRecords,
   merinoSuggestions = null,
   config = QuickSuggestTestUtils.DEFAULT_CONFIG,
@@ -103,7 +102,6 @@ async function initQuickSuggestPingTest({
       // button and closes the new tab, which interferes with the expected
       // indexes of quick suggest results, so disable them.
       ["browser.urlbar.suggest.openpage", false],
-      ["browser.urlbar.quicksuggest.ampTopPickCharThreshold", 0],
     ],
   });
 
@@ -122,8 +120,9 @@ async function initQuickSuggestPingTest({
 }
 
 /**
- * Main entry point for testing the `quick-suggest` ping. It tests impressions,
- * clicks, and commands.
+ * Main entry point for testing primary telemetry for quick suggest suggestions:
+ * impressions, clicks, helps, and blocks. This can be used to declaratively
+ * test all primary telemetry for any suggestion type.
  *
  * @param {object} options
  *   Options
@@ -132,22 +131,27 @@ async function initQuickSuggestPingTest({
  * @param {object} options.suggestion
  *   The suggestion being tested.
  * @param {object} options.impressionOnly
- *   The expected impression ping when only an impression is triggered for the
- *   suggestion (no engagement or dismissal). It should be an object that maps
- *   the camelCased ping keys to their expected values.
- * @param {Array} options.click
- *   An array of expected pings (in the order they're expected) when the
- *   suggestion is clicked.
+ *   An object describing the expected impression-only telemetry, i.e.,
+ *   telemetry recorded when an impression occurs but not a click. It must have
+ *   the following properties:
+ *     {object} ping
+ *       The expected recorded custom telemetry ping. If no ping is expected,
+ *       leave this undefined or pass null.
+ * @param {object} options.click
+ *   An object describing the expected click telemetry. It must have the same
+ *   properties as `impressionOnly` except `ping` must be `pings` (plural), an
+ *   array of expected pings.
  * @param {Array} options.commands
- *   Each element in this array is an object that describes the expected pings
- *   for a result menu command. Each object must have the following properties:
+ *   Each element in this array is an object that describes the expected
+ *   telemetry for a result menu command. Each object must have the following
+ *   properties:
  *     {string|Array} command
  *       A command name or array; this is passed directly to
  *       `UrlbarTestUtils.openResultMenuAndClickItem()` as the `commandOrArray`
  *       arg, so see its documentation for details.
  *     {Array} pings
- *       An array of expected pings (in the order they're expected) when the
- *       command is triggered.
+ *       A list of expected recorded custom telemetry pings. If no pings are
+ *       expected, pass an empty array.
  * @param {string} options.providerName
  *   The name of the provider that is expected to create the UrlbarResult for
  *   the suggestion.
@@ -158,7 +162,7 @@ async function initQuickSuggestPingTest({
  * @param {Function} options.showSuggestion
  *   This function should open the view and show the suggestion.
  */
-async function doQuickSuggestPingTest({
+async function doTelemetryTest({
   index,
   suggestion,
   impressionOnly,
@@ -169,7 +173,7 @@ async function doQuickSuggestPingTest({
   showSuggestion = () =>
     UrlbarTestUtils.promiseAutocompleteResultPopup({
       window,
-      // If the suggestion is a mock remote settings suggestion, it will have a
+      // If the suggestion object is a remote settings result, it will have a
       // `keywords` property. Otherwise the suggestion object must be a Merino
       // suggestion, and the search string doesn't matter in that case because
       // the mock Merino server will be set up to return suggestions regardless.
@@ -177,24 +181,12 @@ async function doQuickSuggestPingTest({
       fireInputEvent: true,
     }),
 }) {
-  Assert.ok(Region.home, "Sanity check: Region should be non-null/empty");
-
-  let allExpectedPings = [
-    impressionOnly,
-    ...click,
-    ...commands.map(({ pings }) => pings),
-  ].flat();
-
-  for (let ping of allExpectedPings) {
-    ping.country = Region.home;
-  }
-
   await doImpressionOnlyTest({
     index,
     suggestion,
     providerName,
     showSuggestion,
-    expectedPing: impressionOnly,
+    expected: impressionOnly,
   });
 
   await doClickTest({
@@ -202,7 +194,7 @@ async function doQuickSuggestPingTest({
     providerName,
     showSuggestion,
     index,
-    expectedPings: click,
+    expected: click,
   });
 
   for (let command of commands) {
@@ -212,7 +204,7 @@ async function doQuickSuggestPingTest({
       showSuggestion,
       index,
       commandOrArray: command.command,
-      expectedPings: command.pings,
+      expected: command,
     });
 
     if (teardown) {
@@ -224,7 +216,7 @@ async function doQuickSuggestPingTest({
 }
 
 /**
- * Helper for `doQuickSuggestPingTest()` that does an impression-only test.
+ * Helper for `doTelemetryTest()` that does an impression-only test.
  *
  * @param {object} options
  *   Options
@@ -235,8 +227,12 @@ async function doQuickSuggestPingTest({
  * @param {string} options.providerName
  *   The name of the provider that is expected to create the UrlbarResult for
  *   the suggestion.
- * @param {object} options.expectedPing
- *   The expected impression ping.
+ * @param {object} options.expected
+ *   An object describing the expected impression-only telemetry. It must have
+ *   the following properties:
+ *     {object} ping
+ *       The expected recorded custom telemetry ping. If no ping is expected,
+ *       leave this undefined or pass null.
  * @param {Function} options.showSuggestion
  *   This function should open the view and show the suggestion.
  */
@@ -244,13 +240,13 @@ async function doImpressionOnlyTest({
   index,
   suggestion,
   providerName,
-  expectedPing,
+  expected,
   showSuggestion,
 }) {
   info("Starting impression-only test");
 
-  let expectedPings = [expectedPing];
-  let gleanPingCount = watchQuickSuggestPings(expectedPings);
+  let expectedPings = expected.ping ? [expected.ping] : [];
+  let gleanPingCount = watchGleanPings(expectedPings);
 
   info("Showing suggestion");
   await showSuggestion();
@@ -310,11 +306,11 @@ async function doImpressionOnlyTest({
   info("Waiting for page to load after clicking different row");
   await loadPromise;
 
-  // The pings are sent asynchronously, so we wait until we've seen them all
-  // be sent.
-  await TestUtils.waitForCondition(() => {
-    return expectedPings.length == gleanPingCount.value;
-  }, "Submitted one Glean ping per expected ping");
+  Assert.equal(
+    expectedPings.length,
+    gleanPingCount.value,
+    "Submitted one Glean ping per expected ping"
+  );
 
   // Clean up.
   await PlacesUtils.history.clear();
@@ -324,7 +320,8 @@ async function doImpressionOnlyTest({
 }
 
 /**
- * Helper for `doQuickSuggestPingTest()` that clicks a suggestion's row.
+ * Helper for `doTelemetryTest()` that clicks a suggestion's row and checks
+ * telemetry.
  *
  * @param {object} options
  *   Options
@@ -335,8 +332,12 @@ async function doImpressionOnlyTest({
  * @param {string} options.providerName
  *   The name of the provider that is expected to create the UrlbarResult for
  *   the suggestion.
- * @param {object} options.expectedPings
- *   An array of expected pings (in the order they're expected).
+ * @param {object} options.expected
+ *   An object describing the telemetry that's expected to be recorded when the
+ *   selectable element is picked. It must have the following properties:
+ *     {Array} pings
+ *       A list of expected recorded custom telemetry pings. If no pings are
+ *       expected, leave this undefined or pass an empty array.
  * @param {Function} options.showSuggestion
  *   This function should open the view and show the suggestion.
  */
@@ -344,12 +345,13 @@ async function doClickTest({
   index,
   suggestion,
   providerName,
-  expectedPings,
+  expected,
   showSuggestion,
 }) {
   info("Starting click test");
 
-  let gleanPingCount = watchQuickSuggestPings(expectedPings);
+  let expectedPings = expected.pings ?? [];
+  let gleanPingCount = watchGleanPings(expectedPings);
 
   info("Showing suggestion");
   await showSuggestion();
@@ -370,11 +372,11 @@ async function doClickTest({
   await loadPromise;
   await TestUtils.waitForTick();
 
-  // The pings are sent asynchronously, so we wait until we've seen them all
-  // be sent.
-  await TestUtils.waitForCondition(() => {
-    return expectedPings.length == gleanPingCount.value;
-  }, "Submitted one Glean ping per expected ping");
+  Assert.equal(
+    expectedPings.length,
+    gleanPingCount.value,
+    "Submitted one Glean ping per expected ping"
+  );
 
   await PlacesUtils.history.clear();
 
@@ -382,7 +384,8 @@ async function doClickTest({
 }
 
 /**
- * Helper for `doQuickSuggestPingTest()` that clicks a result menu command.
+ * Helper for `doTelemetryTest()` that clicks a result menu command for a
+ * suggestion and checks telemetry.
  *
  * @param {object} options
  *   Options
@@ -397,8 +400,12 @@ async function doClickTest({
  *   A command name or array; this is passed directly to
  *  `UrlbarTestUtils.openResultMenuAndClickItem()` as the `commandOrArray` arg,
  *   so see its documentation for details.
- * @param {object} options.expectedPings
- *   An array of expected pings (in the order they're expected).
+ * @param {object} options.expected
+ *   An object describing the telemetry that's expected to be recorded when the
+ *   selectable element is picked. It must have the following properties:
+ *     {Array} pings
+ *       A list of expected recorded custom telemetry pings. If no pings are
+ *       expected, leave this undefined or pass an empty array.
  * @param {Function} options.showSuggestion
  *   This function should open the view and show the suggestion.
  */
@@ -407,12 +414,13 @@ async function doCommandTest({
   suggestion,
   providerName,
   commandOrArray,
-  expectedPings,
+  expected,
   showSuggestion,
 }) {
   info("Starting command test: " + JSON.stringify({ commandOrArray }));
 
-  let gleanPingCount = watchQuickSuggestPings(expectedPings);
+  let expectedPings = expected.pings ?? [];
+  let gleanPingCount = watchGleanPings(expectedPings);
 
   info("Showing suggestion");
   await showSuggestion();
@@ -450,21 +458,21 @@ async function doCommandTest({
     }
   }
 
-  // The pings are sent asynchronously, so we wait until we've seen them all
-  // be sent.
-  await TestUtils.waitForCondition(() => {
-    return expectedPings.length == gleanPingCount.value;
-  }, "Submitted one Glean ping per expected ping");
+  Assert.equal(
+    expectedPings.length,
+    gleanPingCount.value,
+    "Submitted one Glean ping per expected ping"
+  );
 
   if (command == "dismiss") {
-    await QuickSuggest.clearDismissedSuggestions();
+    await QuickSuggest.blockedSuggestions.clear();
   }
   await PlacesUtils.history.clear();
 
   info("Finished command test: " + JSON.stringify({ commandOrArray }));
 }
 
-/**
+/*
  * Do test the "Manage" result menu item.
  *
  * @param {object} options
@@ -551,12 +559,12 @@ async function validateSuggestionRow(index, suggestion, providerName) {
   return row;
 }
 
-function watchQuickSuggestPings(pings) {
+function watchGleanPings(pings) {
   let countObject = { value: 0 };
 
   let checkPing = (ping, next) => {
     countObject.value++;
-    assertQuickSuggestPing(ping);
+    _assertGleanPing(ping);
     if (next) {
       GleanPings.quickSuggest.testBeforeNextSubmit(next);
     }
@@ -577,78 +585,166 @@ function watchQuickSuggestPings(pings) {
   return countObject;
 }
 
-function assertQuickSuggestPing(expectedPing) {
-  let expectedKeys = [
-    "pingType",
-    "country",
-    "matchType",
-    "advertiser",
-    "blockId",
-    "improveSuggestExperience",
-    "position",
-    "suggestedIndex",
-    "suggestedIndexRelativeToGroup",
-    "requestId",
-    "source",
-    "contextId",
-  ];
-
-  Assert.ok(
-    expectedPing.pingType,
-    "Sanity check: The expected ping should have a 'pingType'"
-  );
-  switch (expectedPing.pingType) {
-    case CONTEXTUAL_SERVICES_PING_TYPES.QS_IMPRESSION:
-      expectedKeys.push("isClicked", "reportingUrl");
-      break;
-    case CONTEXTUAL_SERVICES_PING_TYPES.QS_SELECTION:
-      expectedKeys.push("reportingUrl");
-      break;
-    case CONTEXTUAL_SERVICES_PING_TYPES.QS_BLOCK:
-      expectedKeys.push("iabCategory");
-      break;
-  }
-
-  let expectedValueOverrides = {
-    contextId: expectedPingContextId(),
+function _assertGleanPing(ping) {
+  Assert.equal(Glean.quickSuggest.pingType.testGetValue(), ping.type);
+  const keymap = {
+    // present in all pings
+    source: Glean.quickSuggest.source,
+    match_type: Glean.quickSuggest.matchType,
+    position: Glean.quickSuggest.position,
+    suggested_index: Glean.quickSuggest.suggestedIndex,
+    suggested_index_relative_to_group:
+      Glean.quickSuggest.suggestedIndexRelativeToGroup,
+    improve_suggest_experience_checked:
+      Glean.quickSuggest.improveSuggestExperience,
+    block_id: Glean.quickSuggest.blockId,
+    advertiser: Glean.quickSuggest.advertiser,
+    request_id: Glean.quickSuggest.requestId,
+    context_id: Glean.quickSuggest.contextId,
+    // impression and click pings
+    reporting_url: Glean.quickSuggest.reportingUrl,
+    // impression ping
+    is_clicked: Glean.quickSuggest.isClicked,
+    // block/dismiss ping
+    iab_category: Glean.quickSuggest.iabCategory,
   };
+  for (let [key, value] of Object.entries(ping.payload)) {
+    Assert.ok(key in keymap, `A Glean metric exists for field ${key}`);
 
-  for (let key of expectedKeys) {
-    Assert.ok(
-      expectedPing.hasOwnProperty(key),
-      "Sanity check: The expected ping should have key: " + key
-    );
-    Assert.ok(
-      key in Glean.quickSuggest,
-      "The actual ping should have key: " + key
-    );
-
-    let expectedValue = expectedValueOverrides.hasOwnProperty(key)
-      ? expectedValueOverrides[key]
-      : expectedPing[key];
-
-    if (expectedValue === undefined || expectedValue === "") {
-      // The value is specifically not set in this case, which ends up recording
-      // a null value in the actual ping.
-      Assert.strictEqual(
-        Glean.quickSuggest[key].testGetValue(),
-        null,
-        "The actual ping should have a null value for key: " + key
-      );
-    } else {
-      Assert.strictEqual(
-        Glean.quickSuggest[key].testGetValue(),
-        expectedValue,
-        "The actual ping should have the correct value for key: " + key
-      );
+    // Merino results may contain empty strings, but Glean will represent these
+    // as nulls.
+    if (value === "") {
+      value = null;
     }
+
+    Assert.equal(
+      keymap[key].testGetValue(),
+      value ?? null,
+      `Glean metric field ${key} should be the expected value`
+    );
   }
 }
 
-function expectedPingContextId() {
-  // `contextId` in the `quick-suggest` pings should always be the value in this
-  // pref, a UUID, but without the leading and trailing braces.
-  return Services.prefs
-    .getCharPref("browser.contextual-services.contextId")
-    .substring(1, 37);
+let gAddTasksWithRustSetup;
+
+/**
+ * Adds two tasks: One with the Rust backend disabled and one with it enabled.
+ * The names of the task functions will be the name of the passed-in task
+ * function appended with "_rustDisabled" and "_rustEnabled". If the passed-in
+ * task doesn't have a name, "anonymousTask" will be used.
+ *
+ * Call this with the usual `add_task()` arguments. Additionally, an object with
+ * the following properties can be specified as any argument:
+ *
+ * {boolean} skip_if_rust_enabled
+ *   If true, a "_rustEnabled" task won't be added. Useful when Rust is enabled
+ *   by default but the task doesn't make sense with Rust and you still want to
+ *   test some behavior when Rust is disabled.
+ *
+ * @param {...any} args
+ *   The usual `add_task()` arguments.
+ */
+function add_tasks_with_rust(...args) {
+  let skipIfRustEnabled = false;
+  let i = args.findIndex(a => a.skip_if_rust_enabled);
+  if (i >= 0) {
+    skipIfRustEnabled = true;
+    args.splice(i, 1);
+  }
+
+  let taskFnIndex = args.findIndex(a => typeof a == "function");
+  let taskFn = args[taskFnIndex];
+
+  for (let rustEnabled of [false, true]) {
+    let newTaskName =
+      (taskFn.name || "anonymousTask") +
+      (rustEnabled ? "_rustEnabled" : "_rustDisabled");
+
+    if (rustEnabled && skipIfRustEnabled) {
+      info(
+        "add_tasks_with_rust: Skipping due to skip_if_rust_enabled: " +
+          newTaskName
+      );
+      continue;
+    }
+
+    let newTaskFn = async (...taskFnArgs) => {
+      info("add_tasks_with_rust: Setting rustEnabled: " + rustEnabled);
+      UrlbarPrefs.set("quicksuggest.rustEnabled", rustEnabled);
+      info("add_tasks_with_rust: Done setting rustEnabled: " + rustEnabled);
+
+      // The current backend may now start syncing, so wait for it to finish.
+      info("add_tasks_with_rust: Forcing sync");
+      await QuickSuggestTestUtils.forceSync();
+      info("add_tasks_with_rust: Done forcing sync");
+
+      if (gAddTasksWithRustSetup) {
+        info("add_tasks_with_rust: Calling setup function");
+        await gAddTasksWithRustSetup();
+        info("add_tasks_with_rust: Done calling setup function");
+      }
+
+      let rv;
+      try {
+        info(
+          "add_tasks_with_rust: Calling original task function: " + taskFn.name
+        );
+        rv = await taskFn(...taskFnArgs);
+      } catch (e) {
+        // Clearly report any unusual errors to make them easier to spot and to
+        // make the flow of the test clearer. The harness throws NS_ERROR_ABORT
+        // when a normal assertion fails, so don't report that.
+        if (e.result != Cr.NS_ERROR_ABORT) {
+          Assert.ok(
+            false,
+            "add_tasks_with_rust: The original task function threw an error: " +
+              e
+          );
+        }
+        throw e;
+      } finally {
+        info(
+          "add_tasks_with_rust: Done calling original task function: " +
+            taskFn.name
+        );
+        info("add_tasks_with_rust: Clearing rustEnabled");
+        UrlbarPrefs.clear("quicksuggest.rustEnabled");
+        info("add_tasks_with_rust: Done clearing rustEnabled");
+
+        // The current backend may now start syncing, so wait for it to finish.
+        info("add_tasks_with_rust: Forcing sync");
+        await QuickSuggestTestUtils.forceSync();
+        info("add_tasks_with_rust: Done forcing sync");
+      }
+      return rv;
+    };
+
+    Object.defineProperty(newTaskFn, "name", { value: newTaskName });
+
+    let addTaskArgs = [];
+    for (let j = 0; j < args.length; j++) {
+      addTaskArgs[j] =
+        j == taskFnIndex
+          ? newTaskFn
+          : Cu.cloneInto(args[j], this, { cloneFunctions: true });
+    }
+    add_task(...addTaskArgs);
+  }
+}
+
+/**
+ * Registers a setup function that `add_tasks_with_rust()` will await before
+ * calling each of your original tasks. Call this at most once in your test file
+ * (i.e., in `add_setup()`). This is useful when enabling/disabling Rust has
+ * side effects related to your particular test that need to be handled or
+ * awaited for each of your tasks. On the other hand, if only one or two of your
+ * tasks need special setup, do it directly in those tasks instead of using
+ * this. The passed-in `setupFn` is automatically unregistered on cleanup.
+ *
+ * @param {Function} setupFn
+ *   A function that will be awaited before your original tasks are called.
+ */
+function registerAddTasksWithRustSetup(setupFn) {
+  gAddTasksWithRustSetup = setupFn;
+  registerCleanupFunction(() => (gAddTasksWithRustSetup = null));
 }

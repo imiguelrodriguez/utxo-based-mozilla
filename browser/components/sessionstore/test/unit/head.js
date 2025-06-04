@@ -1,6 +1,5 @@
 ChromeUtils.defineESModuleGetters(this, {
   SessionStartup: "resource:///modules/sessionstore/SessionStartup.sys.mjs",
-  SessionStore: "resource:///modules/sessionstore/SessionStore.sys.mjs",
 });
 
 // Call a function once initialization of SessionStartup is complete

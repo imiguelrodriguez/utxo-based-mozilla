@@ -132,7 +132,7 @@ async function testSearchEngine(engineDetails) {
     base.replace("{code}", engineDetails.codes.submission),
     "Check search URL for 'foo'"
   );
-  let sb = document.getElementById("searchbar");
+  let sb = BrowserSearch.searchBar;
 
   let engineTests = [
     {
@@ -141,11 +141,11 @@ async function testSearchEngine(engineDetails) {
       run() {
         // Simulate a contextmenu search
         // FIXME: This is a bit "low-level"...
-        SearchUIUtils._loadSearch(
-          window,
+        BrowserSearch._loadSearch(
           "foo",
           false,
           false,
+          "contextmenu",
           Services.scriptSecurityManager.getSystemPrincipal()
         );
       },

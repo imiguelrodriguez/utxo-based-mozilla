@@ -5,8 +5,6 @@
    - License, v. 2.0. If a copy of the MPL was not distributed with this
    - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
 
-<?csp default-src chrome:; style-src chrome: 'unsafe-inline'; ?>
-
 <window
   type="child"
   xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
@@ -15,7 +13,11 @@
   data-l10n-attrs="title, style"
   persist="lastSelected"
 >
-  <dialog id="ColorsDialog" buttons="accept,cancel">
+  <dialog
+    id="ColorsDialog"
+    buttons="accept,cancel,help"
+    helpTopic="prefs-fonts-and-colors"
+  >
     <linkset>
       <html:link rel="stylesheet" href="chrome://global/skin/global.css" />
       <html:link
@@ -30,7 +32,11 @@
     <script src="chrome://global/content/preferencesBindings.js" />
 
     <keyset>
-      <key id="key_close" data-l10n-id="colors-close-key" modifiers="accel" />
+      <key
+        data-l10n-id="colors-close-key"
+        modifiers="accel"
+        oncommand="Preferences.close(event)"
+      />
     </keyset>
 
     <hbox>
@@ -59,6 +65,14 @@
             type="color"
             id="backgroundmenu"
             preference="browser.display.background_color"
+          />
+        </hbox>
+        <separator class="thin" />
+        <hbox align="center">
+          <checkbox
+            id="browserUseSystemColors"
+            data-l10n-id="colors-use-system"
+            preference="browser.display.use_system_colors"
           />
         </hbox>
       </groupbox>
@@ -92,6 +106,33 @@
           />
         </hbox>
       </groupbox>
+    </hbox>
+
+    <label data-l10n-id="colors-page-override" control="useDocumentColors" />
+    <hbox>
+      <menulist
+        id="useDocumentColors"
+        preference="browser.display.document_color_use"
+        flex="1"
+      >
+        <menupopup>
+          <menuitem
+            data-l10n-id="colors-page-override-option-always"
+            value="2"
+            id="documentColorAlways"
+          />
+          <menuitem
+            data-l10n-id="colors-page-override-option-auto"
+            value="0"
+            id="documentColorAutomatic"
+          />
+          <menuitem
+            data-l10n-id="colors-page-override-option-never"
+            value="1"
+            id="documentColorNever"
+          />
+        </menupopup>
+      </menulist>
     </hbox>
 
     <!-- Load the script after the elements for layout issues (bug 1501755). -->

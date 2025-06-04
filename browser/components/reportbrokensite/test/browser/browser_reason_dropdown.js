@@ -13,14 +13,17 @@ add_common_setup();
 requestLongerTimeout(2);
 
 async function clickSendAndCheckPing(rbs, expectedReason = null) {
-  await GleanPings.brokenSiteReport.testSubmission(
-    () =>
+  const pingCheck = new Promise(resolve => {
+    GleanPings.brokenSiteReport.testBeforeNextSubmit(() => {
       Assert.equal(
         Glean.brokenSiteReport.breakageCategory.testGetValue(),
         expectedReason
-      ),
-    () => rbs.clickSend()
-  );
+      );
+      resolve();
+    });
+  });
+  await rbs.clickSend();
+  return pingCheck;
 }
 
 add_task(async function testReasonDropdown() {
@@ -90,14 +93,11 @@ add_task(async function testReasonDropdownRandomized() {
     const rbs = await AppMenu().openReportBrokenSite();
     const defaultOrder = [
       "choose",
-      "checkout",
-      "load",
       "slow",
       "media",
       "content",
       "account",
-      "adblocker",
-      "notsupported",
+      "adblockers",
       "other",
     ];
     Assert.deepEqual(

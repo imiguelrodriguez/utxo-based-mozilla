@@ -14,8 +14,6 @@ const URL_TAB1 =
   "http://example.com/browser_cleaner.js?newtab1=" + Math.random();
 const URL_TAB2 =
   "http://example.com/browser_cleaner.js?newtab2=" + Math.random();
-const URL_NEWGROUP =
-  "http://example.com/browser_cleaner.js?newgroup=" + Math.random();
 const URL_NEWWIN =
   "http://example.com/browser_cleaner.js?newwin=" + Math.random();
 
@@ -39,7 +37,6 @@ var CLOSED_STATE;
 add_setup(async function () {
   forgetClosedWindows();
   forgetClosedTabs(window);
-  forgetClosedTabGroups(window);
 });
 
 add_task(async function test_open_and_close() {
@@ -48,10 +45,6 @@ add_task(async function test_open_and_close() {
 
   let newTab2 = BrowserTestUtils.addTab(gBrowser, URL_TAB2);
   await promiseBrowserLoaded(newTab2.linkedBrowser);
-
-  let newGroupTab = BrowserTestUtils.addTab(gBrowser, URL_NEWGROUP);
-  await promiseBrowserLoaded(newGroupTab.linkedBrowser);
-  let newGroup = gBrowser.addTabGroup([newGroupTab]);
 
   let newWin = await promiseNewWindowLoaded();
   let tab = BrowserTestUtils.addTab(newWin.gBrowser, URL_NEWWIN);
@@ -84,16 +77,6 @@ add_task(async function test_open_and_close() {
     false,
     "1. Second tab doesn't have closedAt"
   );
-  is(
-    state.windows[0].tabs[2].closedAt || false,
-    false,
-    "1. Grouped tab doesn't have closedAt"
-  );
-  is(
-    state.windows[0].groups[0].closedAt || false,
-    false,
-    "1. Group doesn't have closedAt"
-  );
 
   info("2. Making sure that after closing, we have closedAt");
 
@@ -101,13 +84,6 @@ add_task(async function test_open_and_close() {
   await BrowserTestUtils.closeWindow(newWin);
   await promiseRemoveTabAndSessionState(newTab1);
   await promiseRemoveTabAndSessionState(newTab2);
-
-  let removePromise = BrowserTestUtils.waitForEvent(
-    newGroup,
-    "TabGroupRemoved"
-  );
-  gBrowser.removeTabGroup(newGroup);
-  await removePromise;
 
   state = CLOSED_STATE = JSON.parse(ss.getBrowserState());
 
@@ -128,10 +104,6 @@ add_task(async function test_open_and_close() {
     isRecent(state.windows[0]._closedTabs[1].closedAt),
     "2. Second tab was closed recently"
   );
-  ok(
-    isRecent(state.windows[0].closedGroups[0].closedAt),
-    "2. Group was closed recently"
-  );
 });
 
 add_task(async function test_restore() {
@@ -148,6 +120,7 @@ add_task(async function test_restore() {
   await promiseTabRestored(newTab1);
 
   let state = JSON.parse(ss.getBrowserState());
+  console.log("examining state:", state);
   is(
     state.windows[0].closedAt || false,
     false,
@@ -183,7 +156,6 @@ add_task(async function test_old_data() {
   delete state._closedWindows[0].closedAt;
   delete state.windows[0]._closedTabs[0].closedAt;
   delete state.windows[0]._closedTabs[1].closedAt;
-  delete state.windows[0].closedGroups[0].closedAt;
   await promiseBrowserState(state);
 
   info("Sending idle-daily");
@@ -208,10 +180,6 @@ add_task(async function test_old_data() {
     isRecent(state.windows[0]._closedTabs[1].closedAt),
     "4. Second tab was closed recently"
   );
-  ok(
-    isRecent(state.windows[0].closedGroups[0].closedAt),
-    "4. Group was closed recently"
-  );
   await promiseCleanup();
 });
 
@@ -224,7 +192,6 @@ add_task(async function test_cleanup() {
   let state = getClosedState();
   state._closedWindows[0].closedAt = LONG_TIME_AGO;
   state.windows[0]._closedTabs[0].closedAt = LONG_TIME_AGO;
-  state.windows[0].closedGroups[0].closedAt = LONG_TIME_AGO;
   state.windows[0]._closedTabs[1].closedAt = Date.now();
   let url = state.windows[0]._closedTabs[1].state.entries[0].url;
 
@@ -236,7 +203,6 @@ add_task(async function test_cleanup() {
 
   state = JSON.parse(ss.getBrowserState());
   is(state._closedWindows[0], undefined, "5. Second window was forgotten");
-  is(state.windows[0].closedGroups[0], undefined, "5. Tab group was forgotten");
 
   is(state.windows[0]._closedTabs.length, 1, "5. Only one closed tab left");
   is(
@@ -244,9 +210,5 @@ add_task(async function test_cleanup() {
     url,
     "5. The second tab is still here"
   );
-
   await promiseCleanup();
-
-  // Cleanup closed tab group
-  forgetClosedTabGroups(window);
 });

@@ -31,7 +31,6 @@ var gSyncPane = {
   init() {
     this._setupEventListeners();
     this.setupEnginesUI();
-    this.updateSyncUI();
 
     document
       .getElementById("weavePrefsDeck")
@@ -120,12 +119,6 @@ var gSyncPane = {
     // Notify observers that the UI is now ready
     Services.obs.notifyObservers(window, "sync-pane-loaded");
 
-    this._maybeShowSyncAction();
-  },
-
-  // Check if the user is coming from a call to action
-  // and show them the correct additional panel
-  _maybeShowSyncAction() {
     if (
       location.hash == "#sync" &&
       UIState.get().status == UIState.STATUS_SIGNED_IN
@@ -133,7 +126,7 @@ var gSyncPane = {
       if (location.href.includes("action=pair")) {
         gSyncPane.pairAnotherDevice();
       } else if (location.href.includes("action=choose-what-to-sync")) {
-        gSyncPane._chooseWhatToSync(false, "callToAction");
+        gSyncPane._chooseWhatToSync(false);
       }
     }
   },
@@ -239,10 +232,10 @@ var gSyncPane = {
       }
     });
     setEventListener("syncSetup", "command", function () {
-      this._chooseWhatToSync(false, "setupSync");
+      this._chooseWhatToSync(false);
     });
     setEventListener("syncChangeOptions", "command", function () {
-      this._chooseWhatToSync(true, "manageSyncSettings");
+      this._chooseWhatToSync(true);
     });
     setEventListener("syncNow", "command", function () {
       // syncing can take a little time to send the "started" notification, so
@@ -265,37 +258,11 @@ var gSyncPane = {
     });
   },
 
-  updateSyncUI() {
-    const state = UIState.get();
-    const isSyncEnabled = state.syncEnabled;
-    let syncStatusTitle = document.getElementById("syncStatusTitle");
-    let syncNowButton = document.getElementById("syncNow");
-    let syncNotConfiguredEl = document.getElementById("syncNotConfigured");
-    let syncConfiguredEl = document.getElementById("syncConfigured");
-
-    if (isSyncEnabled) {
-      syncStatusTitle.setAttribute("data-l10n-id", "prefs-syncing-on");
-      syncNowButton.hidden = false;
-      syncConfiguredEl.hidden = false;
-      syncNotConfiguredEl.hidden = true;
-    } else {
-      syncStatusTitle.setAttribute("data-l10n-id", "prefs-syncing-off");
-      syncNowButton.hidden = true;
-      syncConfiguredEl.hidden = true;
-      syncNotConfiguredEl.hidden = false;
-    }
-  },
-
-  async _chooseWhatToSync(isSyncConfigured, why = null) {
-    // Record the user opening the choose what to sync menu.
-    fxAccounts.telemetry.recordOpenCWTSMenu(why).catch(err => {
-      console.error("Failed to record open CWTS menu event", err);
-    });
-
+  async _chooseWhatToSync(isAlreadySyncing) {
     // Assuming another device is syncing and we're not,
     // we update the engines selection so the correct
     // checkboxes are pre-filed.
-    if (!isSyncConfigured) {
+    if (!isAlreadySyncing) {
       try {
         await Weave.Service.updateLocalEnginesState();
       } catch (err) {
@@ -303,7 +270,7 @@ var gSyncPane = {
       }
     }
     let params = {};
-    if (isSyncConfigured) {
+    if (isAlreadySyncing) {
       // If we are already syncing then we also offer to disconnect.
       params.disconnectFun = () => this.disconnectSync();
     }
@@ -311,36 +278,18 @@ var gSyncPane = {
       "chrome://browser/content/preferences/dialogs/syncChooseWhatToSync.xhtml",
       {
         closingCallback: event => {
-          if (event.detail.button == "accept") {
-            // Sync wasn't previously configured, but the user has accepted
-            // so we want to now start syncing!
-            if (!isSyncConfigured) {
-              fxAccounts.telemetry
-                .recordConnection(["sync"], "ui")
-                .then(() => {
-                  this.updateSyncUI();
-                  return Weave.Service.configure();
-                })
-                .catch(err => {
-                  console.error("Failed to enable sync", err);
-                });
-            } else {
-              // User is already configured and have possibly changed the engines they want to
-              // sync, so we should let the server know immediately
-              // if the user is currently syncing, we queue another sync after
-              // to ensure we caught their updates
-              Services.tm.dispatchToMainThread(() => {
-                Weave.Service.queueSync("cwts");
+          if (!isAlreadySyncing && event.detail.button == "accept") {
+            // We weren't syncing but the user has accepted the dialog - so we
+            // want to start!
+            fxAccounts.telemetry
+              .recordConnection(["sync"], "ui")
+              .then(() => {
+                return Weave.Service.configure();
+              })
+              .catch(err => {
+                console.error("Failed to enable sync", err);
               });
-            }
           }
-          // When the modal closes we want to remove any query params
-          // so it doesn't open on subsequent visits (and will reload)
-          const browser = window.docShell.chromeEventHandler;
-          browser.loadURI(Services.io.newURI("about:preferences#sync"), {
-            triggeringPrincipal:
-              Services.scriptSecurityManager.getSystemPrincipal(),
-          });
         },
       },
       params /* aParams */
@@ -447,17 +396,19 @@ var gSyncPane = {
           .setAttribute("href", accountsManageURI);
       });
     // and the actual sync state.
-    let eltSyncStatus = document.getElementById("syncStatusContainer");
+    let eltSyncStatus = document.getElementById("syncStatus");
     eltSyncStatus.hidden = !syncReady;
+    eltSyncStatus.selectedIndex = state.syncEnabled
+      ? SYNC_CONNECTED
+      : SYNC_DISCONNECTED;
     this._updateSyncNow(state.syncing);
-    this.updateSyncUI();
   },
 
   _getEntryPoint() {
-    let params = URL.fromURI(document.documentURIObject).searchParams;
-    let entryPoint = params.get("entrypoint") || "preferences";
-    entryPoint = entryPoint.replace(/[^-.\w]/g, "");
-    return entryPoint;
+    let params = new URLSearchParams(
+      document.URL.split("#")[0].split("?")[1] || ""
+    );
+    return params.get("entrypoint") || "preferences";
   },
 
   openContentInBrowser(url, options) {

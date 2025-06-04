@@ -11,7 +11,6 @@
 
 #include "base/platform_thread.h"
 #include "mozilla/Attributes.h"
-#include "mozilla/RefPtr.h"
 #include "mozilla/UniquePtr.h"
 #include "nsTHashMap.h"
 #include "nsHashKeys.h"
@@ -39,8 +38,6 @@ class FileDescriptor;
 class SandboxBroker final : private SandboxBrokerCommon,
                             public PlatformThread::Delegate {
  public:
-  NS_INLINE_DECL_THREADSAFE_REFCOUNTING(SandboxBroker)
-
   enum Perms {
     MAY_ACCESS = 1 << 0,
     MAY_READ = 1 << 1,
@@ -73,7 +70,7 @@ class SandboxBroker final : private SandboxBrokerCommon,
     Policy(const Policy& aOther);
     ~Policy();
 
-    // Add permissions from AddTree/AddDynamic rules to any rules that
+    // Add permissions from AddDir/AddDynamic rules to any rules that
     // exist for their descendents, and remove any descendent rules
     // made redundant by this process.
     //
@@ -90,9 +87,12 @@ class SandboxBroker final : private SandboxBrokerCommon,
     // need to be whitelisted, but this allows adding entries for
     // them if they'll exist later.  See also the overload below.
     void AddPath(int aPerms, const char* aPath, AddCondition aCond);
+    // This adds all regular files (not directories) in the tree
+    // rooted at the given path.
+    void AddTree(int aPerms, const char* aPath);
     // A directory, and all files and directories under it, even those
     // added after creation (the dir itself must exist).
-    void AddTree(int aPerms, const char* aPath);
+    void AddDir(int aPerms, const char* aPath);
     // A directory, and all files and directories under it, even those
     // added after creation (the dir itself may not exist).
     void AddFutureDir(int aPerms, const char* aPath);
@@ -128,18 +128,16 @@ class SandboxBroker final : private SandboxBrokerCommon,
     // * No /../ path traversal
     bool ValidatePath(const char* path) const;
     void AddPrefixInternal(int aPerms, const nsACString& aPath);
-    void AddTreeInternal(int aPerms, const char* aPath);
+    void AddDirInternal(int aPerms, const char* aPath);
   };
 
   // Constructing a broker involves creating a socketpair and a
   // background thread to handle requests, so it can fail.  If this
   // returns nullptr, do not use the value of aClientFdOut.
-  static already_AddRefed<SandboxBroker> Create(
-      UniquePtr<const Policy> aPolicy, int aChildPid,
-      ipc::FileDescriptor& aClientFdOut);
-
-  // Allow for explicit termination in the gtests
-  void Terminate();
+  static UniquePtr<SandboxBroker> Create(UniquePtr<const Policy> aPolicy,
+                                         int aChildPid,
+                                         ipc::FileDescriptor& aClientFdOut);
+  virtual ~SandboxBroker();
 
  private:
   PlatformThreadHandle mThread;
@@ -151,8 +149,6 @@ class SandboxBroker final : private SandboxBrokerCommon,
   PathMap mSymlinkMap;
 
   SandboxBroker(UniquePtr<const Policy> aPolicy, int aChildPid, int& aClientFd);
-  ~SandboxBroker() override;
-
   void ThreadMain(void) override;
   void AuditPermissive(int aOp, int aFlags, uint64_t aId, int aPerms,
                        const char* aPath);

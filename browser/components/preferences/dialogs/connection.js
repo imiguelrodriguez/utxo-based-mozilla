@@ -7,15 +7,9 @@
 /* import-globals-from /toolkit/content/preferencesBindings.js */
 /* import-globals-from ../extensionControlled.js */
 
-const proxyService = Ci.nsIProtocolProxyService;
-
-const PROXY_TYPES_MAP_REVERSE = new Map([
-  [proxyService.PROXYCONFIG_DIRECT, "DIRECT"],
-  [proxyService.PROXYCONFIG_MANUAL, "MANUAL"],
-  [proxyService.PROXYCONFIG_PAC, "PAC"],
-  [proxyService.PROXYCONFIG_WPAD, "WPAD"],
-  [proxyService.PROXYCONFIG_SYSTEM, "SYSTEM"],
-]);
+document
+  .getElementById("ConnectionsDialog")
+  .addEventListener("dialoghelp", window.top.openPrefsHelp);
 
 Preferences.addAll([
   // Add network.proxy.autoconfig_url before network.proxy.type so they're
@@ -54,10 +48,6 @@ window.addEventListener(
     );
 
     document
-      .getElementById("key_close")
-      .addEventListener("command", event => Preferences.close(event));
-
-    document
       .getElementById("disableProxyExtension")
       .addEventListener(
         "command",
@@ -65,14 +55,6 @@ window.addEventListener(
           gConnectionsDialog
         )
       );
-    document
-      .getElementById("networkProxyAutoconfigURL")
-      .addEventListener("input", () => gConnectionsDialog.updateReloadButton());
-    document
-      .getElementById("autoReload")
-      .addEventListener("command", () => gConnectionsDialog.reloadPAC());
-
-    gConnectionsDialog.checkForSystemProxy();
     gConnectionsDialog.updateProxySettingsUI();
     initializeProxyUI(gConnectionsDialog);
     gConnectionsDialog.registerSyncPrefListeners();
@@ -88,14 +70,6 @@ window.addEventListener(
 var gConnectionsDialog = {
   beforeAccept(event) {
     var proxyTypePref = Preferences.get("network.proxy.type");
-
-    // collect "network.proxy.type" to glean metrics
-    let proxyTypePrefStr =
-      PROXY_TYPES_MAP_REVERSE.get(proxyTypePref.value) || "OTHER";
-    Glean.networkProxySettings.proxyTypePreference.record({
-      value: proxyTypePrefStr,
-    });
-
     if (proxyTypePref.value == 2) {
       this.doAutoconfigURLFixup();
       return;

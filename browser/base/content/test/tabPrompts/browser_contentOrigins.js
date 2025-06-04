@@ -181,6 +181,7 @@ add_task(async function test_check_auth() {
   const HOST = `localhost:${server.identity.primaryPort}`;
   // eslint-disable-next-line @microsoft/sdl/no-insecure-url
   const AUTH_URI = `http://${HOST}/forbidden`;
+  const HTTPS_AUTH_URI = TEST_ROOT + "auth-route.sjs";
 
   // Try a simple load:
   // Should be broken favicon since AUTH_URI's spec is http
@@ -189,6 +190,14 @@ add_task(async function test_check_auth() {
     browser => BrowserTestUtils.startLoadingURIString(browser, AUTH_URI),
     HOST,
     BROKEN_FAVICON,
+    Ci.nsIPrompt.MODAL_TYPE_TAB
+  );
+
+  await checkDialog(
+    "https://example.com/",
+    browser => BrowserTestUtils.startLoadingURIString(browser, HTTPS_AUTH_URI),
+    HOST,
+    DEFAULT_FAVICON,
     Ci.nsIPrompt.MODAL_TYPE_TAB
   );
 
@@ -207,6 +216,15 @@ add_task(async function test_check_auth() {
     browser => subframeLoad(browser, AUTH_URI),
     HOST,
     BROKEN_FAVICON,
+    Ci.nsIPrompt.MODAL_TYPE_TAB
+  );
+
+  await checkDialog(
+    // eslint-disable-next-line @microsoft/sdl/no-insecure-url
+    "http://example.org/1",
+    browser => subframeLoad(browser, HTTPS_AUTH_URI),
+    HOST,
+    DEFAULT_FAVICON,
     Ci.nsIPrompt.MODAL_TYPE_TAB
   );
 });

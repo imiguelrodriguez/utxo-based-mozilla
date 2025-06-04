@@ -31,10 +31,8 @@ add_setup(async function () {
       ["browser.contentblocking.report.lockwise.enabled", false],
       ["browser.contentblocking.report.proxy.enabled", false],
       ["privacy.trackingprotection.enabled", true],
-      ["browser.urlbar.scotchBonnet.enableOverride", true],
     ],
   });
-
   let oldCanRecord = Services.telemetry.canRecordExtended;
   Services.telemetry.canRecordExtended = true;
   Services.telemetry.clearEvents();
@@ -43,8 +41,6 @@ add_setup(async function () {
     Services.telemetry.canRecordExtended = oldCanRecord;
     Services.telemetry.clearEvents();
   });
-
-  Services.fog.testResetFOG();
 });
 
 async function clickToggle(toggle) {
@@ -65,9 +61,16 @@ add_task(async function testToggleSwitch() {
     return gProtectionsHandler._protectionsPopup.hasAttribute("blocking");
   });
 
-  let buttonEvents =
-    Glean.securityUiProtectionspopup.openProtectionsPopup.testGetValue();
-
+  let events = Services.telemetry.snapshotEvents(
+    Ci.nsITelemetry.DATASET_PRERELEASE_CHANNELS
+  ).parent;
+  let buttonEvents = events.filter(
+    e =>
+      e[1] == "security.ui.protectionspopup" &&
+      e[2] == "open" &&
+      e[3] == "protections_popup"
+  );
+  console.log(buttonEvents);
   is(buttonEvents.length, 1, "recorded telemetry for opening the popup");
 
   let browserLoadedPromise = BrowserTestUtils.browserLoaded(tab.linkedBrowser);
@@ -311,10 +314,10 @@ add_task(async function testMiniPanelClick() {
   );
 
   // Simulate clicking on the mini panel text
-  let buttonEl = document.getElementById(
-    "protections-popup-toast-panel-tp-on-desc"
+  let headerEl = document.getElementById(
+    "protections-popup-mainView-panel-header-section"
   );
-  await EventUtils.synthesizeMouseAtCenter(buttonEl, {});
+  await EventUtils.synthesizeMouseAtCenter(headerEl, {});
 
   info("Waiting for mini panel to close");
   await popuphiddenPromise;
@@ -385,12 +388,14 @@ add_task(async function testToggleSwitchFlow() {
     gProtectionsHandler._protectionsPopup,
     "popuphidden"
   );
-
-  // Simulate clicking on the mini panel text
-  let buttonEl = document.getElementById(
-    "protections-popup-toast-panel-tp-off-desc"
-  );
-  await EventUtils.synthesizeMouseAtCenter(buttonEl, {});
+  // We intentionally turn off a11y_checks, because the following click
+  // is targeting static toast message that's not meant to be interactive and
+  // is not expected to be accessible:
+  AccessibilityUtils.setEnv({
+    mustHaveAccessibleRule: false,
+  });
+  document.getElementById("protections-popup-mainView-panel-header").click();
+  AccessibilityUtils.resetEnv();
   await popuphiddenPromise;
   await popupShownPromise;
 

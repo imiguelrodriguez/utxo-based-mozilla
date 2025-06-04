@@ -4,8 +4,7 @@ ChromeUtils.defineESModuleGetters(this, {
     "resource://testing-common/FormHistoryTestUtils.sys.mjs",
 });
 
-const SEARCH_FORM =
-  "http://mochi.test:8888/browser/browser/components/search/test/browser/discovery.html";
+const SEARCH_FORM = "http://mochi.test:8888/";
 
 function expectedURL(aSearchTerms) {
   const ENGINE_HTML_BASE =
@@ -98,13 +97,15 @@ async function prepareTest(searchBarValue = "test") {
 add_setup(async function () {
   await Services.search.init();
 
-  searchBar = await gCUITestUtils.addSearchBar();
-  searchButton = searchBar.querySelector(".search-go-button");
+  await gCUITestUtils.addSearchBar();
 
   await SearchTestUtils.installOpenSearchEngine({
     url: "http://mochi.test:8888/browser/browser/components/search/test/browser/426329.xml",
     setAsDefault: true,
   });
+
+  searchBar = BrowserSearch.searchBar;
+  searchButton = searchBar.querySelector(".search-go-button");
 
   registerCleanupFunction(() => {
     searchBar.value = "";

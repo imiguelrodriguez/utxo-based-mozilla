@@ -82,7 +82,7 @@
     }
 
     & > #backup-password-label > input {
-      margin-inline-start: 0;
+      margin-inline-start: 0px;
     }
 
     & > #backup-password-description {

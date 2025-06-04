@@ -36,7 +36,7 @@ add_setup(async function () {
 });
 
 add_task(async function test_emptybar() {
-  const searchbar = win.document.getElementById("searchbar");
+  const searchbar = win.BrowserSearch.searchBar;
   searchbar.focus();
 
   let contextMenu = searchbar.querySelector(".textbox-contextmenu");
@@ -74,7 +74,7 @@ add_task(async function test_emptybar() {
 });
 
 add_task(async function test_text_in_bar() {
-  const searchbar = win.document.getElementById("searchbar");
+  const searchbar = win.BrowserSearch.searchBar;
   searchbar.focus();
 
   searchbar.value = "Test";
@@ -115,7 +115,7 @@ add_task(async function test_text_in_bar() {
 });
 
 add_task(async function test_unfocused_emptybar() {
-  const searchbar = win.document.getElementById("searchbar");
+  const searchbar = win.BrowserSearch.searchBar;
   // clear searchbar value from previous test
   searchbar.value = "";
 
@@ -158,7 +158,8 @@ add_task(async function test_unfocused_emptybar() {
 });
 
 add_task(async function test_text_in_unfocused_bar() {
-  const searchbar = win.document.getElementById("searchbar");
+  const searchbar = win.BrowserSearch.searchBar;
+
   searchbar.value = "Test";
 
   // force focus onto another component
@@ -204,7 +205,7 @@ add_task(async function test_paste_and_go() {
     gBrowser: win.gBrowser,
   });
 
-  const searchbar = win.document.getElementById("searchbar");
+  const searchbar = win.BrowserSearch.searchBar;
 
   searchbar.value = "";
   searchbar.focus();

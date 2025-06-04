@@ -15,6 +15,10 @@ ChromeUtils.defineESModuleGetters(this, {
     "resource:///modules/SelectionChangedMenulist.sys.mjs",
 });
 
+document
+  .getElementById("BrowserLanguagesDialog")
+  .addEventListener("dialoghelp", window.top.openPrefsHelp);
+
 /* This dialog provides an interface for managing what language the browser is
  * displayed in.
  *
@@ -715,5 +719,3 @@ var gBrowserLanguagesDialog = {
     };
   },
 };
-
-window.addEventListener("load", () => gBrowserLanguagesDialog.onLoad());

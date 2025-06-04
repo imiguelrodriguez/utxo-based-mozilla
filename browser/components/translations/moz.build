@@ -5,9 +5,6 @@
 with Files("**"):
     BUG_COMPONENT = ("Firefox", "Translations")
 
-BROWSER_CHROME_MANIFESTS += [
-    "tests/browser/browser.toml",
-    "tests/browser/perftest.toml",
-]
+BROWSER_CHROME_MANIFESTS += ["tests/browser/browser.toml"]
 
 JAR_MANIFESTS += ["jar.mn"]

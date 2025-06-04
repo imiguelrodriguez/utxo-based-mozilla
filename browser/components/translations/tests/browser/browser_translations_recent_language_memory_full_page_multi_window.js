@@ -30,13 +30,13 @@ add_task(
       "The button is available."
     );
 
-    await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
     await FullPageTranslationsTestUtils.openPanel({
       win: window1,
       expectedFromLanguage: "es",
       expectedToLanguage: "en",
-      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
     });
 
     await FullPageTranslationsTestUtils.changeSelectedToLanguage({
@@ -50,13 +50,11 @@ add_task(
       downloadHandler: resolveDownloads,
     });
 
-    await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated(
-      {
-        fromLanguage: "es",
-        toLanguage: "uk",
-        runInPage,
-      }
-    );
+    await FullPageTranslationsTestUtils.assertPageIsTranslated({
+      fromLanguage: "es",
+      toLanguage: "uk",
+      runInPage,
+    });
 
     await FullPageTranslationsTestUtils.openPanel({
       win: window1,
@@ -65,7 +63,7 @@ add_task(
 
     await focusWindow(window2);
 
-    await FullPageTranslationsTestUtils.assertPageIsNotTranslated(
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(
       testPage2.runInPage
     );
 
@@ -94,13 +92,11 @@ add_task(
 
     await focusWindow(window1);
 
-    await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated(
-      {
-        fromLanguage: "es",
-        toLanguage: "uk",
-        runInPage,
-      }
-    );
+    await FullPageTranslationsTestUtils.assertPageIsTranslated({
+      fromLanguage: "es",
+      toLanguage: "uk",
+      runInPage,
+    });
 
     await FullPageTranslationsTestUtils.openPanel({
       win: window1,
@@ -112,13 +108,11 @@ add_task(
       win: window1,
     });
 
-    await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated(
-      {
-        fromLanguage: "es",
-        toLanguage: "fr",
-        runInPage,
-      }
-    );
+    await FullPageTranslationsTestUtils.assertPageIsTranslated({
+      fromLanguage: "es",
+      toLanguage: "fr",
+      runInPage,
+    });
 
     await testPage2.cleanup();
     await BrowserTestUtils.closeWindow(window2);

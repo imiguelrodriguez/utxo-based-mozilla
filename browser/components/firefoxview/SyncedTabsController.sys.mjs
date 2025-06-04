@@ -137,12 +137,6 @@ export class SyncedTabsController {
           break;
         }
       }
-    } else if (event.type == "click" && event.composedTarget.href) {
-      const { switchToTabHavingURI } =
-        event.view.browsingContext.topChromeWindow;
-      switchToTabHavingURI(event.composedTarget.href, true, {
-        ignoreFragment: true,
-      });
     }
   }
 
@@ -201,13 +195,19 @@ export class SyncedTabsController {
 
   #getMessageCardForState({ error = false, action, errorState }) {
     errorState = errorState || this.errorState;
-    let header, description, descriptionLink, buttonLabel, mainImageUrl;
+    let header,
+      description,
+      descriptionLink,
+      buttonLabel,
+      headerIconUrl,
+      mainImageUrl;
     let descriptionArray;
     if (error) {
       let link;
       ({ header, description, link, buttonLabel } =
         SyncedTabsErrorHandler.getFluentStringsForErrorType(errorState));
       action = `${errorState}`;
+      headerIconUrl = "chrome://global/skin/icons/info-filled.svg";
       mainImageUrl =
         "chrome://browser/content/firefoxview/synced-tabs-error.svg";
       descriptionArray = [description];
@@ -225,7 +225,7 @@ export class SyncedTabsController {
       buttonLabel = this.actionMappings[action].buttonLabel;
       descriptionLink = this.actionMappings[action].descriptionLink;
       mainImageUrl =
-        "chrome://browser/content/firefoxview/synced-tabs-empty.svg";
+        "chrome://browser/content/firefoxview/synced-tabs-error.svg";
       descriptionArray = [description];
     }
     return {
@@ -235,6 +235,7 @@ export class SyncedTabsController {
       descriptionLink,
       error,
       header,
+      headerIconUrl,
       mainImageUrl,
     };
   }
@@ -380,7 +381,7 @@ export class SyncedTabsController {
 
   async getSyncedTabData() {
     this.devices = await lazy.SyncedTabs.getTabClients();
-    let tabs = await lazy.SyncedTabs.createRecentTabsList(this.devices, 5000, {
+    let tabs = await lazy.SyncedTabs.createRecentTabsList(this.devices, 50, {
       removeAllDupes: false,
       removeDeviceDupes: true,
     });

@@ -28,8 +28,7 @@ class AltServiceChild final : public PAltServiceChild {
                             const nsCString& aUsername, bool aPrivateBrowsing,
                             nsIInterfaceRequestor* aCallbacks,
                             nsProxyInfo* aProxyInfo, uint32_t aCaps,
-                            const OriginAttributes& aOriginAttributes,
-                            nsHttpConnectionInfo* aConnInfo);
+                            const OriginAttributes& aOriginAttributes);
 
  private:
   AltServiceChild();

@@ -79,7 +79,7 @@ function tamper(inFilePath, outFilePath, modifications, newEntries) {
         Ci.nsIStringInputStream
       );
       try {
-        sis.setByteStringData(newEntry.content);
+        sis.setData(newEntry.content, newEntry.content.length);
         writer.addEntryStream(
           newEntry.name,
           new Date() * PR_USEC_PER_MSEC,
@@ -111,7 +111,7 @@ function truncateEntry(entry, entryInput) {
   let content = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(
     Ci.nsIStringInputStream
   );
-  content.setByteStringData("");
+  content.data = "";
 
   return [entry, content];
 }

@@ -13,7 +13,7 @@
 #include "nsHttpConnectionInfo.h"
 #include "nsHttpHandler.h"
 #include "nsITLSSocketControl.h"
-#include "mozilla/glean/NetwerkProtocolHttpMetrics.h"
+#include "mozilla/glean/GleanMetrics.h"
 
 #define TLS_EARLY_DATA_NOT_AVAILABLE 0
 #define TLS_EARLY_DATA_AVAILABLE_BUT_NOT_USED 1
@@ -103,6 +103,7 @@ void TlsHandshaker::SetupSSL(bool aInSpdyTunnel, bool aForcePlainText) {
     bool usingHttpsProxy = mConnInfo->UsingHttpsProxy();
     rv = InitSSLParams(usingHttpsProxy, usingHttpsProxy);
   }
+  MOZ_ASSERT(NS_SUCCEEDED(rv));
 }
 
 nsresult TlsHandshaker::InitSSLParams(bool connectingToProxy,
@@ -118,7 +119,6 @@ nsresult TlsHandshaker::InitSSLParams(bool connectingToProxy,
   nsCOMPtr<nsITLSSocketControl> ssl;
   mOwner->GetTLSSocketControl(getter_AddRefs(ssl));
   if (!ssl) {
-    LOG(("Can't find tls socket control"));
     return NS_ERROR_FAILURE;
   }
 
@@ -334,19 +334,19 @@ void TlsHandshaker::EarlyDataTelemetry(int16_t tlsVersion,
   // Send the 0RTT telemetry only for tls1.3
   if (tlsVersion > nsITLSSocketControl::TLS_VERSION_1_2) {
     if (mEarlyDataState == EarlyData::NOT_AVAILABLE) {  // not possible
-      glean::http::tls_early_data_negotiated.AccumulateSingleSample(
-          TLS_EARLY_DATA_NOT_AVAILABLE);
+      Telemetry::Accumulate(Telemetry::TLS_EARLY_DATA_NEGOTIATED,
+                            TLS_EARLY_DATA_NOT_AVAILABLE);
       mozilla::glean::network::tls_early_data_negotiated.Get("not_available"_ns)
           .Add(1);
     } else if (mEarlyDataState == EarlyData::USED) {  // possible and used
-      glean::http::tls_early_data_negotiated.AccumulateSingleSample(
-          TLS_EARLY_DATA_AVAILABLE_AND_USED);
+      Telemetry::Accumulate(Telemetry::TLS_EARLY_DATA_NEGOTIATED,
+                            TLS_EARLY_DATA_AVAILABLE_AND_USED);
       mozilla::glean::network::tls_early_data_negotiated
           .Get("available_and_used"_ns)
           .Add(1);
     } else {  // possible but not used
-      glean::http::tls_early_data_negotiated.AccumulateSingleSample(
-          TLS_EARLY_DATA_AVAILABLE_BUT_NOT_USED);
+      Telemetry::Accumulate(Telemetry::TLS_EARLY_DATA_NEGOTIATED,
+                            TLS_EARLY_DATA_AVAILABLE_BUT_NOT_USED);
       mozilla::glean::network::tls_early_data_negotiated
           .Get("available_but_not_used"_ns)
           .Add(1);
@@ -354,10 +354,8 @@ void TlsHandshaker::EarlyDataTelemetry(int16_t tlsVersion,
 
     // TLS early data was used and it was accepted/rejected by the remote host.
     if (EarlyDataUsed()) {
-      glean::http::tls_early_data_accepted
-          .EnumGet(static_cast<glean::http::TlsEarlyDataAcceptedLabel>(
-              earlyDataAccepted))
-          .Add();
+      Telemetry::Accumulate(Telemetry::TLS_EARLY_DATA_ACCEPTED,
+                            earlyDataAccepted);
       mozilla::glean::network::tls_early_data_accepted
           .Get(earlyDataAccepted ? "accepted"_ns : "not_accepted"_ns)
           .Add(1);

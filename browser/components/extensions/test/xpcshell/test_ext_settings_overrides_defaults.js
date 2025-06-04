@@ -12,7 +12,7 @@ const { SearchTestUtils } = ChromeUtils.importESModule(
 );
 
 const { SearchUtils } = ChromeUtils.importESModule(
-  "moz-src:///toolkit/components/search/SearchUtils.sys.mjs"
+  "resource://gre/modules/SearchUtils.sys.mjs"
 );
 
 const { RemoteSettings } = ChromeUtils.importESModule(

@@ -16,7 +16,6 @@
 /* globals exportFunction */
 
 Object.defineProperty(navigator.clipboard.wrappedJSObject, "read", {
-  configurable: true,
   value: exportFunction(function () {
     return new Promise((resolve, _) => {
       console.log(

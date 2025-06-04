@@ -9,16 +9,11 @@ const ALLOWED_TEST_URL = "http://mochi.test:8888/";
 const BLOCKED_TEST_URL = "https://example.com/browser";
 
 ChromeUtils.defineESModuleGetters(this, {
-  FilterAdult: "resource:///modules/FilterAdult.sys.mjs",
-  InteractionsBlocklist:
-    "moz-src:///browser/components/places/InteractionsBlocklist.sys.mjs",
+  FilterAdult: "resource://activity-stream/lib/FilterAdult.sys.mjs",
+  InteractionsBlocklist: "resource:///modules/InteractionsBlocklist.sys.mjs",
 });
 
 add_setup(async function () {
-  await SpecialPowers.pushPrefEnv({
-    set: [["test.wait300msAfterTabSwitch", true]],
-  });
-
   let oldBlocklistValue = Services.prefs.getStringPref(
     "places.interactions.customBlocklist",
     "[]"

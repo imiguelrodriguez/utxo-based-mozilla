@@ -108,7 +108,7 @@
 }
 
 .fxview-tab-row-button::part(button) {
-  color: var(--fxview-text-primary-color);
+  color: var(--fxview-text-primary-color)
 }
 
 .fxview-tab-row-button[muted="true"]::part(button) {
@@ -117,6 +117,22 @@
 
 .fxview-tab-row-button[soundplaying="true"]::part(button) {
   background-image: url("chrome://global/skin/media/audio.svg");
+}
+
+.fxview-tab-row-button.delete-button::part(button) {
+  background-image: url("chrome://global/skin/icons/delete.svg");
+}
+
+.fxview-tab-row-button.dismiss-button::part(button) {
+  background-image: url("chrome://global/skin/icons/close.svg");
+  -moz-context-properties: fill;
+  fill: currentColor;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.fxview-tab-row-button.options-button::part(button) {
+  background-image: url("chrome://global/skin/icons/more.svg");
 }
 
 .fxview-tab-row-button.undo-button::part(button) {

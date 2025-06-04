@@ -135,49 +135,6 @@ global.replaceUrlInTab = (gBrowser, tab, uri) => {
   return loaded;
 };
 
-// The tabs.Tab.groupId type in the public extension API is an integer,
-// but tabbrowser's tab group ID are strings. This handles the conversion.
-//
-// tabbrowser.addTabGroup() generates the internal tab group ID as follows:
-// internal group id = `${Date.now()}-${Math.round(Math.random() * 100)}`;
-// After dropping the hyphen ("-"), the result can be coerced into a safe
-// integer.
-//
-// As a safeguard, in case the format changes, we fall back to maintaining
-// an internal mapping (that never gets cleaned up).
-// This may change in https://bugzilla.mozilla.org/show_bug.cgi?id=1960104
-const fallbackTabGroupIdMap = new Map();
-let nextFallbackTabGroupId = 1;
-global.getExtTabGroupIdForInternalTabGroupId = groupIdStr => {
-  const parsedTabId = /^(\d{13})-(\d{1,3})$/.exec(groupIdStr);
-  if (parsedTabId) {
-    const groupId = parsedTabId[1] * 1000 + parseInt(parsedTabId[2], 10);
-    if (Number.isSafeInteger(groupId)) {
-      return groupId;
-    }
-  }
-  // Fall back.
-  let fallbackGroupId = fallbackTabGroupIdMap.get(groupIdStr);
-  if (!fallbackGroupId) {
-    fallbackGroupId = nextFallbackTabGroupId++;
-    fallbackTabGroupIdMap.set(groupIdStr, fallbackGroupId);
-  }
-  return fallbackGroupId;
-};
-global.getInternalTabGroupIdForExtTabGroupId = groupId => {
-  if (Number.isSafeInteger(groupId) && groupId >= 1e15) {
-    // 16 digits - this inverts getExtTabGroupIdForInternalTabGroupId.
-    const groupIdStr = `${Math.floor(groupId / 1000)}-${groupId % 1000}`;
-    return groupIdStr;
-  }
-  for (let [groupIdStr, fallbackGroupId] of fallbackTabGroupIdMap) {
-    if (fallbackGroupId === groupId) {
-      return groupIdStr;
-    }
-  }
-  return null;
-};
-
 /**
  * Manages tab-specific and window-specific context data, and dispatches
  * tab select events across all windows.
@@ -624,10 +581,8 @@ class TabTracker extends TabTrackerBase {
       // by the first MozAfterPaint event. That code handles finally
       // adopting the tab, and clears it from the arguments list in the
       // process, so if we run later than it, we're too late.
-      if (window.gBrowser.isTab(tabToAdopt)) {
-        let adoptedBy = window.gBrowser.tabs[0];
-        this.adopt(adoptedBy, tabToAdopt);
-      }
+      let adoptedBy = window.gBrowser.tabs[0];
+      this.adopt(adoptedBy, tabToAdopt);
     } else {
       for (let nativeTab of window.gBrowser.tabs) {
         this.emitCreated(nativeTab);
@@ -921,11 +876,6 @@ class Tab extends TabBase {
   get successorTabId() {
     const { successor } = this.nativeTab;
     return successor ? tabTracker.getId(successor) : -1;
-  }
-
-  get groupId() {
-    const { group } = this.nativeTab;
-    return group ? getExtTabGroupIdForInternalTabGroupId(group.id) : -1;
   }
 
   /**

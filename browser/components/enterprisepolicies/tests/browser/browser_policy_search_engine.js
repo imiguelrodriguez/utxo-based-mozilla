@@ -19,7 +19,7 @@ add_task(async function test_setup() {
 // |shouldWork| should be true if opensearch is expected to work and false if
 // it is not.
 async function test_opensearch(shouldWork) {
-  let searchBar = document.getElementById("searchbar");
+  let searchBar = BrowserSearch.searchBar;
 
   let rootDir = getRootDirectory(gTestPath);
   let tab = await BrowserTestUtils.openNewForegroundTab(

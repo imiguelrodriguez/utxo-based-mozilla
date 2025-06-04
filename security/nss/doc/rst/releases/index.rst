@@ -8,20 +8,11 @@ Releases
    :glob:
    :hidden:
 
-   nss_3_112.rst
-   nss_3_111.rst
-   nss_3_110.rst
-   nss_3_109.rst
-   nss_3_108.rst
-   nss_3_101_3.rst
-   nss_3_107.rst
-   nss_3_106.rst
-   nss_3_105.rst
    nss_3_104.rst
    nss_3_103.rst
    nss_3_102_1.rst
    nss_3_102.rst
-   nss_3_101_2.rst
+   nss_3_101.2.rst
    nss_3_101_1.rst
    nss_3_101.rst
    nss_3_100.rst
@@ -85,30 +76,44 @@ Releases
 
 .. note::
 
-   **NSS 3.112** is the latest version of NSS.
-   Complete release notes are available here: :ref:`mozilla_projects_nss_nss_3_112_release_notes`
+   **NSS 3.104** is the latest version of NSS.
+   Complete release notes are available here: :ref:`mozilla_projects_nss_nss_3_104_release_notes`
 
-   **NSS 3.101.3 (ESR)** is the latest ESR version of NSS.
-   Complete release notes are available here: :ref:`mozilla_projects_nss_nss_3_101_3_release_notes`
+   **NSS 3.101.2 (ESR)** is the latest ESR version of NSS.
+   Complete release notes are available here: :ref:`mozilla_projects_nss_nss_3_101_1_release_notes`
 
 .. container::
 
-   Changes in 3.112 included in this release:
+   Changes in 3.104 included in this release:
 
-   - Bug 1963792 - Fix alias for mac workers on try.
-   - Bug 1966786 - ensure all options can be configured with SSL_OptionSet and SSL_OptionSetDefault.
-   - Bug 1931930 - ABI/API break in ssl certificate processing
-   - Bug 1955971 - remove unnecessary assertion in sec_asn1d_init_state_based_on_template.
-   - Bug 1965754 - update taskgraph to v14.2.1.
-   - Bug 1964358 - Workflow for automation of the release on GitHub when pushing a tag
-   - Bug 1952860 - fix faulty assertions in SEC_ASN1DecoderUpdate
-   - Bug 1934877 - Renegotiations should use a fresh ECH GREASE buffer.
-   - Bug 1951396 - update taskgraph to v14.1.1
-   - Bug 1962503 - Partial fix for ACVP build CI job
-   - Bug 1961827 - Initialize find in sftk_searchDatabase.
-   - Bug 1963121 - Add clang-18 to extra builds.
-   - Bug 1963044 - Fault tolerant git fetch for fuzzing.
-   - Bug 1962556 - Tolerate intermittent failures in ssl_policy_pkix_ocsp.
-   - Bug 1962770 - fix compiler warnings when DEBUG_ASN1D_STATES or CMSDEBUG are set.
-   - Bug 1961835 - fix content type tag check in NSS_CMSMessage_ContainsCertsOrCrls.
-   - Bug 1963102 - Remove Cryptofuzz CI version check
+   - Bug 1910071 - Copy original corpus to heap-allocated buffer
+   - Bug 1910079 - Fix min ssl version for DTLS client fuzzer
+   - Bug 1908990 - Remove OS2 support just like we did on NSPR
+   - Bug 1910605 - clang-format NSS improvements
+   - Bug 1902078 - Adding basicutil.h to use HexString2SECItem function
+   - Bug 1908990 - removing dirent.c from build
+   - Bug 1902078 - Allow handing in keymaterial to shlibsign to make the output reproducible (
+   - Bug 1908990 - remove nec4.3, sunos4, riscos and SNI references
+   - Bug 1908990 - remove other old OS (BSDI, old HP UX, NCR, openunix, sco, unixware or reliantUnix
+   - Bug 1908990 - remove mentions of WIN95
+   - Bug 1908990 - remove mentions of WIN16
+   - Bug 1913750 - More explicit directory naming
+   - Bug 1913755 - Add more options to TLS server fuzz target
+   - Bug 1913675 - Add more options to TLS client fuzz target
+   - Bug 1835240 - Use OSS-Fuzz corpus in NSS CI
+   - Bug 1908012 - set nssckbi version number to 2.70.
+   - Bug 1914499 - Remove Email Trust bit from ACCVRAIZ1 root cert.
+   - Bug 1908009 - Remove Email Trust bit from certSIGN ROOT CA.
+   - Bug 1908006 - Add Cybertrust Japan Roots to NSS.
+   - Bug 1908004 - Add Taiwan CA Roots to NSS.
+   - Bug 1911354 - remove search by decoded serial in nssToken_FindCertificateByIssuerAndSerialNumber.
+   - Bug 1913132 - Fix tstclnt CI build failure
+   - Bug 1913047 - vfyserv: ensure peer cert chain is in db for CERT_VerifyCertificateNow.
+   - Bug 1912427 - Enable all supported protocol versions for UDP
+   - Bug 1910361 - Actually use random PSK hash type
+   - Bug 1911576: Initialize NSS DB once
+   - Bug 1910361 - Additional ECH cipher suites and PSK hash types
+   - Bug 1903604: Automate corpus file generation for TLS client Fuzzer
+   - Bug 1910364 - Fix crash with UNSAFE_FUZZER_MODE
+   - Bug 1910605 - clang-format shlibsign.c
+

@@ -107,13 +107,11 @@ add_task(async function test_translations_panel_fuzzing() {
           "Translations button is fully loaded."
         );
 
-        await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated(
-          {
-            fromLanguage: "es",
-            toLanguage: "en",
-            runInPage: runInSpanishPage,
-          }
-        );
+        await FullPageTranslationsTestUtils.assertPageIsTranslated({
+          fromLanguage: "es",
+          toLanguage: "en",
+          runInPage: runInSpanishPage,
+        });
 
         isSpanishPageTranslated = true;
         isEngineMaybeDestroyed = false;
@@ -203,7 +201,7 @@ add_task(async function test_translations_panel_fuzzing() {
 
         await FullPageTranslationsTestUtils.clickRestoreButton();
 
-        await FullPageTranslationsTestUtils.assertPageIsNotTranslated(
+        await FullPageTranslationsTestUtils.assertPageIsUntranslated(
           runInSpanishPage
         );
 
@@ -227,7 +225,6 @@ add_task(async function test_translations_panel_fuzzing() {
   for (let i = 0; i < fuzzSteps; i++) {
     // Pick a random operation and check if that it was not a noop, otherwise continue
     // trying to find a valid operation.
-    // eslint-disable-next-line
     while (true) {
       const operation = opsArray[Math.floor(Math.random() * opsArray.length)];
       if (await operation()) {

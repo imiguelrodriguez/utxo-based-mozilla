@@ -4,60 +4,50 @@
 
 "use strict";
 
-/**
- * Handles handing off searches from an in-page search input field to the
- * browser's main URL bar. Communicates with the parent via the ContentSearch
- * actor, using custom events to talk to the child actor.
- */
-class ContentSearchHandoffUIController {
-  constructor() {
-    this._isPrivateEngine = false;
-    this._engineIcon = null;
+function ContentSearchHandoffUIController() {
+  this._isPrivateEngine = false;
+  this._isAboutPrivateBrowsing = false;
+  this._engineIcon = null;
 
-    window.addEventListener("ContentSearchService", this);
-    this._sendMsg("GetEngine");
-    this._sendMsg("GetHandoffSearchModePrefs");
-  }
+  window.addEventListener("ContentSearchService", this);
+  this._sendMsg("GetEngine");
+  this._sendMsg("GetHandoffSearchModePrefs");
+}
 
+ContentSearchHandoffUIController.prototype = {
   handleEvent(event) {
     let methodName = "_onMsg" + event.detail.type;
     if (methodName in this) {
       this[methodName](event.detail.data);
     }
-  }
+  },
 
   get defaultEngine() {
     return this._defaultEngine;
-  }
+  },
 
-  static privateBrowsingRegex = /^about:privatebrowsing([#?]|$)/i;
-  get _isAboutPrivateBrowsing() {
-    return ContentSearchHandoffUIController.privateBrowsingRegex.test(
-      document.location.href
-    );
-  }
-
-  _onMsgEngine({ isPrivateEngine, engine }) {
+  _onMsgEngine({ isPrivateEngine, isAboutPrivateBrowsing, engine }) {
     this._isPrivateEngine = isPrivateEngine;
+    this._isAboutPrivateBrowsing = isAboutPrivateBrowsing;
     this._updateEngine(engine);
-  }
+  },
 
   _onMsgCurrentEngine(engine) {
     if (!this._isPrivateEngine) {
       this._updateEngine(engine);
     }
-  }
+  },
 
   _onMsgCurrentPrivateEngine(engine) {
     if (this._isPrivateEngine) {
       this._updateEngine(engine);
     }
-  }
+  },
 
   _onMsgHandoffSearchModePrefs(pref) {
     this._shouldHandOffToSearchMode = pref;
     this._updatel10nIds();
-  }
+  },
 
   _updateEngine(engine) {
     this._defaultEngine = engine;
@@ -80,7 +70,7 @@ class ContentSearchHandoffUIController {
       "url(" + this._engineIcon + ")"
     );
     this._updatel10nIds();
-  }
+  },
 
   _updatel10nIds() {
     let engine = this._defaultEngine;
@@ -135,7 +125,7 @@ class ContentSearchHandoffUIController {
         }
       );
     }
-  }
+  },
 
   /**
    * If the favicon is an iconData object, convert it into a Blob URI.
@@ -154,7 +144,7 @@ class ContentSearchHandoffUIController {
     // If typeof(data) != "string", the iconData object is returned.
     let blob = new Blob([data.icon], { type: data.mimeType });
     return URL.createObjectURL(blob);
-  }
+  },
 
   _sendMsg(type, data = null) {
     dispatchEvent(
@@ -165,7 +155,5 @@ class ContentSearchHandoffUIController {
         },
       })
     );
-  }
-}
-
-window.ContentSearchHandoffUIController = ContentSearchHandoffUIController;
+  },
+};

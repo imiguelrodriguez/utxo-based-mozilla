@@ -10,6 +10,14 @@ ChromeUtils.defineESModuleGetters(this, {
   WindowsLaunchOnLogin: "resource://gre/modules/WindowsLaunchOnLogin.sys.mjs",
 });
 
+const { ExperimentAPI } = ChromeUtils.importESModule(
+  "resource://nimbus/ExperimentAPI.sys.mjs"
+);
+
+const { ExperimentFakes } = ChromeUtils.importESModule(
+  "resource://testing-common/NimbusTestUtils.sys.mjs"
+);
+
 const { MockRegistry } = ChromeUtils.importESModule(
   "resource://testing-common/MockRegistry.sys.mjs"
 );
@@ -27,12 +35,6 @@ add_setup(() => {
     "",
     ""
   );
-  registry.setValue(
-    Ci.nsIWindowsRegKey.ROOT_KEY_CURRENT_USER,
-    "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run",
-    "",
-    ""
-  );
   registerCleanupFunction(() => {
     registry.shutdown();
   });
@@ -40,7 +42,7 @@ add_setup(() => {
 
 add_task(async function test_check_uncheck_checkbox() {
   await ExperimentAPI.ready();
-  let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "windowsLaunchOnLogin",
     value: { enabled: true },
   });
@@ -63,16 +65,14 @@ add_task(async function test_check_uncheck_checkbox() {
     launchOnLoginCheckbox.click();
     ok(!launchOnLoginCheckbox.checked, "Autostart checkbox unchecked");
 
-    await TestUtils.waitForCondition(
-      () => !wrk.hasValue(WindowsLaunchOnLogin.getLaunchOnLoginRegistryName()),
-      "Waiting for Autostart registry key to be removed",
-      undefined,
-      200
+    ok(
+      !wrk.hasValue(WindowsLaunchOnLogin.getLaunchOnLoginRegistryName()),
+      "Autostart registry key does not exist"
     );
 
     gBrowser.removeCurrentTab();
   });
-  await doCleanup();
+  doCleanup();
 });
 
 add_task(async function create_external_regkey() {
@@ -80,7 +80,7 @@ add_task(async function create_external_regkey() {
     return;
   }
   await ExperimentAPI.ready();
-  let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "windowsLaunchOnLogin",
     value: { enabled: true },
   });
@@ -89,7 +89,7 @@ add_task(async function create_external_regkey() {
     // Both functions are install specific so it's safe to run them
     // like this.
     wrk.removeValue(WindowsLaunchOnLogin.getLaunchOnLoginRegistryName());
-    await WindowsLaunchOnLogin._removeLaunchOnLoginShortcuts();
+    await WindowsLaunchOnLogin.removeLaunchOnLoginShortcuts();
     // Create registry key without using settings pane to check if
     // this is reflected in the settings
     let autostartPath =
@@ -115,24 +115,7 @@ add_task(async function create_external_regkey() {
 
     gBrowser.removeCurrentTab();
   });
-  await doCleanup();
-});
-
-add_task(async function testRemoveLaunchOnLoginGuard() {
-  let registryName = WindowsLaunchOnLogin.getLaunchOnLoginRegistryName();
-  // Simulate launch on login disabled from Windows settings
-  registry.setValue(
-    Ci.nsIWindowsRegKey.ROOT_KEY_CURRENT_USER,
-    "Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\Run",
-    registryName,
-    0b1,
-    Ci.nsIWindowsRegKey.TYPE_BINARY
-  );
-  // This function should now be non-op
-  WindowsLaunchOnLogin.removeLaunchOnLogin();
-  await WindowsLaunchOnLogin.withLaunchOnLoginRegistryKey(async wrk => {
-    ok(wrk.hasValue(registryName), "Registry value is not deleted");
-  });
+  doCleanup();
 });
 
 add_task(async function delete_external_regkey() {
@@ -140,7 +123,7 @@ add_task(async function delete_external_regkey() {
     return;
   }
   await ExperimentAPI.ready();
-  let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig({
     featureId: "windowsLaunchOnLogin",
     value: { enabled: true },
   });
@@ -163,7 +146,7 @@ add_task(async function delete_external_regkey() {
 
     gBrowser.removeCurrentTab();
   });
-  await doCleanup();
+  doCleanup();
 });
 
 add_task(async function testDisablingLaunchOnLogin() {
@@ -189,7 +172,7 @@ add_task(async function testDisablingLaunchOnLogin() {
 });
 
 registerCleanupFunction(async function () {
-  await WindowsLaunchOnLogin._removeLaunchOnLoginShortcuts();
+  await WindowsLaunchOnLogin.removeLaunchOnLoginShortcuts();
   await WindowsLaunchOnLogin.withLaunchOnLoginRegistryKey(async wrk => {
     let registryName = WindowsLaunchOnLogin.getLaunchOnLoginRegistryName();
     if (wrk.hasValue(registryName)) {

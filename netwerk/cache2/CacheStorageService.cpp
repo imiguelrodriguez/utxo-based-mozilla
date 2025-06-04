@@ -30,11 +30,10 @@
 #include "mozilla/AtomicBitfields.h"
 #include "mozilla/TimeStamp.h"
 #include "mozilla/DebugOnly.h"
-#include "mozilla/glean/NetwerkMetrics.h"
 #include "mozilla/Services.h"
 #include "mozilla/StoragePrincipalHelper.h"
 #include "mozilla/IntegerPrintfMacros.h"
-#include "mozilla/glean/NetwerkCache2Metrics.h"
+#include "mozilla/Telemetry.h"
 #include "mozilla/StaticPrefs_network.h"
 
 namespace mozilla::net {
@@ -695,8 +694,7 @@ NS_IMETHODIMP CacheStorageService::Clear() {
   return NS_OK;
 }
 
-NS_IMETHODIMP CacheStorageService::ClearOriginsByPrincipal(
-    nsIPrincipal* aPrincipal) {
+NS_IMETHODIMP CacheStorageService::ClearOrigin(nsIPrincipal* aPrincipal) {
   nsresult rv;
 
   if (NS_WARN_IF(!aPrincipal)) {
@@ -716,7 +714,7 @@ NS_IMETHODIMP CacheStorageService::ClearOriginsByPrincipal(
   return NS_OK;
 }
 
-NS_IMETHODIMP CacheStorageService::ClearOriginsByOriginAttributes(
+NS_IMETHODIMP CacheStorageService::ClearOriginAttributes(
     const nsAString& aOriginAttributes) {
   nsresult rv;
 
@@ -1161,9 +1159,8 @@ bool CacheStorageService::IsForcedValidEntry(
   mForcedValidEntries.Remove(aContextEntryKey);
 
   if (!data.viewed) {
-    glean::predictor::prefetch_use_status
-        .EnumGet(glean::predictor::PrefetchUseStatusLabel::eWaitedtoolong)
-        .Add();
+    Telemetry::AccumulateCategorical(
+        Telemetry::LABELS_PREDICTOR_PREFETCH_USE_STATUS::WaitedTooLong);
   }
   return false;
 }
@@ -1208,9 +1205,8 @@ void CacheStorageService::RemoveEntryForceValid(nsACString const& aContextKey,
   ForcedValidData data;
   bool ok = mForcedValidEntries.Get(aContextKey + aEntryKey, &data);
   if (ok && !data.viewed) {
-    glean::predictor::prefetch_use_status
-        .EnumGet(glean::predictor::PrefetchUseStatusLabel::eWaitedtoolong)
-        .Add();
+    Telemetry::AccumulateCategorical(
+        Telemetry::LABELS_PREDICTOR_PREFETCH_USE_STATUS::WaitedTooLong);
   }
   mForcedValidEntries.Remove(aContextKey + aEntryKey);
 }
@@ -1224,9 +1220,8 @@ void CacheStorageService::ForcedValidEntriesPrune(TimeStamp& now) {
   for (auto iter = mForcedValidEntries.Iter(); !iter.Done(); iter.Next()) {
     if (iter.Data().validUntil < now) {
       if (!iter.Data().viewed) {
-        glean::predictor::prefetch_use_status
-            .EnumGet(glean::predictor::PrefetchUseStatusLabel::eWaitedtoolong)
-            .Add();
+        Telemetry::AccumulateCategorical(
+            Telemetry::LABELS_PREDICTOR_PREFETCH_USE_STATUS::WaitedTooLong);
       }
       iter.Remove();
     }
@@ -1251,8 +1246,8 @@ void CacheStorageService::OnMemoryConsumptionChange(
 
   if (!overLimit) return;
 
-  // It's likely the timer has already been set when we get here,
-  // check outside the lock to save resources.
+    // It's likely the timer has already been set when we get here,
+    // check outside the lock to save resources.
 #ifdef MOZ_TSAN
   if (mPurgeTimerActive) {
 #else
@@ -1388,16 +1383,6 @@ void CacheStorageService::MemoryPool::PurgeExpiredOrOverMemoryLimit() {
     // deliver entries.
     if (minprogress == 0 && CacheIOThread::YieldAndRerun()) {
       return;
-    }
-
-    if (mType == EType::DISK) {
-      mozilla::glean::networking::cache_purge_due_to_memory_limit
-          .Get("meta_data_file_size_limit"_ns)
-          .Add(1);
-    } else if (mType == EType::MEMORY) {
-      mozilla::glean::networking::cache_purge_due_to_memory_limit
-          .Get("cache_memory_limit"_ns)
-          .Add(1);
     }
 
     auto r = PurgeByFrecency(minprogress);
@@ -2235,8 +2220,8 @@ void CacheStorageService::TelemetryRecordEntryCreation(
 
   mPurgeTimeStamps.Remove(key);
 
-  glean::network::http_cache_entry_reload_time.AccumulateRawDuration(
-      TimeStamp::NowLoRes() - timeStamp);
+  Telemetry::AccumulateTimeDelta(Telemetry::HTTP_CACHE_ENTRY_RELOAD_TIME,
+                                 timeStamp, TimeStamp::NowLoRes());
 }
 
 void CacheStorageService::TelemetryRecordEntryRemoval(CacheEntry* entry) {
@@ -2259,10 +2244,10 @@ void CacheStorageService::TelemetryRecordEntryRemoval(CacheEntry* entry) {
   TelemetryPrune(now);
   mPurgeTimeStamps.InsertOrUpdate(key, now);
 
-  glean::network::http_cache_entry_reuse_count.AccumulateSingleSample(
-      entry->UseCount());
-  glean::network::http_cache_entry_alive_time.AccumulateRawDuration(
-      TimeStamp::NowLoRes() - entry->LoadStart());
+  Telemetry::Accumulate(Telemetry::HTTP_CACHE_ENTRY_REUSE_COUNT,
+                        entry->UseCount());
+  Telemetry::AccumulateTimeDelta(Telemetry::HTTP_CACHE_ENTRY_ALIVE_TIME,
+                                 entry->LoadStart(), TimeStamp::NowLoRes());
 }
 
 // nsIMemoryReporter

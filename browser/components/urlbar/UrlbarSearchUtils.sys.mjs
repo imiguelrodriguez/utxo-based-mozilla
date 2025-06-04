@@ -65,7 +65,7 @@ class SearchUtils {
    *   Match at each sub domain, for example "a.b.c.com" will be matched at
    *   "a.b.c.com", "b.c.com", and "c.com". Partial matches are always returned
    *   after perfect matches.
-   * @returns {Promise<nsISearchEngine[]>}
+   * @returns {Array<nsISearchEngine>}
    *   An array of all matching engines. An empty array if there are none.
    */
   async enginesForDomainPrefix(prefix, { matchAllDomainLevels = false } = {}) {
@@ -140,7 +140,7 @@ class SearchUtils {
    * @param {string} [searchString]
    *   Optional. If provided, we also enforce that there must be a space after
    *   the alias in the search string.
-   * @returns {Promise<nsISearchEngine>}
+   * @returns {nsISearchEngine}
    *   The matching engine or null if there isn't one.
    */
   async engineForAlias(alias, searchString = null) {
@@ -163,8 +163,11 @@ class SearchUtils {
   }
 
   /**
-   * The list of engines with token ("@") aliases. May be empty if the search
-   * service has not initialized.
+   * The list of engines with token ("@") aliases.
+   *
+   * @returns {Array}
+   *   Array of objects { engine, tokenAliases } for token alias engines or
+   *   null if SearchService has not initialized.
    */
   async tokenAliasEngines() {
     try {

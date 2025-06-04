@@ -12,6 +12,7 @@
 #include "mozilla/Attributes.h"
 #include "nsDeque.h"
 #include "nsString.h"
+#include "mozilla/Telemetry.h"
 #include "mozilla/Mutex.h"
 
 namespace mozilla {
@@ -88,6 +89,10 @@ class Http2BaseCompressor {
 
   uint32_t mPeakSize{0};
   uint32_t mPeakCount{0};
+  MOZ_INIT_OUTSIDE_CTOR
+  Telemetry::HistogramID mPeakSizeID;
+  MOZ_INIT_OUTSIDE_CTOR
+  Telemetry::HistogramID mPeakCountID;
 
   bool mDumpTables{false};
 
@@ -99,8 +104,11 @@ class Http2Compressor;
 
 class Http2Decompressor final : public Http2BaseCompressor {
  public:
-  Http2Decompressor() = default;
-  virtual ~Http2Decompressor();
+  Http2Decompressor() {
+    mPeakSizeID = Telemetry::HPACK_PEAK_SIZE_DECOMPRESSOR;
+    mPeakCountID = Telemetry::HPACK_PEAK_COUNT_DECOMPRESSOR;
+  };
+  virtual ~Http2Decompressor() = default;
 
   // NS_OK: Produces the working set of HTTP/1 formatted headers
   [[nodiscard]] nsresult DecodeHeaderBlock(const uint8_t* data,
@@ -153,8 +161,11 @@ class Http2Decompressor final : public Http2BaseCompressor {
 
 class Http2Compressor final : public Http2BaseCompressor {
  public:
-  Http2Compressor() = default;
-  virtual ~Http2Compressor();
+  Http2Compressor() {
+    mPeakSizeID = Telemetry::HPACK_PEAK_SIZE_COMPRESSOR;
+    mPeakCountID = Telemetry::HPACK_PEAK_COUNT_COMPRESSOR;
+  };
+  virtual ~Http2Compressor() = default;
 
   // HTTP/1 formatted header block as input - HTTP/2 formatted
   // header block as output

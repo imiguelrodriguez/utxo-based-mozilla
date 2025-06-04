@@ -22,21 +22,21 @@ interface nsINetworkConnectivityService : nsISupports
 
   /* If DNS v4/v6 queries actually work on the current network */
   [infallible]
-  attribute nsINetworkConnectivityService_ConnectivityState DNSv4;
+  readonly attribute nsINetworkConnectivityService_ConnectivityState DNSv4;
   [infallible]
-  attribute nsINetworkConnectivityService_ConnectivityState DNSv6;
+  readonly attribute nsINetworkConnectivityService_ConnectivityState DNSv6;
   [infallible]
-  attribute nsINetworkConnectivityService_ConnectivityState DNS_HTTPS;
+  readonly attribute nsINetworkConnectivityService_ConnectivityState DNS_HTTPS;
 
   /* If connecting to IPv4/v6 works on the current network */
   [infallible]
-  attribute nsINetworkConnectivityService_ConnectivityState IPv4;
+  readonly attribute nsINetworkConnectivityService_ConnectivityState IPv4;
   [infallible]
-  attribute nsINetworkConnectivityService_ConnectivityState IPv6;
+  readonly attribute nsINetworkConnectivityService_ConnectivityState IPv6;
 
   /* If a NAT64 gateway was detected on the current network */
   [infallible]
-  attribute nsINetworkConnectivityService_ConnectivityState NAT64;
+  readonly attribute nsINetworkConnectivityService_ConnectivityState NAT64;
 
   /* Starts the DNS request to check for DNS v4/v6 availability */
   void recheckDNS();

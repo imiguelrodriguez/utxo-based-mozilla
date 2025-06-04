@@ -15,7 +15,7 @@
 #include "mozilla/Logging.h"
 #include "nsString.h"
 #include "nsTArray.h"
-#include "nsIHttpChannel.h"
+#include "mozilla/Telemetry.h"
 #include "nsIHttpChannelInternal.h"
 #include "nsITimedChannel.h"
 #include "nsIInterfaceRequestor.h"
@@ -23,8 +23,7 @@
 #include "CacheObserver.h"
 #include "MainThreadUtils.h"
 #include "RequestContextService.h"
-#include "mozilla/glean/NetwerkMetrics.h"
-#include "mozilla/glean/NetwerkProtocolHttpMetrics.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/StoragePrincipalHelper.h"
 #include "mozilla/Unused.h"
 #include "mozilla/net/NeckoCommon.h"
@@ -112,14 +111,6 @@ nsLoadGroup::~nsLoadGroup() {
   nsCOMPtr<nsIObserverService> os = mozilla::services::GetObserverService();
   if (os) {
     Unused << os->RemoveObserver(this, "last-pb-context-exited");
-  }
-
-  if (mPageSize) {
-    glean::network::page_load_size.Get("page"_ns).Accumulate(mPageSize);
-  }
-  if (mTotalSubresourcesSize) {
-    glean::network::page_load_size.Get("subresources"_ns)
-        .Accumulate(mTotalSubresourcesSize);
   }
 
   LOG(("LOADGROUP [%p]: Destroyed.\n", this));
@@ -424,6 +415,7 @@ nsLoadGroup::SetDefaultLoadRequest(nsIRequest* aRequest) {
     mDefaultLoadIsTimed = timedChannel != nullptr;
     if (mDefaultLoadIsTimed) {
       timedChannel->GetChannelCreation(&mDefaultRequestCreationTime);
+      timedChannel->SetTimingEnabled(true);
     }
   }
   // Else, do not change the group's load flags (see bug 95981)
@@ -477,6 +469,9 @@ nsLoadGroup::AddRequest(nsIRequest* request, nsISupports* ctxt) {
   }
 
   if (mPriority != 0) RescheduleRequest(request, mPriority);
+
+  nsCOMPtr<nsITimedChannel> timedChannel = do_QueryInterface(request);
+  if (timedChannel) timedChannel->SetTimingEnabled(true);
 
   bool foreground = !(flags & nsIRequest::LOAD_BACKGROUND);
   if (foreground) {
@@ -541,16 +536,6 @@ nsLoadGroup::RemoveRequest(nsIRequest* request, nsISupports* ctxt,
   return NotifyRemovalObservers(request, aStatus);
 }
 
-static uint64_t GetTransferSize(nsITimedChannel* aTimedChannel) {
-  if (nsCOMPtr<nsIHttpChannel> channel = do_QueryInterface(aTimedChannel)) {
-    uint64_t size = 0;
-    Unused << channel->GetTransferSize(&size);
-    return size;
-  }
-
-  return 0;
-}
-
 nsresult nsLoadGroup::RemoveRequestFromHashtable(nsIRequest* request,
                                                  nsresult aStatus) {
   NS_ENSURE_ARG_POINTER(request);
@@ -602,22 +587,22 @@ nsresult nsLoadGroup::RemoveRequestFromHashtable(nsIRequest* request,
 
       if (request == mDefaultLoadRequest) {
         TelemetryReportChannel(timedChannel, true);
-        mPageSize = GetTransferSize(timedChannel);
       } else {
         rv = timedChannel->GetAsyncOpen(&timeStamp);
         if (NS_SUCCEEDED(rv) && !timeStamp.IsNull()) {
-          glean::http::subitem_open_latency_time.AccumulateRawDuration(
-              timeStamp - mDefaultRequestCreationTime);
+          Telemetry::AccumulateTimeDelta(
+              Telemetry::HTTP_SUBITEM_OPEN_LATENCY_TIME,
+              mDefaultRequestCreationTime, timeStamp);
         }
 
         rv = timedChannel->GetResponseStart(&timeStamp);
         if (NS_SUCCEEDED(rv) && !timeStamp.IsNull()) {
-          glean::http::subitem_first_byte_latency_time.AccumulateRawDuration(
-              timeStamp - mDefaultRequestCreationTime);
+          Telemetry::AccumulateTimeDelta(
+              Telemetry::HTTP_SUBITEM_FIRST_BYTE_LATENCY_TIME,
+              mDefaultRequestCreationTime, timeStamp);
         }
 
         TelemetryReportChannel(timedChannel, false);
-        mTotalSubresourcesSize += GetTransferSize(timedChannel);
       }
     }
   }
@@ -829,10 +814,10 @@ void nsLoadGroup::TelemetryReport() {
   // We should only report HTTP_PAGE_* telemetry if the defaultRequest was
   // actually successful.
   if (mDefaultLoadIsTimed && NS_SUCCEEDED(mDefaultStatus)) {
-    glean::http::request_per_page.AccumulateSingleSample(mTimedRequests);
+    Telemetry::Accumulate(Telemetry::HTTP_REQUEST_PER_PAGE, mTimedRequests);
     if (mTimedRequests) {
-      glean::http::request_per_page_from_cache.AccumulateSingleSample(
-          mCachedRequests * 100 / mTimedRequests);
+      Telemetry::Accumulate(Telemetry::HTTP_REQUEST_PER_PAGE_FROM_CACHE,
+                            mCachedRequests * 100 / mTimedRequests);
     }
   }
 
@@ -844,6 +829,9 @@ void nsLoadGroup::TelemetryReport() {
 void nsLoadGroup::TelemetryReportChannel(nsITimedChannel* aTimedChannel,
                                          bool aDefaultRequest) {
   nsresult rv;
+  bool timingEnabled;
+  rv = aTimedChannel->GetTimingEnabled(&timingEnabled);
+  if (NS_FAILED(rv) || !timingEnabled) return;
 
   TimeStamp asyncOpen;
   rv = aTimedChannel->GetAsyncOpen(&asyncOpen);
@@ -1033,12 +1021,6 @@ void nsLoadGroup::TelemetryReportChannel(nsITimedChannel* aTimedChannel,
           responseEnd - asyncOpen);
       mozilla::glean::network::sub_complete_load_net.AccumulateRawDuration(
           responseEnd - asyncOpen);
-      // GLAM EXPERIMENT
-      // This metric is temporary, disabled by default, and will be enabled only
-      // for the purpose of experimenting with client-side sampling of data for
-      // GLAM use. See Bug 1947604 for more information.
-      mozilla::glean::glam_experiment::sub_complete_load_net
-          .AccumulateRawDuration(responseEnd - asyncOpen);
     }
   }
 #endif

@@ -34,13 +34,6 @@
 
 "use strict";
 
-// We don't normally allow localhost channels to be proxied, but this
-// is easier than updating all the certs and/or domains.
-Services.prefs.setBoolPref("network.proxy.allow_hijacking_localhost", true);
-registerCleanupFunction(() => {
-  Services.prefs.clearUserPref("network.proxy.allow_hijacking_localhost");
-});
-
 const pps = Cc["@mozilla.org/network/protocol-proxy-service;1"].getService();
 
 let proxy_port;
@@ -372,6 +365,10 @@ add_task(async function setup() {
   );
 
   Services.prefs.setBoolPref("network.http.http2.enabled", true);
+
+  // Even with network state isolation active, we don't end up using the
+  // partitioned principal.
+  Services.prefs.setBoolPref("privacy.partition.network_state", true);
 
   // make all native resolve calls "secretly" resolve localhost instead
   Services.prefs.setBoolPref("network.dns.native-is-localhost", true);

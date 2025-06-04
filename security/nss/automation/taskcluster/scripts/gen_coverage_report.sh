@@ -2,7 +2,8 @@
 
 source $(dirname "$0")/tools.sh
 
-cp -a ${VCS_PATH}/nss ${VCS_PATH}/nspr .
+# Clone NSPR.
+hg_clone https://hg.mozilla.org/projects/nspr ./nspr default
 
 pushd nspr
 hg revert --all
@@ -11,7 +12,7 @@ if [[ -f ../nss/nspr.patch && "$ALLOW_NSPR_PATCH" == "1" ]]; then
 fi
 popd
 
-out=/builds/worker/artifacts
+out=/home/worker/artifacts
 mkdir -p $out
 
 # Generate coverage report.

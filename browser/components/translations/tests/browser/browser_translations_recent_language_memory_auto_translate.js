@@ -43,7 +43,7 @@ add_task(async function test_recent_language_memory_with_auto_translate() {
 
   await SelectTranslationsTestUtils.clickTranslateFullPageButton();
 
-  await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated({
+  await FullPageTranslationsTestUtils.assertPageIsTranslated({
     fromLanguage: "en",
     toLanguage: "fr",
     runInPage,
@@ -72,7 +72,7 @@ add_task(async function test_recent_language_memory_with_auto_translate() {
 
   await navigate("Navigate to a Spanish page.", { url: SPANISH_PAGE_URL });
   await resolveDownloads(2);
-  await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated({
+  await FullPageTranslationsTestUtils.assertPageIsTranslated({
     fromLanguage: "es",
     toLanguage: "fr",
     runInPage,

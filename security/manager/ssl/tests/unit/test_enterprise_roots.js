@@ -55,9 +55,7 @@ async function check_some_enterprise_roots_imported(nssComponent, certDB) {
       foundNonBuiltIn = true;
       savedDBKey = cert.dbKey;
       info("saving dbKey from " + cert.commonName);
-      await asyncTestCertificateUsages(certDB, cert, [
-        Ci.nsIX509CertDB.verifyUsageTLSServerCA,
-      ]);
+      await asyncTestCertificateUsages(certDB, cert, [certificateUsageSSLCA]);
       break;
     }
   }

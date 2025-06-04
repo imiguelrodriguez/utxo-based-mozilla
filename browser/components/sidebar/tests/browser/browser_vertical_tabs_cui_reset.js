@@ -5,12 +5,18 @@
 
 add_setup(() =>
   SpecialPowers.pushPrefEnv({
-    set: [[VERTICAL_TABS_PREF, true]],
+    set: [["sidebar.verticalTabs", true]],
   })
 );
 
 add_task(async function test_cui_reset_vertical_tabs() {
-  ok(Services.prefs.getBoolPref(VERTICAL_TABS_PREF), "Vertical tabs enabled");
+  ok(
+    Services.prefs.getBoolPref("sidebar.verticalTabs"),
+    "Vertical tabs enabled"
+  );
   CustomizableUI.reset();
-  ok(!Services.prefs.getBoolPref(VERTICAL_TABS_PREF), "Vertical tabs disabled");
+  ok(
+    !Services.prefs.getBoolPref("sidebar.verticalTabs"),
+    "Vertical tabs disabled"
+  );
 });

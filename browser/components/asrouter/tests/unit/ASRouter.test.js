@@ -14,7 +14,7 @@ import {
 } from "modules/ASRouterPreferences.sys.mjs";
 import { ASRouterTriggerListeners } from "modules/ASRouterTriggerListeners.sys.mjs";
 import { CFRPageActions } from "modules/CFRPageActions.sys.mjs";
-import { GlobalOverrider } from "tests/unit/utils";
+import { GlobalOverrider } from "test/unit/utils";
 import { PanelTestProvider } from "modules/PanelTestProvider.sys.mjs";
 import ProviderResponseSchema from "content-src/schemas/provider-response.schema.json";
 
@@ -170,9 +170,6 @@ describe("ASRouter", () => {
         scoreThreshold: 5000,
         isChinaRepack: false,
         userId: "adsf",
-        currentProfileId: "1",
-        canCreateSelectableProfiles: false,
-        hasSelectableProfiles: false,
       },
     };
     gBrowser = {
@@ -232,21 +229,15 @@ describe("ASRouter", () => {
       "spotlight",
       "moments-page",
       "pbNewtab",
-      "fxms-message-15",
     ].reduce((features, featureId) => {
       features[featureId] = {
-        getEnrollmentMetadata: sandbox.stub().returns({
-          slug: "experiment-slug",
-          branch: "experiment-branch-slug",
-          isRollout: false,
-        }),
-        getAllVariables: sandbox.stub().returns(undefined),
+        getAllVariables: sandbox.stub().returns(null),
         recordExposureEvent: sandbox.stub(),
       };
       return features;
     }, {});
     globals.set({
-      // Testing framework doesn't know how to `defineESModuleGetters` so we're
+      // Testing framework doesn't know how to `defineLazyModuleGetters` so we're
       // importing these modules into the global scope ourselves.
       GroupsConfigurationProvider: { getMessages: () => Promise.resolve([]) },
       ASRouterPreferences,
@@ -270,16 +261,30 @@ describe("ASRouter", () => {
           return this;
         }
         getRecord() {
-          return Promise.resolve({ data: { attachment: { size: 42 } } });
+          return Promise.resolve({ data: {} });
         }
       },
-      UnstoredDownloader: class {
+      Downloader: class {
         download() {
-          return Promise.resolve({ buffer: "fake buffer" });
+          return Promise.resolve("/path/to/download");
         }
       },
       NimbusFeatures: fakeNimbusFeatures,
       ExperimentAPI: {
+        getExperimentMetaData: sandbox.stub().returns({
+          slug: "experiment-slug",
+          active: true,
+          branch: { slug: "experiment-branch-slug" },
+        }),
+        getExperiment: sandbox.stub().returns({
+          branch: {
+            slug: "unit-slug",
+            feature: {
+              featureId: "foo",
+              value: { id: "test-message" },
+            },
+          },
+        }),
         getAllBranches: sandbox.stub().resolves([]),
         ready: sandbox.stub().resolves(),
       },
@@ -299,9 +304,6 @@ describe("ASRouter", () => {
         // This is just a subset of supported locales that happen to be used in
         // the test.
         isLocaleSupported: locale => ["en-US", "ja-JP-mac"].includes(locale),
-        // PathUtils.join() is mocked in `unit-entry.js`, only filenames count.
-        cfrFluentFileDir: "ms-language-packs",
-        cfrFluentFilePath: "asrouter.ftl",
       },
     });
     await createRouterAndInit();
@@ -870,9 +872,12 @@ describe("ASRouter", () => {
       assertRouterContainsMessages(FAKE_LOCAL_MESSAGES);
     });
     it("should parse the triggers in the messages and register the trigger listeners", async () => {
-      sandbox.spy(ASRouterTriggerListeners.get("openURL"), "init");
+      sandbox.spy(
+        ASRouterTriggerListeners.get("openURL"),
+        "init"
+      ); /* eslint-disable object-property-newline */
 
-      await createRouterAndInit([
+      /* eslint-disable object-curly-newline */ await createRouterAndInit([
         {
           id: "foo",
           type: "local",
@@ -901,8 +906,10 @@ describe("ASRouter", () => {
             },
           ],
         },
-      ]);
-      assert.calledTwice(ASRouterTriggerListeners.get("openURL").init);
+      ]); /* eslint-enable object-property-newline */
+      /* eslint-enable object-curly-newline */ assert.calledTwice(
+        ASRouterTriggerListeners.get("openURL").init
+      );
       assert.calledWithExactly(
         ASRouterTriggerListeners.get("openURL").init,
         Router._triggerHandler,
@@ -924,10 +931,10 @@ describe("ASRouter", () => {
           enabled: true,
           messages: [
             {
-              id: "foo",
+              id: "bar3",
               template: "simple_template",
               trigger: { id: "messagesLoaded" },
-              content: { title: "Foo", body: "Bar123" },
+              content: { title: "Bar3", body: "Bar123" },
             },
           ],
         },
@@ -941,26 +948,6 @@ describe("ASRouter", () => {
         sandbox.match({ id: "messagesLoaded" }),
         true
       );
-    });
-    it("should not register a trigger listener in automation for a message with skip_in_tests", async () => {
-      sandbox.spy(ASRouterTriggerListeners.get("openURL"), "init");
-      await createRouterAndInit([
-        {
-          id: "foo",
-          type: "local",
-          enabled: true,
-          messages: [
-            {
-              id: "foo",
-              template: "simple_template",
-              trigger: { id: "openURL" },
-              content: { title: "Foo", body: "Foo123" },
-              skip_in_tests: "testing",
-            },
-          ],
-        },
-      ]);
-      assert.notCalled(ASRouterTriggerListeners.get("openURL").init);
     });
     it("should gracefully handle messages loading before a window or browser exists", async () => {
       sandbox.stub(global, "gBrowser").value(undefined);
@@ -1034,9 +1021,8 @@ describe("ASRouter", () => {
       sandbox
         .stub(MessageLoaderUtils, "_getRemoteSettingsMessages")
         .resolves([{ id: "message_1" }]);
-      sandbox.stub(global.IOUtils, "exists").resolves(false);
       const spy = sandbox.spy();
-      global.UnstoredDownloader.prototype.download = spy;
+      global.Downloader.prototype.downloadToDisk = spy;
       const provider = {
         id: "cfr",
         enabled: true,
@@ -1136,38 +1122,6 @@ describe("ASRouter", () => {
       await Router.setState(() => ({
         providers: [{ id: "cfr" }, { id: "badge" }],
       }));
-    });
-    it("should return no messages if shouldShowMessagesToProfile returns false", async () => {
-      sandbox.stub(Router, "shouldShowMessagesToProfile").returns(false);
-      await Router.setState(() => ({
-        messages: [
-          { id: "foo", provider: "cfr", groups: ["cfr"] },
-          { id: "bar", provider: "cfr", groups: ["cfr"] },
-        ],
-      }));
-      const result = await Router.handleMessageRequest({
-        provider: "cfr",
-      });
-      assert.isNull(result);
-    });
-    it("should return messages if shouldShowMessagesToProfile returns true", async () => {
-      sandbox.stub(Router, "shouldShowMessagesToProfile").returns(true);
-      await Router.setState(() => ({
-        messages: [
-          { id: "foo", provider: "cfr", groups: ["cfr"] },
-          { id: "bar", provider: "cfr", groups: ["cfr"] },
-        ],
-      }));
-      const result = await Router.handleMessageRequest({
-        provider: "cfr",
-      });
-      assert.isNotNull(result);
-      assert.calledWithMatch(ASRouterTargeting.findMatchingMessage, {
-        messages: [
-          { id: "foo", provider: "cfr", groups: ["cfr"] },
-          { id: "bar", provider: "cfr", groups: ["cfr"] },
-        ],
-      });
     });
     it("should not return a blocked message", async () => {
       // Block all messages except the first
@@ -1409,15 +1363,6 @@ describe("ASRouter", () => {
       assert.lengthOf(result, 1);
       assert.deepEqual(result[0], message1);
     });
-    it("should filter out messages with skip_in_tests when in automation", async () => {
-      await Router.setState(() => ({
-        messages: [
-          { id: "foo", provider: "cfr", skip_in_tests: "testing", groups: [] },
-        ],
-      }));
-      const result = await Router.handleMessageRequest({ provider: "cfr" });
-      assert.isNull(result);
-    });
   });
 
   describe("#uninit", () => {
@@ -1618,15 +1563,17 @@ describe("ASRouter", () => {
     let experimentAPIStub;
     let featureIds = ["cfr", "moments-page", "infobar", "spotlight"];
     beforeEach(() => {
+      let getExperimentMetaDataStub = sandbox.stub();
       let getAllBranchesStub = sandbox.stub();
       featureIds.forEach(feature => {
         global.NimbusFeatures[feature].getAllVariables.returns({
           id: `message-${feature}`,
         });
-        global.NimbusFeatures[feature].getEnrollmentMetadata.returns({
+        getExperimentMetaDataStub.withArgs({ featureId: feature }).returns({
           slug: `slug-${feature}`,
-          branch: `branch-${feature}`,
-          isRollout: false,
+          branch: {
+            slug: `branch-${feature}`,
+          },
         });
         getAllBranchesStub.withArgs(`slug-${feature}`).resolves([
           {
@@ -1636,6 +1583,7 @@ describe("ASRouter", () => {
         ]);
       });
       experimentAPIStub = {
+        getExperimentMetaData: getExperimentMetaDataStub,
         getAllBranches: getAllBranchesStub,
       };
       globals.set("ExperimentAPI", experimentAPIStub);
@@ -1680,6 +1628,7 @@ describe("ASRouter", () => {
       Router.loadMessagesFromAllProviders.onFirstCall().resolves();
 
       await Router.sendTriggerMessage({
+        tabId: 0,
         browser: gBrowser.selectedBrowser,
         id: "firstRun",
       });
@@ -1695,24 +1644,35 @@ describe("ASRouter", () => {
       );
     });
     it("should record telemetry information", async () => {
-      const fakeTimerId = 42;
-      const start = sandbox
-        .stub(global.Glean.messagingSystem.messageRequestTime, "start")
-        .returns(fakeTimerId);
-      const stopAndAccumulate = sandbox.stub(
-        global.Glean.messagingSystem.messageRequestTime,
-        "stopAndAccumulate"
+      const startTelemetryStopwatch = sandbox.stub(
+        global.TelemetryStopwatch,
+        "start"
+      );
+      const finishTelemetryStopwatch = sandbox.stub(
+        global.TelemetryStopwatch,
+        "finish"
       );
 
+      const tabId = 123;
+
       await Router.sendTriggerMessage({
+        tabId,
         browser: {},
         id: "firstRun",
       });
 
-      assert.calledTwice(start);
-      assert.calledWithExactly(start);
-      assert.calledTwice(stopAndAccumulate);
-      assert.calledWithExactly(stopAndAccumulate, fakeTimerId);
+      assert.calledTwice(startTelemetryStopwatch);
+      assert.calledWithExactly(
+        startTelemetryStopwatch,
+        "MS_MESSAGE_REQUEST_TIME_MS",
+        { tabId }
+      );
+      assert.calledTwice(finishTelemetryStopwatch);
+      assert.calledWithExactly(
+        finishTelemetryStopwatch,
+        "MS_MESSAGE_REQUEST_TIME_MS",
+        { tabId }
+      );
     });
     it("should have previousSessionEnd in the message context", () => {
       assert.propertyVal(
@@ -1753,6 +1713,7 @@ describe("ASRouter", () => {
       sandbox.spy(Glean.messagingExperiments.reachCfr, "record");
 
       await Router.sendTriggerMessage({
+        tabId: 0,
         browser: {},
         id: "foo",
       });
@@ -1775,14 +1736,12 @@ describe("ASRouter", () => {
       sandbox.spy(Glean.messagingExperiments.reachCfr, "record");
 
       await Router.sendTriggerMessage({
+        tabId: 0,
         browser: {},
         id: "foo",
       });
       assert.notCalled(Glean.messagingExperiments.reachCfr.record);
     });
-    // XXX this next test set (ie the single `it` that tries to generate
-    // four tests with `forEach`) doesn't work, because it will always
-    // pass, so don't use it as a pattern to write other tests. Bug 1967593
     it("should record the Exposure event for each valid feature", async () => {
       ["cfr_doorhanger", "update_action", "infobar", "spotlight"].forEach(
         async template => {
@@ -1807,6 +1766,7 @@ describe("ASRouter", () => {
           sandbox.stub(Router, "handleMessageRequest").resolves(messages);
 
           await Router.sendTriggerMessage({
+            tabId: 0,
             browser: {},
             id: "foo",
           });
@@ -1816,52 +1776,6 @@ describe("ASRouter", () => {
           );
         }
       );
-    });
-
-    it("should send Exposure and route messages if recording reach fails", async () => {
-      const template = "feature_callout";
-      const featureId = "fxms-message-15";
-      const featureIdReachGroup = "FxmsMessage15";
-      let messages = [
-        {
-          _nimbusFeature: [featureId], // from _experimentsAPILoader
-          forReachEvent: {
-            sent: false,
-            group: featureIdReachGroup,
-          },
-          id: "foo1",
-          template,
-          trigger: { id: "fakeTrigger" },
-          content: { title: "Foo1", body: "Foo123-1" },
-        },
-        {
-          _nimbusFeature: [featureId], // from _experimentsAPILoader
-          id: "foo2",
-          template,
-          trigger: { id: "fakeTrigger" },
-          content: { title: "Foo2", body: "Foo123-2" },
-        },
-      ];
-      sandbox.stub(Router, "handleMessageRequest").resolves(messages);
-      sandbox.spy(Router, "routeCFRMessage");
-      sandbox
-        .stub(
-          Glean.messagingExperiments[`reach${featureIdReachGroup}`],
-          "record"
-        )
-        .throws(new Error("stuff"));
-      assert.notCalled(global.NimbusFeatures[featureId].recordExposureEvent);
-
-      await Router.sendTriggerMessage(
-        {
-          browser: {},
-          id: "foo",
-        },
-        true // skipMessagesLoaded to avoid irrelevant calls spy/stub calls
-      );
-
-      assert.calledOnce(global.NimbusFeatures[featureId].recordExposureEvent);
-      assert.calledOnce(Router.routeCFRMessage);
     });
   });
 
@@ -2547,14 +2461,19 @@ describe("ASRouter", () => {
 
       await MessageLoaderUtils.loadMessagesForProvider(args);
 
-      assert.calledOnce(global.NimbusFeatures.spotlight.getEnrollmentMetadata);
       assert.calledOnce(global.NimbusFeatures.spotlight.getAllVariables);
+      assert.calledOnce(global.ExperimentAPI.getExperimentMetaData);
+      assert.calledWithExactly(global.ExperimentAPI.getExperimentMetaData, {
+        featureId: "spotlight",
+      });
     });
     it("should handle the case of no experiments in the ExperimentAPI", async () => {
       const args = {
         type: "remote-experiments",
         featureIds: ["infobar"],
       };
+
+      global.ExperimentAPI.getExperiment.returns(null);
 
       const result = await MessageLoaderUtils.loadMessagesForProvider(args);
 
@@ -2566,7 +2485,6 @@ describe("ASRouter", () => {
         featureIds: ["infobar"],
       };
       const enrollment = {
-        slug: "enrollment01",
         branch: {
           slug: "branch01",
           infobar: {
@@ -2579,10 +2497,8 @@ describe("ASRouter", () => {
       global.NimbusFeatures.infobar.getAllVariables.returns(
         enrollment.branch.infobar.value
       );
-      global.NimbusFeatures.infobar.getEnrollmentMetadata.returns({
-        slug: enrollment.slug,
-        branch: enrollment.branch.slug,
-        isRollout: false,
+      global.ExperimentAPI.getExperimentMetaData.returns({
+        branch: { slug: enrollment.branch.slug },
       });
       global.ExperimentAPI.getAllBranches.returns([
         enrollment.branch,
@@ -2630,10 +2546,10 @@ describe("ASRouter", () => {
       global.NimbusFeatures.cfr.getAllVariables.returns(
         enrollment.branch.cfr.value
       );
-      global.NimbusFeatures.cfr.getEnrollmentMetadata.returns({
+      global.ExperimentAPI.getExperimentMetaData.returns({
         slug: enrollment.slug,
-        branch: enrollment.branch.slug,
-        isRollout: false,
+        active: true,
+        branch: { slug: enrollment.branch.slug },
       });
       global.ExperimentAPI.getAllBranches.resolves([
         enrollment.branch,
@@ -2682,15 +2598,15 @@ describe("ASRouter", () => {
         },
       };
 
-      // Needs to match the `featureIds` value to return an enrollment
+      // Nedds to match the `featureIds` value to return an enrollment
       // for that feature
       global.NimbusFeatures.cfr.getAllVariables.returns(
         enrollment.branch.cfr.value
       );
-      global.NimbusFeatures.cfr.getEnrollmentMetadata.returns({
+      global.ExperimentAPI.getExperimentMetaData.returns({
         slug: enrollment.slug,
-        branch: enrollment.branch.slug,
-        isRollout: false,
+        active: true,
+        branch: { slug: enrollment.branch.slug },
       });
       global.ExperimentAPI.getAllBranches.resolves([
         enrollment.branch,
@@ -2734,12 +2650,11 @@ describe("ASRouter", () => {
       sandbox
         .stub(MessageLoaderUtils, "_getRemoteSettingsMessages")
         .resolves([{ id: "message_1" }]);
-      sandbox.stub(global.IOUtils, "exists").resolves(false);
-      spy = sandbox.spy(global.UnstoredDownloader.prototype.download);
-      global.UnstoredDownloader.prototype.download = spy;
+      spy = sandbox.spy();
+      global.Downloader.prototype.downloadToDisk = spy;
     });
     it("should be called with the expected dir path", async () => {
-      const writeSpy = sandbox.spy(global.IOUtils, "write");
+      const dlSpy = sandbox.spy(global, "Downloader");
 
       sandbox
         .stub(global.Services.locale, "appLocaleAsBCP47")
@@ -2747,38 +2662,13 @@ describe("ASRouter", () => {
 
       await MessageLoaderUtils._remoteSettingsLoader(provider, {});
 
-      assert.calledOnce(spy);
-      assert.calledWithMatch(
-        writeSpy,
-        "asrouter.ftl", // PathUtils.join() is mocked in `unit-entry.js` and only returns the filename.
-        sinon.match.any,
-        { tmpPath: "asrouter.ftl.tmp" }
+      assert.calledWith(
+        dlSpy,
+        "main",
+        "ms-language-packs",
+        "browser",
+        "newtab"
       );
-    });
-    it("should download if local file has different size", async () => {
-      global.IOUtils.exists.resolves(true);
-      sandbox.stub(global.IOUtils, "stat").resolves({ size: 1337 });
-      sandbox
-        .stub(global.Services.locale, "appLocaleAsBCP47")
-        .get(() => "en-US");
-
-      await MessageLoaderUtils._remoteSettingsLoader(provider, {});
-
-      assert.calledOnce(spy);
-    });
-    it("should not download if local file has same size", async () => {
-      global.IOUtils.exists.resolves(true);
-      sandbox.stub(global.IOUtils, "stat").resolves({ size: 42 });
-      sandbox
-        .stub(global.KintoHttpClient.prototype, "getRecord")
-        .resolves({ data: { attachment: { size: 42 } } });
-      sandbox
-        .stub(global.Services.locale, "appLocaleAsBCP47")
-        .get(() => "en-US");
-
-      await MessageLoaderUtils._remoteSettingsLoader(provider, {});
-
-      assert.notCalled(spy);
     });
     it("should allow fetch for known locales", async () => {
       sandbox

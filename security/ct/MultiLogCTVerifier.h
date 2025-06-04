@@ -16,7 +16,6 @@
 #include "mozpkix/Result.h"
 #include "mozpkix/Time.h"
 #include "signature_cache_ffi.h"
-#include "mozilla/UniquePtr.h"
 
 namespace mozilla {
 namespace ct {

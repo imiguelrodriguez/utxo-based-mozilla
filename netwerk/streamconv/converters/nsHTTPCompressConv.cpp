@@ -29,7 +29,6 @@
 #include "state.h"
 #include "brotli/decode.h"
 
-#define ZSTD_STATIC_LINKING_ONLY 1
 #include "zstd/zstd.h"
 
 namespace mozilla {
@@ -56,29 +55,11 @@ class BrotliWrapper {
   uint64_t mSourceOffset{0};
 };
 
-#ifdef ZSTD_INFALLIBLE
-// zstd can grab large blocks; use an infallible alloctor
-static void* zstd_malloc(void*, size_t size) { return moz_xmalloc(size); }
-
-static void zstd_free(void*, void* address) { free(address); }
-
-ZSTD_customMem const zstd_allocators = {zstd_malloc, zstd_free, nullptr};
-#endif
-
 class ZstdWrapper {
  public:
   ZstdWrapper() {
-#ifdef ZSTD_INFALLIBLE
-    mDStream = ZSTD_createDStream_advanced(zstd_allocators);  // infallible
-#else
-    mDStream = ZSTD_createDStream();  // fallible
-    if (!mDStream) {
-      MOZ_RELEASE_ASSERT(ZSTD_defaultCMem.customAlloc == NULL &&
-                         ZSTD_defaultCMem.customFree == NULL &&
-                         ZSTD_defaultCMem.opaque == NULL);
-      return;
-    }
-#endif
+    mDStream = ZSTD_createDStream();
+    MOZ_RELEASE_ASSERT(mDStream);  // we'll crash anyways if it fails
     ZSTD_DCtx_setParameter(mDStream, ZSTD_d_windowLogMax, 23 /*8*1024*1024*/);
   }
   ~ZstdWrapper() {
@@ -509,20 +490,12 @@ nsHTTPCompressConv::OnDataAvailable(nsIRequest* request, nsIInputStream* iStr,
       [[fallthrough]];
 
     case HTTP_COMPRESS_DEFLATE:
-#if defined(__GNUC__) && (__GNUC__ >= 12) && !defined(__clang__)
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored "-Wuse-after-free"
-#endif  // __GNUC__ >= 12
 
-      // The return value of realloc is null in case of failure, and the old
-      // buffer will stay valid but GCC isn't smart enough to figure that out.
-      // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=110501
       if (mInpBuffer != nullptr && streamLen > mInpBufferLen) {
         unsigned char* originalInpBuffer = mInpBuffer;
         if (!(mInpBuffer = (unsigned char*)realloc(
-                  mInpBuffer, mInpBufferLen = streamLen))) {
+                  originalInpBuffer, mInpBufferLen = streamLen))) {
           free(originalInpBuffer);
-          mInpBufferLen = 0;
         }
 
         if (mOutBufferLen < streamLen * 2) {
@@ -530,13 +503,8 @@ nsHTTPCompressConv::OnDataAvailable(nsIRequest* request, nsIInputStream* iStr,
           if (!(mOutBuffer = (unsigned char*)realloc(
                     mOutBuffer, mOutBufferLen = streamLen * 3))) {
             free(originalOutBuffer);
-            mOutBufferLen = 0;
           }
         }
-
-#if defined(__GNUC__) && (__GNUC__ >= 12) && !defined(__clang__)
-#  pragma GCC diagnostic pop
-#endif  // __GNUC__ >= 12
 
         if (mInpBuffer == nullptr || mOutBuffer == nullptr) {
           return NS_ERROR_OUT_OF_MEMORY;
@@ -721,9 +689,6 @@ nsHTTPCompressConv::OnDataAvailable(nsIRequest* request, nsIInputStream* iStr,
     case HTTP_COMPRESS_ZSTD: {
       if (!mZstd) {
         mZstd = MakeUnique<ZstdWrapper>();
-        if (!mZstd->mDStream) {
-          return NS_ERROR_OUT_OF_MEMORY;
-        }
       }
 
       mZstd->mRequest = request;

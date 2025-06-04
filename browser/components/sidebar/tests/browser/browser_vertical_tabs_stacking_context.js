@@ -7,12 +7,7 @@
  * Check that when enabling vertical tabs, we can still receive a click on the urlbar results view
  */
 add_task(async function test_click_urlbar_results() {
-  await SpecialPowers.pushPrefEnv({
-    set: [
-      [VERTICAL_TABS_PREF, true],
-      [SIDEBAR_VISIBILITY_PREF, "always-show"],
-    ],
-  });
+  await SpecialPowers.pushPrefEnv({ set: [["sidebar.verticalTabs", true]] });
 
   await TestUtils.waitForCondition(() => {
     return BrowserTestUtils.isVisible(document.querySelector("sidebar-main"));

@@ -25,11 +25,9 @@ XPCOMUtils.defineLazyPreferenceGetter(
 );
 
 let firstPaintNotification = "widget-first-paint";
-// On Linux widget-first-paint fires much later than expected and
-// xul-window-visible fires too early for currently unknown reasons.
-if (AppConstants.platform == "linux") {
-  firstPaintNotification = "document-shown";
-} else if (
+// widget-first-paint fires much later than expected on Linux.
+if (
+  AppConstants.platform == "linux" ||
   Services.prefs.getBoolPref("browser.startup.preXulSkeletonUI", false)
 ) {
   firstPaintNotification = "xul-window-visible";
@@ -38,7 +36,6 @@ if (AppConstants.platform == "linux") {
 let win, canvas;
 let paints = [];
 let afterPaintListener = () => {
-  let startTime = Cu.now();
   let width, height;
   canvas.width = width = win.innerWidth;
   canvas.height = height = win.innerHeight;
@@ -64,11 +61,6 @@ let afterPaintListener = () => {
     width,
     height,
   });
-  ChromeUtils.addProfilerMarker(
-    "startupRecorder",
-    { category: "Test", startTime },
-    `screenshot: ${width}x${height}px`
-  );
 };
 
 /**
@@ -99,13 +91,9 @@ StartupRecorder.prototype = {
   QueryInterface: ChromeUtils.generateQI(["nsIObserver"]),
 
   record(name) {
-    ChromeUtils.addProfilerMarker(
-      "startupRecorder",
-      { category: "Test" },
-      name
-    );
+    ChromeUtils.addProfilerMarker("startupRecorder:" + name);
     this.data.code[name] = {
-      modules: Cu.loadedESModules,
+      modules: Cu.loadedJSModules.concat(Cu.loadedESModules),
       services: Object.keys(Cc).filter(c => {
         try {
           return Cm.isServiceInstantiatedByContractID(c, Ci.nsISupports);
@@ -166,12 +154,9 @@ StartupRecorder.prototype = {
           .getInterface(Ci.nsIDOMWindow);
       }
 
-      // In the case we're handling document-shown, we'll have been handed
-      // an HTMLDocument instead of an nsIDOMWindow.
-      let doc = topic == "document-shown" ? subject : subject.document;
-
       if (
-        doc.documentElement.getAttribute("windowtype") != "navigator:browser"
+        subject.document.documentElement.getAttribute("windowtype") !=
+        "navigator:browser"
       ) {
         return;
       }
@@ -187,7 +172,7 @@ StartupRecorder.prototype = {
     if (topic == firstPaintNotification) {
       // Because of the check for navigator:browser we made earlier, we know
       // that if we got here, then the subject must be the first browser window.
-      win = topic == "document-shown" ? subject.defaultView : subject;
+      win = subject;
       canvas = win.document.createElementNS(
         "http://www.w3.org/1999/xhtml",
         "canvas"

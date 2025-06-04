@@ -70,14 +70,14 @@ const certBlocklist = [
   },
   {
     issuerName: "MBIxEDAOBgNVBAMMB1Rlc3QgQ0E=",
-    serialNumber: "AxPrsRjtbFinLUfRzhtR8EeYh4Y=",
+    serialNumber: "a0X7/7DlTaedpgrIJg25iBPOkIM=",
   },
   // ... and some good
   // In this case, the issuer name and the valid serialNumber correspond
   // to other-test-ca.pem in bad_certs/ (for testing root revocation)
   {
     issuerName: "MBgxFjAUBgNVBAMMDU90aGVyIHRlc3QgQ0E=",
-    serialNumber: "VTTv5DQM+fh01nnfm3AoUJt4UIY=",
+    serialNumber: "Rym6o+VN9xgZXT/QLrvN/nv1ZN4=",
   },
   // These items correspond to an entry in sample_revocations.txt where:
   // isser name is the base-64 encoded subject DN for the shared Test
@@ -106,7 +106,7 @@ function verify_cert(file, expectedError) {
     certDB,
     ee,
     expectedError,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
 }
 
@@ -117,19 +117,19 @@ async function verify_non_tls_usage_succeeds(file) {
     certDB,
     ee,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageTLSClient
+    certificateUsageSSLClient
   );
   await checkCertErrorGeneric(
     certDB,
     ee,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageEmailSigner
+    certificateUsageEmailSigner
   );
   await checkCertErrorGeneric(
     certDB,
     ee,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageEmailRecipient
+    certificateUsageEmailRecipient
   );
 }
 

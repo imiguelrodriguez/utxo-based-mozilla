@@ -83,22 +83,22 @@ add_task(async function test_n_autocomplete_cancel() {
   const context = createContext(TEST_URL, { providers: [provider.name] });
 
   Assert.ok(
-    !context.firstTimerId,
+    !TelemetryStopwatch.running(TELEMETRY_1ST_RESULT, context),
     "Should not have started first result stopwatch"
   );
   Assert.ok(
-    !context.sixthTimerId,
+    !TelemetryStopwatch.running(TELEMETRY_6_FIRST_RESULTS, context),
     "Should not have started first 6 results stopwatch"
   );
 
   let startQueryPromise = controller.startQuery(context);
 
   Assert.ok(
-    !!context.firstTimerId,
+    TelemetryStopwatch.running(TELEMETRY_1ST_RESULT, context),
     "Should have started first result stopwatch"
   );
   Assert.ok(
-    !!context.sixthTimerId,
+    TelemetryStopwatch.running(TELEMETRY_6_FIRST_RESULTS, context),
     "Should have started first 6 results stopwatch"
   );
 
@@ -106,11 +106,11 @@ add_task(async function test_n_autocomplete_cancel() {
   await startQueryPromise;
 
   Assert.ok(
-    !context.firstTimerId,
+    !TelemetryStopwatch.running(TELEMETRY_1ST_RESULT, context),
     "Should have canceled first result stopwatch"
   );
   Assert.ok(
-    !context.sixthTimerId,
+    !TelemetryStopwatch.running(TELEMETRY_6_FIRST_RESULTS, context),
     "Should have canceled first 6 results stopwatch"
   );
 
@@ -142,31 +142,34 @@ add_task(async function test_n_autocomplete_results() {
   );
 
   Assert.ok(
-    !context.firstTimerId,
+    !TelemetryStopwatch.running(TELEMETRY_1ST_RESULT, context),
     "Should not have started first result stopwatch"
   );
   Assert.ok(
-    !context.sixthTimerId,
+    !TelemetryStopwatch.running(TELEMETRY_6_FIRST_RESULTS, context),
     "Should not have started first 6 results stopwatch"
   );
 
   controller.startQuery(context);
 
   Assert.ok(
-    !!context.firstTimerId,
+    TelemetryStopwatch.running(TELEMETRY_1ST_RESULT, context),
     "Should have started first result stopwatch"
   );
   Assert.ok(
-    !!context.sixthTimerId,
+    TelemetryStopwatch.running(TELEMETRY_6_FIRST_RESULTS, context),
     "Should have started first 6 results stopwatch"
   );
 
   await provider.addResults([MATCH], false);
   await resultsPromise;
 
-  Assert.ok(!context.firstTimerId, "Should have stopped the first stopwatch");
   Assert.ok(
-    !!context.sixthTimerId,
+    !TelemetryStopwatch.running(TELEMETRY_1ST_RESULT, context),
+    "Should have stopped the first stopwatch"
+  );
+  Assert.ok(
+    TelemetryStopwatch.running(TELEMETRY_6_FIRST_RESULTS, context),
     "Should have kept the first 6 results stopwatch running"
   );
 
@@ -202,9 +205,12 @@ add_task(async function test_n_autocomplete_results() {
     await resultsPromise;
   }
 
-  Assert.ok(!context.firstTimerId, "Should have stopped the first stopwatch");
   Assert.ok(
-    !context.sixthTimerId,
+    !TelemetryStopwatch.running(TELEMETRY_1ST_RESULT, context),
+    "Should have stopped the first stopwatch"
+  );
+  Assert.ok(
+    !TelemetryStopwatch.running(TELEMETRY_6_FIRST_RESULTS, context),
     "Should have stopped the first 6 results stopwatch"
   );
 

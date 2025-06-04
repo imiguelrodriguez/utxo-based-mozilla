@@ -457,11 +457,6 @@ TEST_F(SoftokenTest, CreateObjectReadBreakLine) {
   ASSERT_TRUE(NSS_IsInitialized());
 }
 
-// Disabled on MacOS because of Bug 1962505
-// (Skip test is insufficient because the error happens during
-// test class construction)
-#if !GTEST_OS_MAC
-
 class SoftokenNonAsciiTest : public SoftokenTest {
  protected:
   SoftokenNonAsciiTest() : SoftokenTest("SoftokenTest.\xF7-") {}
@@ -474,7 +469,6 @@ TEST_F(SoftokenNonAsciiTest, NonAsciiPathWorking) {
   EXPECT_EQ(SECSuccess, PK11_ResetToken(slot.get(), nullptr));
   EXPECT_EQ(SECSuccess, PK11_InitPin(slot.get(), nullptr, nullptr));
 }
-#endif
 
 // This is just any X509 certificate. Its contents don't matter.
 static unsigned char certDER[] = {

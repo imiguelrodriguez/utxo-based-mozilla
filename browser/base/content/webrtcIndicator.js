@@ -540,9 +540,8 @@ const WebRTCIndicator = {
       toggleEl.checked
     );
     Services.ppmm.sharedData.flush();
-    let l10nId = toggleEl.checked
-      ? "webrtc-microphone-muted"
-      : "webrtc-microphone-unmuted";
+    let l10nId =
+      "webrtc-microphone-" + (toggleEl.checked ? "muted" : "unmuted");
     document.l10n.setAttributes(toggleEl, l10nId);
   },
 
@@ -558,9 +557,7 @@ const WebRTCIndicator = {
   toggleCameraMute(toggleEl) {
     Services.ppmm.sharedData.set("WebRTC:GlobalCameraMute", toggleEl.checked);
     Services.ppmm.sharedData.flush();
-    let l10nId = toggleEl.checked
-      ? "webrtc-camera-muted"
-      : "webrtc-camera-unmuted";
+    let l10nId = "webrtc-camera-" + (toggleEl.checked ? "muted" : "unmuted");
     document.l10n.setAttributes(toggleEl, l10nId);
   },
 

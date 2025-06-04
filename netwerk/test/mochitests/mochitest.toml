@@ -59,8 +59,9 @@ support-files = [
   "test2.css",
   "test2.css^headers^",
 ]
-prefs = [ "javascript.options.large_arraybuffers=true" ]
+prefs = ["javascript.options.large_arraybuffers=true"]
 
+# test_1331680* fail with xorigin if 3pc are rejected by default (Bug 1873998).
 ["test_1331680.html"]
 skip-if = ["xorigin"]
 
@@ -80,7 +81,6 @@ skip-if = [
 ]
 
 # test_142* fail with xorigin if 3pc are rejected by default (Bug 1873998).
-
 ["test_1421324.html"]
 skip-if = ["xorigin"]
 
@@ -97,16 +97,17 @@ support-files = [
 ["test_1503201.html"]
 
 ["test_accept_header.html"]
-support-files = ["test_accept_header.sjs", "test_import_json_module.mjs"]
+support-files = ["test_accept_header.sjs"]
 
 ["test_anchor_query_encoding.html"]
 
 ["test_arraybufferinputstream.html"]
 
 ["test_arraybufferinputstream_large.html"]
-run-if = ["processor != 'x86'"] # Large ArrayBuffers not supported on 32-bit.
+# Large ArrayBuffers not supported on 32-bit. TSan shadow memory causes OOMs.
 skip-if = [
-  "tsan", # TSan shadow memory causes OOMs.
+  "win11_2009 && bits == 32",
+  "tsan",
   "asan",
 ]
 
@@ -162,11 +163,6 @@ skip-if = [
 ]
 
 ["test_partially_cached_content.html"]
-
-["test_pdf.html"]
-support-files = ["file_pdfjs_test.pdf", "file_pdfjs_test.pdf^headers^"]
-
-# test_1331680* fail with xorigin if 3pc are rejected by default (Bug 1873998).
 
 ["test_redirect_ref.html"]
 skip-if = [

@@ -62,16 +62,8 @@ var SessionCookiesInternal = {
         );
       }
       if (!exists) {
-        // Enforces isPartitioned if the partitionKey is set. We need to do this
-        // because the session store didn't store the isPartitioned flag.
-        // Otherwise, we'd end up setting partitioned cookies without
-        // isPartitioned flag.
-        let isPartitioned =
-          cookie.isPartitioned ||
-          cookie.originAttributes?.partitionKey?.length > 0;
-
         try {
-          const cv = Services.cookies.add(
+          Services.cookies.add(
             cookie.host,
             cookie.path || "",
             cookie.name || "",
@@ -81,20 +73,9 @@ var SessionCookiesInternal = {
             /* isSession = */ true,
             expiry,
             cookie.originAttributes || {},
-            // If sameSite is undefined, we are migrating from a pre bug 1955685 session).
-            cookie.sameSite === undefined
-              ? Ci.nsICookie.SAMESITE_NONE
-              : cookie.sameSite,
-            cookie.schemeMap || Ci.nsICookie.SCHEME_HTTPS,
-            isPartitioned
+            cookie.sameSite || Ci.nsICookie.SAMESITE_NONE,
+            cookie.schemeMap || Ci.nsICookie.SCHEME_HTTPS
           );
-          if (cv.result !== Ci.nsICookieValidation.eOK) {
-            console.error(
-              `CookieService::Add failed with error '${cv.result}' for cookie ${JSON.stringify(
-                cookie
-              )}.`
-            );
-          }
         } catch (ex) {
           console.error(
             `CookieService::Add failed with error '${ex}' for cookie ${JSON.stringify(
@@ -267,14 +248,12 @@ var CookieStore = {
       jscookie.originAttributes = cookie.originAttributes;
     }
 
-    jscookie.sameSite = cookie.sameSite;
+    if (cookie.sameSite) {
+      jscookie.sameSite = cookie.sameSite;
+    }
 
     if (cookie.schemeMap) {
       jscookie.schemeMap = cookie.schemeMap;
-    }
-
-    if (cookie.isPartitioned) {
-      jscookie.isPartitioned = true;
     }
 
     this._entries.set(this._getKeyForCookie(cookie), jscookie);

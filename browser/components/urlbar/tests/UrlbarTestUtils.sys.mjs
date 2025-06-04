@@ -15,10 +15,11 @@ ChromeUtils.defineESModuleGetters(lazy, {
   BrowserUIUtils: "resource:///modules/BrowserUIUtils.sys.mjs",
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
   ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
+  ExperimentFakes: "resource://testing-common/NimbusTestUtils.sys.mjs",
+  ExperimentManager: "resource://nimbus/lib/ExperimentManager.sys.mjs",
   FormHistoryTestUtils:
     "resource://testing-common/FormHistoryTestUtils.sys.mjs",
   NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
-  NimbusTestUtils: "resource://testing-common/NimbusTestUtils.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   TestUtils: "resource://testing-common/TestUtils.sys.mjs",
   UrlbarController: "resource:///modules/UrlbarController.sys.mjs",
@@ -29,11 +30,11 @@ ChromeUtils.defineESModuleGetters(lazy, {
 
 export var UrlbarTestUtils = {
   /**
-   * This maps the categories used by the FX_SEARCHBAR_SELECTED_RESULT_METHOD
-   * histogram to its indexes in the `labels` array. This only needs to be
-   * used by tests that need to map from category names to indexes in histogram
-   * snapshots. Actual app code can use these category names directly when
-   * they add to a histogram.
+   * This maps the categories used by the FX_URLBAR_SELECTED_RESULT_METHOD and
+   * FX_SEARCHBAR_SELECTED_RESULT_METHOD histograms to their indexes in the
+   * `labels` array.  This only needs to be used by tests that need to map from
+   * category names to indexes in histogram snapshots.  Actual app code can use
+   * these category names directly when they add to a histogram.
    */
   SELECTED_RESULT_METHODS: {
     enter: 0,
@@ -718,9 +719,9 @@ export var UrlbarTestUtils = {
     }
     this.info("Waiting for the urlbar view to open");
     await new Promise(resolve => {
-      win.gURLBar.controller.addListener({
+      win.gURLBar.controller.addQueryListener({
         onViewOpen() {
-          win.gURLBar.controller.removeListener(this);
+          win.gURLBar.controller.removeQueryListener(this);
           resolve();
         },
       });
@@ -742,9 +743,9 @@ export var UrlbarTestUtils = {
         resolve();
         return;
       }
-      win.gURLBar.controller.addListener({
+      win.gURLBar.controller.addQueryListener({
         onViewClose() {
-          win.gURLBar.controller.removeListener(this);
+          win.gURLBar.controller.removeQueryListener(this);
           resolve();
         },
       });
@@ -830,12 +831,21 @@ export var UrlbarTestUtils = {
     );
 
     let results = window.gURLBar.querySelector(".urlbarView-results");
-    await lazy.BrowserTestUtils.waitForCondition(
-      () =>
-        results.hasAttribute("actionmode") ==
-        (window.gURLBar.searchMode?.source == UrlbarUtils.RESULT_SOURCE.ACTIONS)
-    );
-    this.Assert.ok(true, "Urlbar results have proper actionmode attribute");
+    if (
+      window.gURLBar.searchMode?.source &&
+      window.gURLBar.searchMode.source !== UrlbarUtils.RESULT_SOURCE.SEARCH
+    ) {
+      this.Assert.equal(
+        results.getAttribute("searchmodesource"),
+        UrlbarUtils.getResultSourceName(window.gURLBar.searchMode.source),
+        "Urlbar results have proper searchmodesource attribute"
+      );
+    } else {
+      this.Assert.ok(
+        !results.hasAttribute("searchmodesource"),
+        "Urlbar results does not have searchmodesource attribute"
+      );
+    }
 
     if (!expectedSearchMode) {
       // Check the input's placeholder.
@@ -843,20 +853,11 @@ export var UrlbarTestUtils = {
         "browser.urlbar.placeholderName" +
         (lazy.PrivateBrowsingUtils.isWindowPrivate(window) ? ".private" : "");
       let engineName = Services.prefs.getStringPref(prefName, "");
-      let expectedPlaceholder = engineName
-        ? { id: "urlbar-placeholder-with-name", args: { name: engineName } }
-        : { id: "urlbar-placeholder", args: null };
-      await lazy.BrowserTestUtils.waitForCondition(() => {
-        let l10nAttributes = window.document.l10n.getAttributes(
-          window.gURLBar.inputField
-        );
-        return (
-          l10nAttributes.id == expectedPlaceholder.id &&
-          l10nAttributes.args?.name == expectedPlaceholder.args?.name
-        );
-      });
-      this.Assert.ok(
-        true,
+      this.Assert.deepEqual(
+        window.document.l10n.getAttributes(window.gURLBar.inputField),
+        engineName
+          ? { id: "urlbar-placeholder-with-name", args: { name: engineName } }
+          : { id: "urlbar-placeholder", args: null },
         "Expected placeholder l10n when search mode is inactive"
       );
       return;
@@ -1150,7 +1151,7 @@ export var UrlbarTestUtils = {
         urlbarValue,
         "Urlbar value hasn't changed."
       );
-      await this.assertSearchMode(window, null);
+      this.assertSearchMode(window, null);
     } else if (clickClose) {
       // We need to hover the indicator to make the close button clickable in the
       // test.
@@ -1247,6 +1248,9 @@ export var UrlbarTestUtils = {
   /**
    * Enrolls in a mock Nimbus feature.
    *
+   * If you call UrlbarPrefs.updateFirefoxSuggestScenario() from an xpcshell
+   * test, you must call this first to intialize the Nimbus urlbar feature.
+   *
    * @param {object} value
    *   Define any desired Nimbus variables in this object.
    * @param {string} [feature]
@@ -1261,46 +1265,36 @@ export var UrlbarTestUtils = {
     feature = "urlbar",
     enrollmentType = "rollout"
   ) {
-    this.info("initNimbusFeature awaiting ExperimentAPI.init");
-    const initializedExperimentAPI = await lazy.ExperimentAPI.init();
+    this.info("initNimbusFeature awaiting ExperimentManager.onStartup");
+    await lazy.ExperimentManager.onStartup();
 
     this.info("initNimbusFeature awaiting ExperimentAPI.ready");
     await lazy.ExperimentAPI.ready();
 
     this.info(
-      `initNimbusFeature awaiting NimbusTestUtils.enrollWithFeatureConfig`
+      `initNimbusFeature awaiting ExperimentFakes.enrollWithFeatureConfig`
     );
-    const doExperimentCleanup =
-      await lazy.NimbusTestUtils.enrollWithFeatureConfig(
-        {
-          featureId: lazy.NimbusFeatures[feature].featureId,
-          value,
-        },
-        {
-          isRollout: enrollmentType === "rollout",
-        }
-      );
+    const doCleanup = await lazy.ExperimentFakes.enrollWithFeatureConfig(
+      {
+        featureId: lazy.NimbusFeatures[feature].featureId,
+        value: { enabled: true, ...value },
+      },
+      {
+        isRollout: enrollmentType === "rollout",
+      }
+    );
 
     this.info("initNimbusFeature done");
 
-    const cleanup = async () => {
-      await doExperimentCleanup();
-      if (initializedExperimentAPI) {
-        // Only reset if we're in an xpcshell-test and actually initialized the
-        // ExperimentAPI.
-        lazy.ExperimentAPI._resetForTests();
-      }
-    };
-
     this.registerCleanupFunction?.(async () => {
-      // If `cleanup()` has already been called (i.e., by the caller), it will
+      // If `doCleanup()` has already been called (i.e., by the caller), it will
       // throw an error here.
       try {
-        await cleanup();
+        doCleanup();
       } catch (error) {}
     });
 
-    return cleanup;
+    return doCleanup;
   },
 
   /**
@@ -1384,9 +1378,9 @@ export var UrlbarTestUtils = {
 
   async openSearchModeSwitcher(win) {
     let popup = this.searchModeSwitcherPopup(win);
-    let promiseMenuOpen = lazy.BrowserTestUtils.waitForPopupEvent(
+    let promiseMenuOpen = lazy.BrowserTestUtils.waitForEvent(
       popup,
-      "shown"
+      "popupshown"
     );
     let button = win.document.getElementById("urlbar-searchmode-switcher");
     this.Assert.ok(lazy.BrowserTestUtils.isVisible(button));
@@ -1397,29 +1391,10 @@ export var UrlbarTestUtils = {
   },
 
   searchModeSwitcherPopupClosed(win) {
-    return lazy.BrowserTestUtils.waitForPopupEvent(
+    return lazy.BrowserTestUtils.waitForEvent(
       this.searchModeSwitcherPopup(win),
-      "hidden"
+      "popuphidden"
     );
-  },
-
-  async selectMenuItem(menupopup, targetSelector) {
-    let target = menupopup.querySelector(targetSelector);
-    let selected;
-    for (let i = 0; i < menupopup.children.length; i++) {
-      this.EventUtils.synthesizeKey("KEY_ArrowDown", {}, menupopup.ownerGlobal);
-      await lazy.BrowserTestUtils.waitForCondition(() => {
-        let current = menupopup.querySelector("[_moz-menuactive]");
-        if (selected != current) {
-          selected = current;
-          return true;
-        }
-        return false;
-      });
-      if (selected == target) {
-        break;
-      }
-    }
   },
 };
 
@@ -1521,7 +1496,7 @@ class TestProvider extends UrlbarProvider {
    *
    * @param {object} options
    *   Constructor options
-   * @param {Array} [options.results]
+   * @param {Array} options.results
    *   An array of UrlbarResult objects that will be the provider's results.
    * @param {string} [options.name]
    *   The provider's name.  Provider names should be unique.
@@ -1553,7 +1528,7 @@ class TestProvider extends UrlbarProvider {
    *   If given, we'll await on this before returning results.
    */
   constructor({
-    results = [],
+    results,
     name = "TestProvider" + Services.uuid.generateUUID(),
     type = UrlbarUtils.PROVIDER_TYPE.PROFILE,
     priority = 0,
@@ -1616,7 +1591,7 @@ class TestProvider extends UrlbarProvider {
     return this.priority;
   }
 
-  async isActive(_context) {
+  isActive(_context) {
     return true;
   }
 

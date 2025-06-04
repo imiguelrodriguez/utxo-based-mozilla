@@ -167,24 +167,22 @@
                 <menuseparator/>
 #ifdef XP_MACOSX
                 <menuitem id="enterFullScreenItem"
-                          key="key_enterFullScreen"
-                          command="View:FullScreen"
-                          data-l10n-id="menu-view-enter-full-screen">
+                          key="key_enterFullScreen" data-l10n-id="menu-view-enter-full-screen">
+                  <observes element="View:FullScreen" attribute="oncommand"/>
                 </menuitem>
                 <menuitem id="exitFullScreenItem"
                           key="key_exitFullScreen"
-                          command="View:FullScreen"
                           hidden="true" data-l10n-id="menu-view-exit-full-screen">
+                  <observes element="View:FullScreen" attribute="oncommand"/>
                 </menuitem>
 #else
                 <menuitem id="fullScreenItem"
                           key="key_enterFullScreen"
                           type="checkbox"
-                          command="View:FullScreen"
-                          data-l10n-id="menu-view-full-screen"/>
+                          observes="View:FullScreen" data-l10n-id="menu-view-full-screen"/>
 #endif
                 <menuitem id="menu_readerModeItem"
-                          command="View:ReaderView"
+                          observes="View:ReaderView"
                           key="key_toggleReaderMode"
                           data-l10n-id="menu-view-enter-readerview"
                           hidden="true"/>
@@ -205,7 +203,6 @@
                          placespopup="true"
                          is="places-popup"
 #endif
-                         needsgutter="always"
                          tooltip="bhTooltip"
                          popupsinherittooltip="true">
                 <menuitem id="menu_showAllHistory"
@@ -247,8 +244,9 @@
 # If the menu is actually opened, we'll clear this out and replace
 # it with a "real" entry.
 # See bug 492320 for the nasty details.
-                    <menuitem id="hiddenUndoCloseWindow"
-                              key="key_undoCloseWindow"/>
+                    <menuitem key="key_undoCloseWindow"
+                              oncommand="undoCloseWindow(0)"
+                              />
 #endif
                   </menupopup>
                 </menu>
@@ -258,15 +256,20 @@
             </menu>
 
   <menu id="bookmarksMenu"
+        ondragenter="PlacesMenuDNDHandler.onDragEnter(event);"
+        ondragover="PlacesMenuDNDHandler.onDragOver(event);"
+        ondrop="PlacesMenuDNDHandler.onDrop(event);"
         data-l10n-id="menu-bookmarks-menu">
     <menupopup id="bookmarksMenuPopup"
 #ifndef XP_MACOSX
                placespopup="true"
                is="places-popup"
 #endif
-               needsgutter="always"
                context="placesContext"
                openInTabs="children"
+               onmouseup="BookmarksEventHandler.onMouseUp(event);"
+               oncommand="BookmarksEventHandler.onCommand(event);"
+               onclick="BookmarksEventHandler.onClick(event, this.parentNode._placesView);"
                tooltip="bhTooltip" popupsinherittooltip="true">
       <menuitem id="bookmarksShowAll"
                 command="Browser:ShowAllBookmarks"
@@ -325,11 +328,6 @@
     </menupopup>
   </menu>
 
-  <menu id="profiles-menu" data-l10n-id="menu-profiles" hidden="true">
-    <menupopup id="menu_ProfilesPopup">
-    </menupopup>
-  </menu>
-
             <menu id="tools-menu" data-l10n-id="menu-tools">
               <menupopup id="menu_ToolsPopup">
               <menuitem id="menu_openDownloads"
@@ -337,7 +335,7 @@
                         command="Tools:Downloads" data-l10n-id="menu-tools-downloads"/>
               <menuitem id="menu_openAddons"
                         key="key_openAddons"
-                        command="Tools:Addons" data-l10n-id="menu-tools-extensions-and-themes"/>
+                        command="Tools:Addons" data-l10n-id="menu-tools-addons-and-themes"/>
 
               <!-- only one of sync-setup, sync-enable, sync-unverifieditem, sync-syncnowitem or sync-reauthitem will be showing at once -->
               <menuitem id="sync-setup"
@@ -408,7 +406,7 @@
                    data-l10n-id="menu-window-menu">
                 <menupopup id="windowPopup">
                     <menuseparator/>
-                    <menuitem command="cmd_minimizeWindow" key="key_minimizeWindow" data-l10n-id="window-minimize-command" />
+                    <menuitem command="minimizeWindow" key="key_minimizeWindow"/>
                     <menuitem command="zoomWindow"/>
                     <!-- decomment when "BringAllToFront" is implemented
                         <menuseparator/>
@@ -424,12 +422,16 @@
                 <menuitem id="menu_openHelp"
                           data-l10n-id="menu-get-help"
                           appmenu-data-l10n-id="appmenu-get-help"
+#ifdef XP_MACOSX
+                          key="key_openHelpMac"/>
+#else
                           />
+#endif
                 <menuitem id="help_reportBrokenSite"
                           command="cmd_reportBrokenSite"
                           data-l10n-id="menu-report-broken-site"
-                          disabled="true"
-                          appmenu-data-l10n-id="appmenuitem-report-broken-site"/>
+                          hidden="true"
+                          appmenu-data-l10n-id="menu-report-broken-site"/>
                 <menuitem id="feedbackPage"
                           data-l10n-id="menu-help-share-ideas"
                           appmenu-data-l10n-id="appmenu-help-share-ideas"/>
@@ -439,6 +441,10 @@
                 <menuitem id="troubleShooting"
                           data-l10n-id="menu-help-more-troubleshooting-info"
                           appmenu-data-l10n-id="appmenu-help-more-troubleshooting-info"/>
+                <menuitem id="help_reportSiteIssue"
+                          data-l10n-id="menu-help-report-site-issue"
+                          appmenu-data-l10n-id="appmenu-help-report-site-issue"
+                          hidden="true"/>
                 <menuitem id="menu_HelpPopup_reportPhishingtoolmenu"
                           disabled="true"
                           hidden="true"

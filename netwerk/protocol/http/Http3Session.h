@@ -104,12 +104,14 @@ namespace mozilla::net {
 class HttpConnectionUDP;
 class Http3StreamBase;
 class QuicSocketControl;
-class Http3WebTransportSession;
-class Http3WebTransportStream;
 
 // IID for the Http3Session interface
-#define NS_HTTP3SESSION_IID \
-  {0x8fc82aaf, 0xc4ef, 0x46ed, {0x89, 0x41, 0x93, 0x95, 0x8f, 0xac, 0x4f, 0x21}}
+#define NS_HTTP3SESSION_IID                          \
+  {                                                  \
+    0x8fc82aaf, 0xc4ef, 0x46ed, {                    \
+      0x89, 0x41, 0x93, 0x95, 0x8f, 0xac, 0x4f, 0x21 \
+    }                                                \
+  }
 
 enum class EchExtensionStatus {
   kNotPresent,  // No ECH Extension was sent
@@ -119,9 +121,9 @@ enum class EchExtensionStatus {
 
 class Http3Session final : public nsAHttpTransaction, public nsAHttpConnection {
  public:
-  NS_INLINE_DECL_STATIC_IID(NS_HTTP3SESSION_IID)
+  NS_DECLARE_STATIC_IID_ACCESSOR(NS_HTTP3SESSION_IID)
 
-  NS_DECL_ISUPPORTS_INHERITED
+  NS_DECL_THREADSAFE_ISUPPORTS
   NS_DECL_NSAHTTPTRANSACTION
   NS_DECL_NSAHTTPCONNECTION(mConnection)
 
@@ -181,7 +183,7 @@ class Http3Session final : public nsAHttpTransaction, public nsAHttpConnection {
 
   // This function will be called by QuicSocketControl when the certificate
   // verification is done.
-  void Authenticated(int32_t aError, bool aServCertHashesSucceeded = false);
+  void Authenticated(int32_t aError);
 
   nsresult ProcessOutputAndEvents(nsIUDPSocket* socket);
 
@@ -217,8 +219,6 @@ class Http3Session final : public nsAHttpTransaction, public nsAHttpConnection {
   void SetSendOrder(Http3StreamBase* aStream, Maybe<int64_t> aSendOrder);
 
   void CloseWebTransportConn();
-
-  Http3Stats GetStats();
 
  private:
   ~Http3Session();
@@ -340,7 +340,6 @@ class Http3Session final : public nsAHttpTransaction, public nsAHttpConnection {
   Maybe<uint64_t> mFirstStreamIdReuseIdleConnection;
   TimeStamp mTimerShouldTrigger;
   TimeStamp mZeroRttStarted;
-  TimeStamp mLastTRRResponseTime;  // Time of the last successful TRR response
   uint64_t mBlockedByStreamLimitCount = 0;
   uint64_t mTransactionsBlockedByStreamLimitCount = 0;
   uint64_t mTransactionsSenderBlockedByFlowControlCount = 0;
@@ -354,7 +353,6 @@ class Http3Session final : public nsAHttpTransaction, public nsAHttpConnection {
   int64_t mTotalBytesRead = 0;     // total data read
   int64_t mTotalBytesWritten = 0;  // total data read
   PRIntervalTime mLastWriteTime = 0;
-  nsCString mServer;
 
   // Records whether we sent an ECH Extension and whether it was a GREASE Xtn
   EchExtensionStatus mEchExtensionStatus = EchExtensionStatus::kNotPresent;
@@ -386,6 +384,8 @@ class Http3Session final : public nsAHttpTransaction, public nsAHttpConnection {
   // improve performance.
   nsIUDPSocket* mSocket;
 };
+
+NS_DEFINE_STATIC_IID_ACCESSOR(Http3Session, NS_HTTP3SESSION_IID);
 
 }  // namespace mozilla::net
 

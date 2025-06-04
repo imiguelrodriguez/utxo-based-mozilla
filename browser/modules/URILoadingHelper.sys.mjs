@@ -129,8 +129,11 @@ function openInWindow(url, params, sourceWindow) {
       );
     }
   }
-  if (params.schemelessInput !== undefined) {
-    extraOptions.setPropertyAsUint32("schemelessInput", params.schemelessInput);
+  if (params.wasSchemelessInput !== undefined) {
+    extraOptions.setPropertyAsBool(
+      "wasSchemelessInput",
+      params.wasSchemelessInput
+    );
   }
 
   var allowThirdPartyFixupSupports = Cc[
@@ -263,7 +266,7 @@ function openInCurrentTab(targetBrowser, url, uriObj, params) {
     hasValidUserGestureActivation,
     globalHistoryOptions,
     triggeringRemoteType,
-    schemelessInput,
+    wasSchemelessInput,
   } = params;
 
   targetBrowser.fixupAndLoadURIString(url, {
@@ -276,7 +279,7 @@ function openInCurrentTab(targetBrowser, url, uriObj, params) {
     hasValidUserGestureActivation,
     globalHistoryOptions,
     triggeringRemoteType,
-    schemelessInput,
+    wasSchemelessInput,
   });
   params.resolveOnContentBrowserCreated?.(targetBrowser);
 }
@@ -368,7 +371,7 @@ export const URILoadingHelper = {
    * @param {string}  params.charset
    *                  Character set to use for the load. Only honoured for tabs.
    *                  Legacy argument - do not use.
-   * @param {SchemelessInputType}  params.schemelessInput
+   * @param {string}  params.wasSchemelessInput
    *                  Whether the search/URL term was without an explicit scheme.
    *
    * Options relating to security, whether the load is allowed to happen,
@@ -474,17 +477,11 @@ export const URILoadingHelper = {
     } else {
       w = this.getTargetWindow(window, { forceNonPrivate });
     }
-    // We don't want to open tabs in popups or taskbar tab windows,
-    // so try to find a regular Firefox window in that case.
-    if (
-      (where == "tab" || where == "tabshifted") &&
-      w &&
-      (!w.toolbar.visible ||
-        w.document.documentElement.hasAttribute("taskbartab"))
-    ) {
+    // We don't want to open tabs in popups, so try to find a non-popup window in
+    // that case.
+    if ((where == "tab" || where == "tabshifted") && w && !w.toolbar.visible) {
       w = this.getTargetWindow(window, {
         skipPopups: true,
-        skipTaskbarTabs: true,
         forceNonPrivate,
       });
       relatedToCurrent = false;
@@ -510,7 +507,9 @@ export const URILoadingHelper = {
     if (where == "current") {
       targetBrowser = params.targetBrowser || w.gBrowser.selectedBrowser;
       loadInBackground = false;
-      uriObj = URL.parse(url)?.URI;
+      try {
+        uriObj = Services.io.newURI(url);
+      } catch (e) {}
 
       // In certain tabs, we restrict what if anything may replace the loaded
       // page. If a load request bounces off for the currently selected tab,
@@ -564,7 +563,7 @@ export const URILoadingHelper = {
       case "tabshifted":
         loadInBackground = !loadInBackground;
       // fall through
-      case "tab": {
+      case "tab":
         focusUrlBar =
           !loadInBackground &&
           w.isBlankPageURL(url) &&
@@ -590,7 +589,7 @@ export const URILoadingHelper = {
           openerBrowser: params.openerBrowser,
           fromExternal: params.fromExternal,
           globalHistoryOptions,
-          schemelessInput: params.schemelessInput,
+          wasSchemelessInput: params.wasSchemelessInput,
           hasValidUserGestureActivation,
           textDirectiveUserActivation,
         });
@@ -617,7 +616,6 @@ export const URILoadingHelper = {
           );
         }
         break;
-      }
     }
 
     if (
@@ -639,14 +637,10 @@ export const URILoadingHelper = {
    * @param {Window} window - The current window.
    * @param {Object} params - Parameters for selecting the window.
    * @param {boolean} params.skipPopups - Require a non-popup window.
-   * @param {boolean} params.skipTaskbarTabs - Require a non-taskbartab window.
    * @param {boolean} params.forceNonPrivate - Require a non-private window.
    * @returns {Window | null} A matching browser window or null if none matched.
    */
-  getTargetWindow(
-    window,
-    { skipPopups, skipTaskbarTabs, forceNonPrivate } = {}
-  ) {
+  getTargetWindow(window, { skipPopups, forceNonPrivate } = {}) {
     let { top } = window;
     // If this is called in a browser window, use that window regardless of
     // whether it's the frontmost window, since commands can be executed in
@@ -655,8 +649,6 @@ export const URILoadingHelper = {
       top.document.documentElement.getAttribute("windowtype") ==
         "navigator:browser" &&
       (!skipPopups || top.toolbar.visible) &&
-      (!skipTaskbarTabs ||
-        !top.document.documentElement.hasAttribute("taskbartab")) &&
       (!forceNonPrivate || !PrivateBrowsingUtils.isWindowPrivate(top))
     ) {
       return top;
@@ -665,7 +657,6 @@ export const URILoadingHelper = {
     return lazy.BrowserWindowTracker.getTopWindow({
       private: !forceNonPrivate && PrivateBrowsingUtils.isWindowPrivate(window),
       allowPopups: !skipPopups,
-      allowTaskbarTabs: !skipTaskbarTabs,
     });
   },
 

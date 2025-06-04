@@ -9,8 +9,7 @@ let log = ChromeUtils.importESModule(
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
-  OpenInTabsUtils:
-    "moz-src:///browser/components/tabbrowser/OpenInTabsUtils.sys.mjs",
+  OpenInTabsUtils: "resource:///modules/OpenInTabsUtils.sys.mjs",
 });
 
 /**

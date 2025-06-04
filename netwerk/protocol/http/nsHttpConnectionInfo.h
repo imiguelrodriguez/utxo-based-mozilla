@@ -64,10 +64,6 @@ class nsHttpConnectionInfo final : public ARefBase {
   DeserializeHttpConnectionInfoCloneArgs(
       const HttpConnectionInfoCloneArgs& aInfoArgs);
 
-  static void BuildOriginFrameHashKey(nsACString& newKey,
-                                      nsHttpConnectionInfo* ci,
-                                      const nsACString& host, int32_t port);
-
  private:
   virtual ~nsHttpConnectionInfo() {
     MOZ_LOG(gHttpLog, LogLevel::Debug,
@@ -279,8 +275,6 @@ class nsHttpConnectionInfo final : public ARefBase {
 
   void SetEchConfig(const nsACString& aEchConfig) { mEchConfig = aEchConfig; }
   const nsCString& GetEchConfig() const { return mEchConfig; }
-
-  static uint64_t GenerateNewWebTransportId();
 
  private:
   void Init(const nsACString& host, int32_t port, const nsACString& npnToken,

@@ -9,21 +9,9 @@ ChromeUtils.defineESModuleGetters(this, {
   QuickSuggest: "resource:///modules/QuickSuggest.sys.mjs",
 });
 
+const CONTAINER_ID = "firefoxSuggestPrivacyContainer";
 const DATA_COLLECTION_TOGGLE_ID = "firefoxSuggestDataCollectionPrivacyToggle";
-
-// Maps `SETTINGS_UI` values to expected visibility state objects. See
-// `assertSuggestVisibility()` in `head.js` for info on the state objects.
-const EXPECTED = {
-  [QuickSuggest.SETTINGS_UI.FULL]: {
-    [DATA_COLLECTION_TOGGLE_ID]: { isVisible: true },
-  },
-  [QuickSuggest.SETTINGS_UI.NONE]: {
-    [DATA_COLLECTION_TOGGLE_ID]: { isVisible: false },
-  },
-  [QuickSuggest.SETTINGS_UI.OFFLINE_ONLY]: {
-    [DATA_COLLECTION_TOGGLE_ID]: { isVisible: false },
-  },
-};
+const LEARN_MORE_CLASS = "firefoxSuggestLearnMore";
 
 // This test can take a while due to the many permutations some of these tasks
 // run through, so request a longer timeout.
@@ -32,150 +20,273 @@ requestLongerTimeout(10);
 // The following tasks check the initial visibility of the Firefox Suggest UI
 // and the visibility after installing a Nimbus experiment.
 
-add_task(async function initiallyDisabled_disable() {
+add_task(async function history_suggestDisabled() {
   await doSuggestVisibilityTest({
     pane: "privacy",
-    initialSuggestEnabled: false,
-    initialExpected: EXPECTED[QuickSuggest.SETTINGS_UI.NONE],
+    initialScenarios: ["history"],
+    initialExpected: {
+      [CONTAINER_ID]: { isVisible: false },
+    },
     nimbusVariables: {
       quickSuggestEnabled: false,
     },
   });
 });
 
-add_task(async function initiallyDisabled_disable_settingsUIFull() {
+add_task(async function history_suggestEnabled() {
   await doSuggestVisibilityTest({
     pane: "privacy",
-    initialSuggestEnabled: false,
-    initialExpected: EXPECTED[QuickSuggest.SETTINGS_UI.NONE],
-    nimbusVariables: {
-      quickSuggestEnabled: false,
-      // `quickSuggestEnabled: false` should override this, so the Suggest
-      // settings should not be visible (`initialExpected` should persist).
-      quickSuggestSettingsUi: QuickSuggest.SETTINGS_UI.FULL,
+    initialScenarios: ["history"],
+    initialExpected: {
+      [CONTAINER_ID]: { isVisible: false },
     },
-  });
-});
-
-add_task(async function initiallyDisabled_enable() {
-  await doSuggestVisibilityTest({
-    pane: "privacy",
-    initialSuggestEnabled: false,
-    initialExpected: EXPECTED[QuickSuggest.SETTINGS_UI.NONE],
     nimbusVariables: {
       quickSuggestEnabled: true,
     },
-    newExpected: EXPECTED[QuickSuggest.SETTINGS_UI.FULL],
-  });
-});
-
-add_task(async function initiallyDisabled_enable_settingsUiFull() {
-  await doSuggestVisibilityTest({
-    pane: "privacy",
-    initialSuggestEnabled: false,
-    initialExpected: EXPECTED[QuickSuggest.SETTINGS_UI.NONE],
-    nimbusVariables: {
-      quickSuggestEnabled: true,
-      quickSuggestSettingsUi: QuickSuggest.SETTINGS_UI.FULL,
-    },
-    newExpected: EXPECTED[QuickSuggest.SETTINGS_UI.FULL],
-  });
-});
-
-add_task(async function initiallyDisabled_enable_settingsUiNone() {
-  await doSuggestVisibilityTest({
-    pane: "privacy",
-    initialSuggestEnabled: false,
-    initialExpected: EXPECTED[QuickSuggest.SETTINGS_UI.NONE],
-    nimbusVariables: {
-      quickSuggestEnabled: true,
-      quickSuggestSettingsUi: QuickSuggest.SETTINGS_UI.NONE,
+    newExpected: {
+      [CONTAINER_ID]: { isVisible: true },
     },
   });
 });
 
-add_task(async function initiallyDisabled_enable_settingsUiOfflineOnly() {
+add_task(async function history_suggestEnabled_hideSettingsUIDisabled() {
   await doSuggestVisibilityTest({
     pane: "privacy",
-    initialSuggestEnabled: false,
-    initialExpected: EXPECTED[QuickSuggest.SETTINGS_UI.NONE],
+    initialScenarios: ["history"],
+    initialExpected: {
+      [CONTAINER_ID]: { isVisible: false },
+    },
     nimbusVariables: {
       quickSuggestEnabled: true,
-      quickSuggestSettingsUi: QuickSuggest.SETTINGS_UI.OFFLINE_ONLY,
+      quickSuggestHideSettingsUI: false,
     },
-    newExpected: EXPECTED[QuickSuggest.SETTINGS_UI.OFFLINE_ONLY],
+    newExpected: {
+      [CONTAINER_ID]: { isVisible: true },
+    },
   });
 });
 
-add_task(async function initiallyEnabled_disable() {
+add_task(async function history_suggestEnabled_hideSettingsUIEnabled() {
   await doSuggestVisibilityTest({
     pane: "privacy",
-    initialSuggestEnabled: true,
-    initialExpected: EXPECTED[QuickSuggest.SETTINGS_UI.FULL],
+    initialScenarios: ["history"],
+    initialExpected: {
+      [CONTAINER_ID]: { isVisible: false },
+    },
+    nimbusVariables: {
+      quickSuggestEnabled: true,
+      quickSuggestHideSettingsUI: true,
+    },
+  });
+});
+
+add_task(async function offlineOnline_suggestDisabled() {
+  await doSuggestVisibilityTest({
+    pane: "privacy",
+    initialScenarios: ["offline", "online"],
+    initialExpected: {
+      [CONTAINER_ID]: { isVisible: true },
+    },
     nimbusVariables: {
       quickSuggestEnabled: false,
     },
-    newExpected: EXPECTED[QuickSuggest.SETTINGS_UI.NONE],
-  });
-});
-
-add_task(async function initiallyEnabled_disable_settingsUiFull() {
-  await doSuggestVisibilityTest({
-    pane: "privacy",
-    initialSuggestEnabled: true,
-    initialExpected: EXPECTED[QuickSuggest.SETTINGS_UI.FULL],
-    nimbusVariables: {
-      quickSuggestEnabled: false,
-      // `quickSuggestEnabled: false` should override this, so the Suggest
-      // settings should not be visible.
-      quickSuggestSettingsUi: QuickSuggest.SETTINGS_UI.FULL,
+    newExpected: {
+      [CONTAINER_ID]: { isVisible: false },
     },
-    newExpected: EXPECTED[QuickSuggest.SETTINGS_UI.NONE],
   });
 });
 
-add_task(async function initiallyEnabled_enable() {
+add_task(async function offlineOnline_suggestEnabled() {
   await doSuggestVisibilityTest({
     pane: "privacy",
-    initialSuggestEnabled: true,
-    initialExpected: EXPECTED[QuickSuggest.SETTINGS_UI.FULL],
+    initialScenarios: ["offline", "online"],
+    initialExpected: {
+      [CONTAINER_ID]: { isVisible: true },
+    },
     nimbusVariables: {
       quickSuggestEnabled: true,
     },
   });
 });
 
-add_task(async function initiallyEnabled_settingsUiFull() {
+add_task(async function offlineOnline_hideSettingsUIDisabled() {
   await doSuggestVisibilityTest({
     pane: "privacy",
-    initialSuggestEnabled: true,
-    initialExpected: EXPECTED[QuickSuggest.SETTINGS_UI.FULL],
+    initialScenarios: ["offline", "online"],
+    initialExpected: {
+      [CONTAINER_ID]: { isVisible: true },
+    },
     nimbusVariables: {
-      quickSuggestSettingsUi: QuickSuggest.SETTINGS_UI.FULL,
+      quickSuggestHideSettingsUI: false,
     },
   });
 });
 
-add_task(async function initiallyEnabled_settingsUiNone() {
+add_task(async function offlineOnline_hideSettingsUIEnabled() {
   await doSuggestVisibilityTest({
     pane: "privacy",
-    initialSuggestEnabled: true,
-    initialExpected: EXPECTED[QuickSuggest.SETTINGS_UI.FULL],
-    nimbusVariables: {
-      quickSuggestSettingsUi: QuickSuggest.SETTINGS_UI.NONE,
+    initialScenarios: ["offline", "online"],
+    initialExpected: {
+      [CONTAINER_ID]: { isVisible: true },
     },
-    newExpected: EXPECTED[QuickSuggest.SETTINGS_UI.NONE],
+    nimbusVariables: {
+      quickSuggestHideSettingsUI: true,
+    },
+    newExpected: {
+      [CONTAINER_ID]: { isVisible: false },
+    },
   });
 });
 
-add_task(async function initiallyEnabled_settingsUiOfflineOnly() {
+add_task(async function offlineOnline_suggestEnabled_hideSettingsUIDisabled() {
   await doSuggestVisibilityTest({
     pane: "privacy",
-    initialSuggestEnabled: true,
-    initialExpected: EXPECTED[QuickSuggest.SETTINGS_UI.FULL],
-    nimbusVariables: {
-      quickSuggestSettingsUi: QuickSuggest.SETTINGS_UI.OFFLINE_ONLY,
+    initialScenarios: ["offline", "online"],
+    initialExpected: {
+      [CONTAINER_ID]: { isVisible: true },
     },
-    newExpected: EXPECTED[QuickSuggest.SETTINGS_UI.OFFLINE_ONLY],
+    nimbusVariables: {
+      quickSuggestEnabled: true,
+      quickSuggestHideSettingsUI: false,
+    },
   });
 });
+
+add_task(async function offlineOnline_suggestEnabled_hideSettingsUIEnabled() {
+  await doSuggestVisibilityTest({
+    pane: "privacy",
+    initialScenarios: ["offline", "online"],
+    initialExpected: {
+      [CONTAINER_ID]: { isVisible: true },
+    },
+    nimbusVariables: {
+      quickSuggestEnabled: true,
+      quickSuggestHideSettingsUI: true,
+    },
+    newExpected: {
+      [CONTAINER_ID]: { isVisible: false },
+    },
+  });
+});
+
+// Clicks each of the checkboxes and toggles and makes sure the prefs and info box are updated.
+add_task(async function clickCheckboxesOrToggle() {
+  await openPreferencesViaOpenPreferencesAPI("privacy", { leaveOpen: true });
+
+  let doc = gBrowser.selectedBrowser.contentDocument;
+  let dataCollectionSection = doc.getElementById(CONTAINER_ID);
+  dataCollectionSection.scrollIntoView();
+
+  async function clickElement(id, eventName) {
+    let element = doc.getElementById(id);
+    let changed = BrowserTestUtils.waitForEvent(element, eventName);
+
+    if (eventName == "toggle") {
+      element = element.buttonEl;
+    }
+
+    EventUtils.synthesizeMouseAtCenter(
+      element,
+      {},
+      gBrowser.selectedBrowser.contentWindow
+    );
+    await changed;
+  }
+
+  // Set initial state.
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.urlbar.quicksuggest.dataCollection.enabled", true]],
+  });
+  assertPrefUIState({
+    [DATA_COLLECTION_TOGGLE_ID]: true,
+  });
+
+  // data collection toggle
+  await clickElement(DATA_COLLECTION_TOGGLE_ID, "toggle");
+  Assert.ok(
+    !Services.prefs.getBoolPref(
+      "browser.urlbar.quicksuggest.dataCollection.enabled"
+    ),
+    "quicksuggest.dataCollection.enabled is false after clicking data collection toggle"
+  );
+  assertPrefUIState({
+    [DATA_COLLECTION_TOGGLE_ID]: false,
+  });
+
+  gBrowser.removeCurrentTab();
+  await SpecialPowers.popPrefEnv();
+});
+
+// Clicks the learn-more links and checks the help page is opened in a new tab.
+add_task(async function clickLearnMore() {
+  await openPreferencesViaOpenPreferencesAPI("privacy", { leaveOpen: true });
+
+  let doc = gBrowser.selectedBrowser.contentDocument;
+  let dataCollectionSection = doc.getElementById(CONTAINER_ID);
+  dataCollectionSection.scrollIntoView();
+
+  // Set initial state so that the info box and learn more link are shown.
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.urlbar.quicksuggest.dataCollection.enabled", true]],
+  });
+
+  let learnMoreLinks = doc.querySelectorAll(
+    `#${CONTAINER_ID} .` + LEARN_MORE_CLASS
+  );
+  Assert.equal(
+    learnMoreLinks.length,
+    1,
+    "Expected number of learn-more links are present"
+  );
+  for (let link of learnMoreLinks) {
+    Assert.ok(
+      BrowserTestUtils.isVisible(link),
+      "Learn-more link is visible: " + link.id
+    );
+  }
+
+  let prefsTab = gBrowser.selectedTab;
+  for (let link of learnMoreLinks) {
+    let tabPromise = BrowserTestUtils.waitForNewTab(
+      gBrowser,
+      QuickSuggest.HELP_URL
+    );
+    info("Clicking learn-more link: " + link.id);
+    Assert.ok(link.id, "Sanity check: Learn-more link has an ID");
+    await BrowserTestUtils.synthesizeMouseAtCenter(
+      "#" + link.id,
+      {},
+      gBrowser.selectedBrowser
+    );
+    info("Waiting for help page to load in a new tab");
+    await tabPromise;
+    gBrowser.removeCurrentTab();
+    gBrowser.selectedTab = prefsTab;
+  }
+
+  gBrowser.removeCurrentTab();
+  await SpecialPowers.popPrefEnv();
+});
+
+/**
+ * Verifies the state of pref related to checkboxes or toggles.
+ *
+ * @param {object} stateByElementID
+ *   Maps checkbox or toggle element IDs to booleans. Each boolean
+ *   is the expected state of the corresponding ID.
+ */
+function assertPrefUIState(stateByElementID) {
+  let doc = gBrowser.selectedBrowser.contentDocument;
+  let container = doc.getElementById(CONTAINER_ID);
+  let attr;
+  Assert.ok(BrowserTestUtils.isVisible(container), "The container is visible");
+  for (let [id, state] of Object.entries(stateByElementID)) {
+    let element = doc.getElementById(id);
+    if (element.tagName === "checkbox") {
+      attr = "checked";
+    } else if (element.tagName === "html:moz-toggle") {
+      attr = "pressed";
+    }
+    Assert.equal(element[attr], state, "Expected state for ID: " + id);
+  }
+}

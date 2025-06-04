@@ -14,7 +14,7 @@
 /llvm-symbolizer
 #endif
 #if defined(MOZ_CRASHREPORTER)
-/crashhelper
+/minidump-analyzer
 #endif
 /nmhproxy
 /pingsender

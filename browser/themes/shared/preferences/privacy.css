@@ -5,7 +5,7 @@
 /* Permissions */
 
 .highlighting-group {
-  --section-highlight-background-color: color-mix(in srgb, var(--color-accent-primary) 20%, transparent);
+  --section-highlight-background-color: color-mix(in srgb, var(--in-content-accent-color) 20%, transparent);
 }
 
 .permission-icon {
@@ -184,12 +184,12 @@
 }
 
 .privacy-detailedoption.selected {
-  border-color: var(--color-accent-primary);
+  border-color: var(--in-content-accent-color);
 }
 
 @media (forced-colors) {
   .privacy-detailedoption.selected {
-    outline: 2px solid var(--color-accent-primary);
+    outline: 2px solid var(--in-content-accent-color);
   }
 }
 
@@ -322,18 +322,21 @@
 
 /* Address bar */
 
-#firefoxSuggestDataCollectionPrivacyToggle {
+.firefoxSuggestOptionBox {
   /* With this value we're trying to keep the apparent vertical space between
      option boxes the same as the apparent vertical space between the labels of
-     the checkboxes above this toggle. */
+     the checkboxes above the Firefox Suggest subsection. */
   margin-block-start: 18px;
 }
 
-#openSearchEnginePreferences {
-  margin-block-start: 0.5em;
+#firefoxSuggestInfoBox {
+  margin-block-start: 16px;
 }
 
-#firefoxSuggestDataCollectionSearchToggle,
+#openSearchEnginePreferences {
+  margin-block-start: .5em;
+}
+
 #dismissedSuggestions,
 #openSearchEnginePreferences.extraMargin {
   margin-block-start: 2em;

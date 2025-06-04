@@ -7,8 +7,7 @@
  */
 
 ChromeUtils.defineESModuleGetters(this, {
-  SearchSERPTelemetry:
-    "moz-src:///browser/components/search/SearchSERPTelemetry.sys.mjs",
+  SearchSERPTelemetry: "resource:///modules/SearchSERPTelemetry.sys.mjs",
 });
 
 const TESTS = [

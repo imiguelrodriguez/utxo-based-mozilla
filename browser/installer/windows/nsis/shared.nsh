@@ -376,15 +376,6 @@ ${RemoveDefaultBrowserAgentShortcut}
     ReadINIStr $R8 "$R9" "${LOG_SECTION}" "Shortcut0"
     ${IfNot} ${Errors}
       ${If} ${FileExists} "${SHORTCUT_DIR}\$R8"
-
-        ; If the shortcut does not have a description, add one. See https://nsis.sourceforge.io/ShellLink_plug-in#Get_Shortcut_Description
-        ShellLink::GetShortCutDescription "${SHORTCUT_DIR}\$R8"
-        ; Let's use R7 to store the result, since it's going to be reused in the next check
-        Pop $R7
-        ${If} $R7 == ""
-          ; Looks like there is no description. Let's add one. See https://nsis.sourceforge.io/ShellLink_plug-in#Set_Shortcut_Description
-          ShellLink::SetShortCutDescription "${SHORTCUT_DIR}\$R8" "$(BRIEF_APP_DESC)"
-        ${EndIf}
         ShellLink::GetShortCutTarget "${SHORTCUT_DIR}\$R8"
         Pop $R7
         ${GetLongPath} "$R7" $R7
@@ -833,7 +824,7 @@ ${RemoveDefaultBrowserAgentShortcut}
 
 ; Add uninstall registry entries. This macro tests for write access to determine
 ; if the uninstall keys should be added to HKLM or HKCU.
-; This expects $RegHive and $AppUserModelID to already have been set correctly.
+; This expects $RegHive to already have been set correctly.
 !macro SetUninstallKeys
   ; Check if this is an ESR release and if so add registry values so it is
   ; possible to determine that this is an ESR install (bug 726781).
@@ -845,9 +836,7 @@ ${RemoveDefaultBrowserAgentShortcut}
     StrCpy $3 " ESR"
   ${EndIf}
 
-  ; Use the value of $AppUserModelID to provide a unique key name, even if there are multiple installs
-  ; of a single version
-  StrCpy $0 "Software\Microsoft\Windows\CurrentVersion\Uninstall\${BrandFullNameInternal}-$AppUserModelID"
+  StrCpy $0 "Software\Microsoft\Windows\CurrentVersion\Uninstall\${BrandFullNameInternal} ${AppVersion}$3 (${ARCH} ${AB_CD})"
 
   StrCpy $2 ""
   ClearErrors
@@ -1583,13 +1572,14 @@ ${RemoveDefaultBrowserAgentShortcut}
   Push "end"
   Push "AccessibleMarshal.dll"
   Push "freebl3.dll"
+  Push "nssckbi.dll"
   Push "nspr4.dll"
   Push "nssdbm3.dll"
   Push "mozsqlite3.dll"
   Push "xpcom.dll"
-  Push "crashhelper.exe"
   Push "crashreporter.exe"
   Push "default-browser-agent.exe"
+  Push "minidump-analyzer.exe"
   Push "nmhproxy.exe"
   Push "pingsender.exe"
   Push "updater.exe"

@@ -22,12 +22,6 @@ async function hideContextMenu() {
   await promise;
 }
 
-add_setup(async function () {
-  await SpecialPowers.pushPrefEnv({
-    set: [["test.wait300msAfterTabSwitch", true]],
-  });
-});
-
 /**
  * Check that the chat context menu is hidden by default
  */
@@ -56,34 +50,6 @@ add_task(async function test_menu_enabled() {
       "Ask chat menu is shown"
     );
     await hideContextMenu();
-  });
-});
-
-/**
- * Check that the remove option resets provider
- */
-add_task(async function test_remove_option() {
-  Services.fog.testResetFOG();
-  await BrowserTestUtils.withNewTab("about:blank", async () => {
-    await openContextMenu();
-    Assert.ok(
-      Services.prefs.getStringPref("browser.ml.chat.provider"),
-      "Provider is set"
-    );
-
-    const menu = document.getElementById("context-ask-chat");
-    menu.getItemAtIndex(menu.itemCount - 1).click();
-    await hideContextMenu();
-
-    Assert.equal(
-      Services.prefs.getStringPref("browser.ml.chat.provider"),
-      "",
-      "Provider reset"
-    );
-
-    const events = Glean.genaiChatbot.contextmenuRemove.testGetValue();
-    Assert.equal(events.length, 1, "One remove event recorded");
-    Assert.equal(events[0].extra.provider, "localhost", "Provider recorded");
   });
 });
 

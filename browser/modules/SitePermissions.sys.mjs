@@ -1249,6 +1249,9 @@ let gPermissions = {
       labelID: "open-protocol-handler",
       exactHostMatch: true,
       states: [SitePermissions.UNKNOWN, SitePermissions.ALLOW],
+      get disabled() {
+        return !SitePermissions.openProtoPermissionEnabled;
+      },
     },
 
     xr: {
@@ -1321,5 +1324,12 @@ XPCOMUtils.defineLazyPreferenceGetter(
   "resistFingerprinting",
   "privacy.resistFingerprinting",
   false,
+  SitePermissions.invalidatePermissionList.bind(SitePermissions)
+);
+XPCOMUtils.defineLazyPreferenceGetter(
+  SitePermissions,
+  "openProtoPermissionEnabled",
+  "security.external_protocol_requires_permission",
+  true,
   SitePermissions.invalidatePermissionList.bind(SitePermissions)
 );

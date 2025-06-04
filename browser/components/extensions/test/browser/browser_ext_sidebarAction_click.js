@@ -4,17 +4,19 @@
 
 add_task(async function test_sidebar_click_isAppTab_behavior() {
   function sidebarScript() {
-    browser.tabs.onUpdated.addListener(
-      function onUpdated(tabId, changeInfo, tab) {
-        if (
-          changeInfo.status == "complete" &&
-          tab.url == "http://mochi.test:8888/"
-        ) {
-          browser.tabs.remove(tab.id);
-          browser.test.notifyPass("sidebar-click");
-        }
+    browser.tabs.onUpdated.addListener(function onUpdated(
+      tabId,
+      changeInfo,
+      tab
+    ) {
+      if (
+        changeInfo.status == "complete" &&
+        tab.url == "http://mochi.test:8888/"
+      ) {
+        browser.tabs.remove(tab.id);
+        browser.test.notifyPass("sidebar-click");
       }
-    );
+    });
     window.addEventListener(
       "load",
       () => {

@@ -1,4 +1,4 @@
-import { GlobalOverrider } from "tests/unit/utils";
+import { GlobalOverrider } from "test/unit/utils";
 import { PanelTestProvider } from "modules/PanelTestProvider.sys.mjs";
 import { _MomentsPageHub } from "modules/MomentsPageHub.sys.mjs";
 const HOMEPAGE_OVERRIDE_PREF = "browser.startup.homepage_override.once";
@@ -44,12 +44,6 @@ describe("MomentsPageHub", () => {
         messagingExperiments: {
           reachMomentsPage: {
             record: () => {},
-          },
-        },
-        messagingSystem: {
-          messageRequestTime: {
-            start() {},
-            stopAndAccumulate() {},
           },
         },
       },
@@ -152,22 +146,30 @@ describe("MomentsPageHub", () => {
 
       assert.notCalled(setStringPrefStub);
     });
-    it("should record a message request time", async () => {
-      const fakeTimerId = 42;
-      const start = sandbox
-        .stub(global.Glean.messagingSystem.messageRequestTime, "start")
-        .returns(fakeTimerId);
-      const stopAndAccumulate = sandbox.stub(
-        global.Glean.messagingSystem.messageRequestTime,
-        "stopAndAccumulate"
+    it("should record telemetry events", async () => {
+      const startTelemetryStopwatch = sandbox.stub(
+        global.TelemetryStopwatch,
+        "start"
+      );
+      const finishTelemetryStopwatch = sandbox.stub(
+        global.TelemetryStopwatch,
+        "finish"
       );
 
       await instance.messageRequest({ triggerId: "trigger" });
 
-      assert.calledOnce(start);
-      assert.calledWithExactly(start);
-      assert.calledOnce(stopAndAccumulate);
-      assert.calledWithExactly(stopAndAccumulate, fakeTimerId);
+      assert.calledOnce(startTelemetryStopwatch);
+      assert.calledWithExactly(
+        startTelemetryStopwatch,
+        "MS_MESSAGE_REQUEST_TIME_MS",
+        { triggerId: "trigger" }
+      );
+      assert.calledOnce(finishTelemetryStopwatch);
+      assert.calledWithExactly(
+        finishTelemetryStopwatch,
+        "MS_MESSAGE_REQUEST_TIME_MS",
+        { triggerId: "trigger" }
+      );
     });
     it("should record Reach event for the Moments page experiment", async () => {
       const momentsMessages = (await PanelTestProvider.getMessages()).filter(

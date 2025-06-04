@@ -5,8 +5,7 @@
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
-  AboutHomeStartupCacheChild:
-    "resource:///modules/AboutNewTabRedirector.sys.mjs",
+  AboutHomeStartupCacheChild: "resource:///modules/AboutNewTabService.sys.mjs",
   WebRTCChild: "resource:///actors/WebRTCChild.sys.mjs",
 });
 

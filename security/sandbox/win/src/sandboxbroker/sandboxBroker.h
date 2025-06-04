@@ -26,8 +26,6 @@ class TargetPolicy;
 
 namespace mozilla {
 
-enum GMPSandboxKind { Default, Widevine, Clearkey };
-
 class SandboxBroker {
  public:
   SandboxBroker();
@@ -58,7 +56,9 @@ class SandboxBroker {
   bool SetSecurityLevelForRDDProcess();
   bool SetSecurityLevelForSocketProcess();
 
-  bool SetSecurityLevelForGMPlugin(GMPSandboxKind aGMPSandboxKind);
+  enum SandboxLevel { LockDown, Restricted };
+  bool SetSecurityLevelForGMPlugin(SandboxLevel aLevel,
+                                   bool aIsRemoteLaunch = false);
   bool SetSecurityLevelForUtilityProcess(mozilla::ipc::SandboxingKind aSandbox);
 
   // File system permissions

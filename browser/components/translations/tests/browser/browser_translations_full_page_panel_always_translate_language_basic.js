@@ -5,7 +5,7 @@
 
 /**
  * Tests the effect of toggling the always-translate-language menuitem.
- * Checking the box on an not translated page should immediately translate the page.
+ * Checking the box on an untranslated page should immediately translate the page.
  * Unchecking the box on a translated page should immediately restore the page.
  */
 add_task(async function test_toggle_always_translate_language_menuitem() {
@@ -19,12 +19,12 @@ add_task(async function test_toggle_always_translate_language_menuitem() {
     "The translations button is visible."
   );
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await FullPageTranslationsTestUtils.openPanel({
     expectedFromLanguage: "es",
     expectedToLanguage: "en",
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
   });
   await FullPageTranslationsTestUtils.openTranslationsSettingsMenu();
 
@@ -38,7 +38,7 @@ add_task(async function test_toggle_always_translate_language_menuitem() {
     checked: true,
   });
 
-  await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated({
+  await FullPageTranslationsTestUtils.assertPageIsTranslated({
     fromLanguage: "es",
     toLanguage: "en",
     runInPage,
@@ -47,9 +47,10 @@ add_task(async function test_toggle_always_translate_language_menuitem() {
 
   await navigate("Navigate to a different Spanish page", {
     url: SPANISH_PAGE_URL_DOT_ORG,
+    downloadHandler: resolveDownloads,
   });
 
-  await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated({
+  await FullPageTranslationsTestUtils.assertPageIsTranslated({
     fromLanguage: "es",
     toLanguage: "en",
     runInPage,
@@ -75,7 +76,7 @@ add_task(async function test_toggle_always_translate_language_menuitem() {
     "Only the button appears"
   );
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await cleanup();
 });

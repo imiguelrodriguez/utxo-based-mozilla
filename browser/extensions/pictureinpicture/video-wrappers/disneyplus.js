@@ -7,12 +7,12 @@
 class PictureInPictureVideoWrapper {
   setCaptionContainerObserver(video, updateCaptionsFunction) {
     // Handle Disney+ (US)
-    let container = document.querySelector(".TimedTextOverlay");
+    let container = document.querySelector(".dss-hls-subtitle-overlay");
 
     if (container) {
       const callback = () => {
         let textNodeList = container.querySelectorAll(
-          ".hive-subtitle-renderer-line"
+          ".dss-subtitle-renderer-line"
         );
 
         if (!textNodeList.length) {

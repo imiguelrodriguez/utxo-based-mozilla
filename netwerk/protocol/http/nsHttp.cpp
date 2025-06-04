@@ -49,8 +49,7 @@ enum {
 };
 #undef HTTP_ATOM
 
-MOZ_RUNINIT static StaticDataMutex<
-    nsTHashtable<nsCStringASCIICaseInsensitiveHashKey>>
+static StaticDataMutex<nsTHashtable<nsCStringASCIICaseInsensitiveHashKey>>
     sAtomTable("nsHttp::sAtomTable");
 
 // This is set to true in DestroyAtomTable so we don't try to repopulate the
@@ -982,10 +981,21 @@ nsresult HttpProxyResponseToErrorCode(uint32_t aStatusCode) {
   return rv;
 }
 
+SupportedAlpnRank H3VersionToRank(const nsACString& aVersion) {
+  for (uint32_t i = 0; i < std::size(kHttp3Versions); i++) {
+    if (aVersion.Equals(kHttp3Versions[i])) {
+      return static_cast<SupportedAlpnRank>(
+          static_cast<uint32_t>(SupportedAlpnRank::HTTP_3_DRAFT_29) + i);
+    }
+  }
+
+  return SupportedAlpnRank::NOT_SUPPORTED;
+}
+
 SupportedAlpnRank IsAlpnSupported(const nsACString& aAlpn) {
   if (nsHttpHandler::IsHttp3Enabled() &&
       gHttpHandler->IsHttp3VersionSupported(aAlpn)) {
-    return SupportedAlpnRank::HTTP_3_VER_1;
+    return H3VersionToRank(aAlpn);
   }
 
   if (StaticPrefs::network_http_http2_enabled()) {

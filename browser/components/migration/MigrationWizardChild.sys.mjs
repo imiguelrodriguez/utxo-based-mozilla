@@ -4,7 +4,6 @@
 
 import { MigrationWizardConstants } from "chrome://browser/content/migration/migration-wizard-constants.mjs";
 import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
-import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 
 const lazy = {};
 XPCOMUtils.defineLazyPreferenceGetter(
@@ -123,10 +122,10 @@ export class MigrationWizardChild extends JSWindowActorChild {
         break;
       }
 
-      case "MigrationWizard:SelectManualPasswordFile": {
-        let path = await this.sendQuery("SelectManualPasswordFile");
+      case "MigrationWizard:SelectSafariPasswordFile": {
+        let path = await this.sendQuery("SelectSafariPasswordFile");
         if (path) {
-          event.detail.manualPasswordFilePath = path;
+          event.detail.safariPasswordFilePath = path;
 
           let passwordResourceIndex = event.detail.resourceTypes.indexOf(
             MigrationWizardConstants.DISPLAYED_RESOURCE_TYPES.PASSWORDS
@@ -317,30 +316,18 @@ export class MigrationWizardChild extends JSWindowActorChild {
    *   message.
    */
   async beginMigration(migrationDetails, extraArgs) {
-    // We redirect to manual password import for Safari and Chrome on Windows.
     if (
+      migrationDetails.key == "safari" &&
       migrationDetails.resourceTypes.includes(
         MigrationWizardConstants.DISPLAYED_RESOURCE_TYPES.PASSWORDS
       ) &&
-      !migrationDetails.manualPasswordFilePath
+      !migrationDetails.safariPasswordFilePath
     ) {
-      if (migrationDetails.key == "safari") {
-        this.#sendTelemetryEvent("safariPasswordFile");
-        this.setComponentState({
-          page: MigrationWizardConstants.PAGES.SAFARI_PASSWORD_PERMISSION,
-        });
-        return;
-      } else if (
-        migrationDetails.key == "chrome" &&
-        AppConstants.platform == "win"
-      ) {
-        this.#sendTelemetryEvent("chromePasswordFile");
-        this.setComponentState({
-          page: MigrationWizardConstants.PAGES
-            .CHROME_WINDOWS_PASSWORD_PERMISSION,
-        });
-        return;
-      }
+      this.#sendTelemetryEvent("safariPasswordFile");
+      this.setComponentState({
+        page: MigrationWizardConstants.PAGES.SAFARI_PASSWORD_PERMISSION,
+      });
+      return;
     }
 
     extraArgs = await this.sendQuery("Migrate", {

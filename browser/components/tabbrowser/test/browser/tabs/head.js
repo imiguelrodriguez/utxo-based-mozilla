@@ -1,7 +1,3 @@
-const { TabGroupTestUtils } = ChromeUtils.importESModule(
-  "resource://testing-common/TabGroupTestUtils.sys.mjs"
-);
-
 function promiseTabLoadEvent(tab, url) {
   info("Wait tab event: load");
 
@@ -286,7 +282,7 @@ async function test_mute_tab(tab, icon, expectMuted) {
 async function dragAndDrop(
   tab1,
   tab2,
-  copy = false,
+  copy,
   destWindow = window,
   afterTab = true,
   origWindow = window
@@ -305,7 +301,7 @@ async function dragAndDrop(
     origWindow.moveTo(rect.left, rect.top + rect.height * 3);
   }
 
-  let originalIndex = tab1.elementIndex;
+  let originalTPos = tab1._tPos;
   EventUtils.synthesizeDrop(
     tab1,
     tab2,
@@ -319,7 +315,7 @@ async function dragAndDrop(
   EventUtils.synthesizeMouseAtCenter(tab2, { type: "mouseup" }, destWindow);
   if (!copy && destWindow == origWindow) {
     await BrowserTestUtils.waitForCondition(() => {
-      return tab1.elementIndex != originalIndex;
+      return tab1._tPos != originalTPos;
     }, "Waiting for tab position to be updated");
   } else if (destWindow != origWindow) {
     await BrowserTestUtils.waitForCondition(
@@ -587,48 +583,4 @@ function httpURL(filename, host = "https://example.com/") {
 
 function loadTestSubscript(filePath) {
   Services.scriptloader.loadSubScript(new URL(filePath, gTestPath).href, this);
-}
-
-/**
- * Removes a tab group (along with its tabs). Resolves when the tab group
- * is gone.
- *
- * @param {MozTabbrowserTabGroup} group
- * @returns {Promise<void>}
- */
-async function removeTabGroup(group) {
-  return TabGroupTestUtils.removeTabGroup(group);
-}
-
-/**
- * @param {Node} triggerNode
- * @param {string} contextMenuId
- * @returns {Promise<XULMenuElement|XULPopupElement>}
- */
-async function getContextMenu(triggerNode, contextMenuId) {
-  let win = triggerNode.ownerGlobal;
-  triggerNode.scrollIntoView({ behavior: "instant" });
-  const contextMenu = win.document.getElementById(contextMenuId);
-  const contextMenuShown = BrowserTestUtils.waitForPopupEvent(
-    contextMenu,
-    "shown"
-  );
-
-  EventUtils.synthesizeMouseAtCenter(
-    triggerNode,
-    { type: "contextmenu", button: 2 },
-    win
-  );
-  await contextMenuShown;
-  return contextMenu;
-}
-
-/**
- * @param {XULMenuElement|XULPopupElement} contextMenu
- * @returns {Promise<void>}
- */
-async function closeContextMenu(contextMenu) {
-  let menuHidden = BrowserTestUtils.waitForPopupEvent(contextMenu, "hidden");
-  contextMenu.hidePopup();
-  await menuHidden;
 }

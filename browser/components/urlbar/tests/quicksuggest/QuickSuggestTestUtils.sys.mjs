@@ -1,29 +1,36 @@
 /* Any copyright is dedicated to the Public Domain.
    http://creativecommons.org/publicdomain/zero/1.0/ */
 
+/* eslint-disable mozilla/valid-lazy */
 /* eslint-disable jsdoc/require-param */
 
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
-  AmpSuggestions: "resource:///modules/urlbar/private/AmpSuggestions.sys.mjs",
   ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
-  NimbusTestUtils: "resource://testing-common/NimbusTestUtils.sys.mjs",
+  ExperimentFakes: "resource://testing-common/NimbusTestUtils.sys.mjs",
+  NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
   QuickSuggest: "resource:///modules/QuickSuggest.sys.mjs",
   Region: "resource://gre/modules/Region.sys.mjs",
+  RemoteSettings: "resource://services-settings/remote-settings.sys.mjs",
+  RemoteSettingsConfig: "resource://gre/modules/RustRemoteSettings.sys.mjs",
   RemoteSettingsServer:
     "resource://testing-common/RemoteSettingsServer.sys.mjs",
-  SearchUtils: "moz-src:///toolkit/components/search/SearchUtils.sys.mjs",
-  SharedRemoteSettingsService:
-    "resource://gre/modules/RustSharedRemoteSettingsService.sys.mjs",
-  Suggestion:
-    "moz-src:///toolkit/components/uniffi-bindgen-gecko-js/components/generated/RustSuggest.sys.mjs",
+  SearchUtils: "resource://gre/modules/SearchUtils.sys.mjs",
+  SuggestBackendRust:
+    "resource:///modules/urlbar/private/SuggestBackendRust.sys.mjs",
+  Suggestion: "resource://gre/modules/RustSuggest.sys.mjs",
+  SuggestionProvider: "resource://gre/modules/RustSuggest.sys.mjs",
+  SuggestStore: "resource://gre/modules/RustSuggest.sys.mjs",
+  TelemetryTestUtils: "resource://testing-common/TelemetryTestUtils.sys.mjs",
   TestUtils: "resource://testing-common/TestUtils.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
+  UrlbarProviderQuickSuggest:
+    "resource:///modules/UrlbarProviderQuickSuggest.sys.mjs",
+  UrlbarProvidersManager: "resource:///modules/UrlbarProvidersManager.sys.mjs",
   UrlbarUtils: "resource:///modules/UrlbarUtils.sys.mjs",
-  YelpSubjectType:
-    "moz-src:///toolkit/components/uniffi-bindgen-gecko-js/components/generated/RustSuggest.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
+  sinon: "resource://testing-common/Sinon.sys.mjs",
 });
 
 let gTestScope;
@@ -35,7 +42,6 @@ let gTestScope;
 // xpcshell tests.
 Object.defineProperty(lazy, "UrlbarTestUtils", {
   get: () => {
-    // eslint-disable-next-line mozilla/valid-lazy
     if (!lazy._UrlbarTestUtils) {
       const { UrlbarTestUtils: module } = ChromeUtils.importESModule(
         "resource://testing-common/UrlbarTestUtils.sys.mjs"
@@ -43,13 +49,10 @@ Object.defineProperty(lazy, "UrlbarTestUtils", {
       module.init(gTestScope);
       gTestScope.registerCleanupFunction(() => {
         // Make sure the utils are re-initialized during the next test.
-        // eslint-disable-next-line mozilla/valid-lazy
         lazy._UrlbarTestUtils = null;
       });
-      // eslint-disable-next-line mozilla/valid-lazy
       lazy._UrlbarTestUtils = module;
     }
-    // eslint-disable-next-line mozilla/valid-lazy
     return lazy._UrlbarTestUtils;
   },
 });
@@ -61,7 +64,6 @@ Object.defineProperty(lazy, "UrlbarTestUtils", {
 // xpcshell tests.
 Object.defineProperty(lazy, "MerinoTestUtils", {
   get: () => {
-    // eslint-disable-next-line mozilla/valid-lazy
     if (!lazy._MerinoTestUtils) {
       const { MerinoTestUtils: module } = ChromeUtils.importESModule(
         "resource://testing-common/MerinoTestUtils.sys.mjs"
@@ -69,13 +71,10 @@ Object.defineProperty(lazy, "MerinoTestUtils", {
       module.init(gTestScope);
       gTestScope.registerCleanupFunction(() => {
         // Make sure the utils are re-initialized during the next test.
-        // eslint-disable-next-line mozilla/valid-lazy
         lazy._MerinoTestUtils = null;
       });
-      // eslint-disable-next-line mozilla/valid-lazy
       lazy._MerinoTestUtils = module;
     }
-    // eslint-disable-next-line mozilla/valid-lazy
     return lazy._MerinoTestUtils;
   },
 });
@@ -135,20 +134,6 @@ class _QuickSuggestTestUtils {
     }
   }
 
-  get RS_COLLECTION() {
-    return {
-      AMP: "quicksuggest-amp",
-      OTHER: "quicksuggest-other",
-    };
-  }
-
-  get RS_TYPE() {
-    return {
-      AMP: "amp",
-      WIKIPEDIA: "wikipedia",
-    };
-  }
-
   get DEFAULT_CONFIG() {
     // Return a clone so callers can modify it.
     return Cu.cloneInto(DEFAULT_CONFIG, this);
@@ -167,7 +152,7 @@ class _QuickSuggestTestUtils {
    *     - `record.attachment` - Optional. This should be the attachment itself
    *       and not its metadata. It should be a JSONable object.
    *     - `record.collection` - Optional. The name of the RS collection that
-   *       the record should be added to. Defaults to "quicksuggest-other".
+   *       the record should be added to. Defaults to "quicksuggest".
    * @param {Array} options.merinoSuggestions
    *   Array of Merino suggestion objects. If given, this function will start
    *   the mock Merino server and set `quicksuggest.dataCollection.enabled` to
@@ -200,28 +185,36 @@ class _QuickSuggestTestUtils {
     config = DEFAULT_CONFIG,
     prefs = [],
   } = {}) {
-    this.#log("ensureQuickSuggestInit", "Started");
+    prefs.push(["quicksuggest.enabled", true]);
 
-    this.#log("ensureQuickSuggestInit", "Awaiting ExperimentAPI.init");
-    const initializedExperimentAPI = await lazy.ExperimentAPI.init();
-
-    this.#log("ensureQuickSuggestInit", "Awaiting ExperimentAPI.ready");
-    await lazy.ExperimentAPI.ready();
+    // Make a Map from collection name to the array of records that should be
+    // added to that collection.
+    let recordsByCollection = remoteSettingsRecords.reduce((memo, record) => {
+      let collection = record.collection || "quicksuggest";
+      let records = memo.get(collection);
+      if (!records) {
+        records = [];
+        memo.set(collection, records);
+      }
+      records.push(record);
+      return memo;
+    }, new Map());
 
     // Set up the local remote settings server.
-    this.#log("ensureQuickSuggestInit", "Preparing remote settings server");
+    this.#log(
+      "ensureQuickSuggestInit",
+      "Started, preparing remote settings server"
+    );
     if (!this.#remoteSettingsServer) {
       this.#remoteSettingsServer = new lazy.RemoteSettingsServer();
     }
 
     this.#remoteSettingsServer.removeRecords();
-    for (let [collection, records] of this.#recordsByCollection(
-      remoteSettingsRecords
-    )) {
+    for (let [collection, records] of recordsByCollection.entries()) {
       await this.#remoteSettingsServer.addRecords({ collection, records });
     }
     await this.#remoteSettingsServer.addRecords({
-      collection: this.RS_COLLECTION.OTHER,
+      collection: "quicksuggest",
       records: [{ type: "configuration", configuration: config }],
     });
 
@@ -229,31 +222,36 @@ class _QuickSuggestTestUtils {
     await this.#remoteSettingsServer.start();
     this.#log("ensureQuickSuggestInit", "Remote settings server started");
 
-    // Init Suggest and force the region to US and the locale to en-US, which
-    // will cause Suggest to be enabled along with all suggestion types that are
-    // enabled in the US by default. Do this after setting up remote settings
-    // because the Rust backend will immediately try to sync.
+    // Get the cached `RemoteSettings` client used by the JS backend and tell it
+    // to ignore signatures and to always force sync. Otherwise it won't sync if
+    // the previous sync was recent enough, which is incompatible with testing.
+    let rs = lazy.RemoteSettings("quicksuggest");
+    let { get, verifySignature } = rs;
+    rs.verifySignature = false;
+    rs.get = opts => get.call(rs, { forceSync: true, ...opts });
+    this.#restoreRemoteSettings = () => {
+      rs.verifySignature = verifySignature;
+      rs.get = get;
+    };
+
+    // Finally, init Suggest and set prefs. Do this after setting up remote
+    // settings because the current backend will immediately try to sync.
     this.#log(
       "ensureQuickSuggestInit",
       "Calling QuickSuggest.init() and setting prefs"
     );
-    await lazy.QuickSuggest.init({ region: "US", locale: "en-US" });
-
-    // Set prefs requested by the caller.
+    lazy.QuickSuggest.init();
     for (let [name, value] of prefs) {
       lazy.UrlbarPrefs.set(name, value);
     }
 
     // Tell the Rust backend to use the local remote setting server.
-    lazy.SharedRemoteSettingsService.updateServer({
-      url: this.#remoteSettingsServer.url.toString(),
+    await lazy.QuickSuggest.rustBackend._test_setRemoteSettingsConfig({
       bucketName: "main",
+      serverUrl: this.#remoteSettingsServer.url.toString(),
     });
-    await lazy.QuickSuggest.rustBackend._test_setRemoteSettingsService(
-      lazy.SharedRemoteSettingsService.rustService()
-    );
 
-    // Wait for the Rust backend to finish syncing.
+    // Wait for the current backend to finish syncing.
     await this.forceSync();
 
     // Set up Merino. This can happen any time relative to Suggest init.
@@ -270,12 +268,6 @@ class _QuickSuggestTestUtils {
       if (!cleanupCalled) {
         cleanupCalled = true;
         await this.#uninitQuickSuggest(prefs, !!merinoSuggestions);
-
-        if (initializedExperimentAPI) {
-          // Only reset if we're in an xpcshell-test and actually initialized
-          // the ExperimentAPI.
-          lazy.ExperimentAPI._resetForTests();
-        }
       }
     };
     this.registerCleanupFunction?.(cleanup);
@@ -287,8 +279,8 @@ class _QuickSuggestTestUtils {
   async #uninitQuickSuggest(prefs, clearDataCollectionEnabled) {
     this.#log("#uninitQuickSuggest", "Started");
 
-    // Reset prefs, which can cause the Rust backend to start syncing. Wait for
-    // it to finish.
+    // Reset prefs, which can cause the current backend to start syncing. Wait
+    // for it to finish.
     for (let [name] of prefs) {
       lazy.UrlbarPrefs.clear(name);
     }
@@ -296,12 +288,11 @@ class _QuickSuggestTestUtils {
 
     this.#log("#uninitQuickSuggest", "Stopping remote settings server");
     await this.#remoteSettingsServer.stop();
+    this.#restoreRemoteSettings();
 
     if (clearDataCollectionEnabled) {
       lazy.UrlbarPrefs.clear("quicksuggest.dataCollection.enabled");
     }
-
-    await lazy.QuickSuggest.rustBackend._test_setRemoteSettingsService(null);
 
     this.#log("#uninitQuickSuggest", "Done");
   }
@@ -319,15 +310,10 @@ class _QuickSuggestTestUtils {
    */
   async setRemoteSettingsRecords(records, { forceSync = true } = {}) {
     this.#log("setRemoteSettingsRecords", "Started");
-
-    this.#remoteSettingsServer.removeRecords();
-    for (let [collection, recs] of this.#recordsByCollection(records)) {
-      await this.#remoteSettingsServer.addRecords({
-        collection,
-        records: recs,
-      });
-    }
-
+    await this.#remoteSettingsServer.setRecords({
+      collection: "quicksuggest",
+      records,
+    });
     if (forceSync) {
       this.#log("setRemoteSettingsRecords", "Forcing sync");
       await this.forceSync();
@@ -349,7 +335,7 @@ class _QuickSuggestTestUtils {
     let type = "configuration";
     this.#remoteSettingsServer.removeRecords({ type });
     await this.#remoteSettingsServer.addRecords({
-      collection: this.RS_COLLECTION.OTHER,
+      collection: "quicksuggest",
       records: [{ type, configuration: config }],
     });
     this.#log("setConfig", "Forcing sync");
@@ -368,6 +354,11 @@ class _QuickSuggestTestUtils {
       await lazy.QuickSuggest.rustBackend._test_ingest();
       this.#log("forceSync", "Done syncing Rust backend");
     }
+    if (lazy.QuickSuggest.jsBackend.isEnabled) {
+      this.#log("forceSync", "Syncing JS backend");
+      await lazy.QuickSuggest.jsBackend._test_syncAll();
+      this.#log("forceSync", "Done syncing JS backend");
+    }
     this.#log("forceSync", "Done");
   }
 
@@ -385,7 +376,7 @@ class _QuickSuggestTestUtils {
    * @see {@link setConfig}
    */
   async withConfig({ config, callback }) {
-    let original = lazy.QuickSuggest.config;
+    let original = lazy.QuickSuggest.jsBackend.config;
     await this.setConfig(config);
     await callback();
     await this.setConfig(original);
@@ -400,14 +391,12 @@ class _QuickSuggestTestUtils {
    */
   ampRemoteSettings({
     keywords = ["amp"],
-    full_keywords = keywords.map(kw => [kw, 1]),
     url = "https://example.com/amp",
     title = "Amp Suggestion",
     score = 0.3,
   } = {}) {
     return {
       keywords,
-      full_keywords,
       url,
       title,
       score,
@@ -422,14 +411,15 @@ class _QuickSuggestTestUtils {
 
   /**
    * Returns an expected AMP (sponsored) result that can be passed to
-   * `check_results()` in xpcshell tests.
+   * `check_results()` in xpcshell tests regardless of whether the Rust backend
+   * is enabled.
    *
    * @returns {object}
    *   An object that can be passed to `check_results()`.
    */
   ampResult({
-    source = "rust",
-    provider = "Amp",
+    source,
+    provider,
     keyword = "amp",
     fullKeyword = keyword,
     title = "Amp Suggestion",
@@ -460,8 +450,6 @@ class _QuickSuggestTestUtils {
         url,
         originalUrl,
         requestId,
-        source,
-        provider,
         displayUrl: url.replace(/^https:\/\//, ""),
         isSponsored: true,
         qsSuggestion: fullKeyword ?? keyword,
@@ -471,6 +459,9 @@ class _QuickSuggestTestUtils {
         sponsoredAdvertiser: advertiser,
         sponsoredIabCategory: iabCategory,
         isBlockable: true,
+        blockL10n: {
+          id: "urlbar-result-menu-dismiss-firefox-suggest",
+        },
         isManageable: true,
         telemetryType: "adm_sponsored",
       },
@@ -480,25 +471,17 @@ class _QuickSuggestTestUtils {
       result.payload.descriptionL10n = descriptionL10n;
     }
 
-    if (result.payload.source == "rust") {
-      result.payload.iconBlob = iconBlob;
-      result.payload.suggestionObject = new lazy.Suggestion.Amp({
-        title,
-        url,
-        rawUrl: originalUrl,
-        icon: null,
-        iconMimetype: null,
-        fullKeyword,
-        blockId,
-        advertiser,
-        iabCategory,
-        impressionUrl,
-        clickUrl,
-        rawClickUrl: clickUrl,
-        score: 0.3,
-        ftsMatchInfo: null,
-      });
+    if (lazy.UrlbarPrefs.get("quickSuggestRustEnabled")) {
+      result.payload.source = source || "rust";
+      result.payload.provider = provider || "Amp";
+      if (result.payload.source == "rust") {
+        result.payload.iconBlob = iconBlob;
+      } else {
+        result.payload.icon = icon;
+      }
     } else {
+      result.payload.source = source || "remote-settings";
+      result.payload.provider = provider || "AdmWikipedia";
       result.payload.icon = icon;
     }
 
@@ -534,19 +517,27 @@ class _QuickSuggestTestUtils {
 
   /**
    * Returns an expected Wikipedia (non-sponsored) result that can be passed to
-   * `check_results()` in xpcshell tests.
+   * `check_results()` in xpcshell tests regardless of whether the Rust backend
+   * is enabled.
    *
    * @returns {object}
    *   An object that can be passed to `check_results()`.
    */
   wikipediaResult({
-    source = "rust",
-    provider = "Wikipedia",
+    source,
+    provider,
     keyword = "wikipedia",
     fullKeyword = keyword,
     title = "Wikipedia Suggestion",
     url = "https://example.com/wikipedia",
+    originalUrl = url,
+    icon = null,
     iconBlob = null,
+    impressionUrl = "https://example.com/wikipedia-impression",
+    clickUrl = "https://example.com/wikipedia-click",
+    blockId = 2,
+    advertiser = "Wikipedia",
+    iabCategory = "5 - Education",
     suggestedIndex = -1,
     isSuggestedIndexRelativeToGroup = true,
   } = {}) {
@@ -559,28 +550,34 @@ class _QuickSuggestTestUtils {
       payload: {
         title,
         url,
-        iconBlob,
-        source,
-        provider,
+        originalUrl,
         displayUrl: url.replace(/^https:\/\//, ""),
         isSponsored: false,
         qsSuggestion: fullKeyword ?? keyword,
         sponsoredAdvertiser: "Wikipedia",
         sponsoredIabCategory: "5 - Education",
         isBlockable: true,
+        blockL10n: {
+          id: "urlbar-result-menu-dismiss-firefox-suggest",
+        },
         isManageable: true,
         telemetryType: "adm_nonsponsored",
       },
     };
 
-    if (source == "rust") {
-      result.payload.suggestionObject = new lazy.Suggestion.Wikipedia({
-        title,
-        url,
-        icon: null,
-        iconMimeType: null,
-        fullKeyword,
-      });
+    if (lazy.UrlbarPrefs.get("quickSuggestRustEnabled")) {
+      result.payload.source = source || "rust";
+      result.payload.provider = provider || "Wikipedia";
+      result.payload.iconBlob = iconBlob;
+    } else {
+      result.payload.source = source || "remote-settings";
+      result.payload.provider = provider || "AdmWikipedia";
+      result.payload.icon = icon;
+      result.payload.sponsoredImpressionUrl = impressionUrl;
+      result.payload.sponsoredClickUrl = clickUrl;
+      result.payload.sponsoredBlockId = blockId;
+      result.payload.sponsoredAdvertiser = advertiser;
+      result.payload.sponsoredIabCategory = iabCategory;
     }
 
     return result;
@@ -620,6 +617,9 @@ class _QuickSuggestTestUtils {
         isSponsored: false,
         qsSuggestion: fullKeyword ?? keyword,
         isBlockable: true,
+        blockL10n: {
+          id: "urlbar-result-menu-dismiss-firefox-suggest",
+        },
         isManageable: true,
         telemetryType: "wikipedia",
       },
@@ -653,188 +653,16 @@ class _QuickSuggestTestUtils {
   }
 
   /**
-   * Returns a remote settings weather record.
-   *
-   * @returns {object}
-   *   A weather record for storing in remote settings.
-   */
-  weatherRecord({
-    keywords = ["weather"],
-    min_keyword_length = undefined,
-    score = 0.29,
-  } = {}) {
-    return {
-      type: "weather",
-      attachment: {
-        keywords,
-        min_keyword_length,
-        score,
-      },
-    };
-  }
-
-  /**
-   * Returns remote settings records containing geonames populated with some
-   * cities.
-   *
-   * @returns {Array}
-   *   One or more geonames records for storing in remote settings.
-   */
-  geonamesRecords() {
-    let geonames = [
-      // Waterloo, AL
-      {
-        id: 4096497,
-        name: "Waterloo",
-        feature_class: "P",
-        feature_code: "PPL",
-        country: "US",
-        admin1: "AL",
-        admin2: "077",
-        population: 200,
-        latitude: "34.91814",
-        longitude: "-88.0642",
-      },
-      // AL
-      {
-        id: 4829764,
-        name: "Alabama",
-        feature_class: "A",
-        feature_code: "ADM1",
-        country: "US",
-        admin1: "AL",
-        population: 4530315,
-        latitude: "32.75041",
-        longitude: "-86.75026",
-      },
-      // Waterloo, IA
-      {
-        id: 4880889,
-        name: "Waterloo",
-        feature_class: "P",
-        feature_code: "PPLA2",
-        country: "US",
-        admin1: "IA",
-        admin2: "013",
-        admin3: "94597",
-        population: 68460,
-        latitude: "42.49276",
-        longitude: "-92.34296",
-      },
-      // IA
-      {
-        id: 4862182,
-        name: "Iowa",
-        feature_class: "A",
-        feature_code: "ADM1",
-        country: "US",
-        admin1: "IA",
-        population: 2955010,
-        latitude: "42.00027",
-        longitude: "-93.50049",
-      },
-      // Made-up cities with the same name in the US and CA. The CA city has a
-      // larger population.
-      {
-        id: 100,
-        name: "US CA City",
-        feature_class: "P",
-        feature_code: "PPL",
-        country: "US",
-        admin1: "IA",
-        population: 1,
-        latitude: "38.06084",
-        longitude: "-97.92977",
-      },
-      {
-        id: 101,
-        name: "US CA City",
-        feature_class: "P",
-        feature_code: "PPL",
-        country: "CA",
-        admin1: "08",
-        population: 2,
-        latitude: "45.50884",
-        longitude: "-73.58781",
-      },
-      // Made-up cities that are only ~1.5 km apart.
-      {
-        id: 102,
-        name: "Twin City A",
-        feature_class: "P",
-        feature_code: "PPL",
-        country: "US",
-        admin1: "GA",
-        population: 1,
-        latitude: "33.748889",
-        longitude: "-84.39",
-      },
-      {
-        id: 103,
-        name: "Twin City B",
-        feature_class: "P",
-        feature_code: "PPL",
-        country: "US",
-        admin1: "GA",
-        population: 2,
-        latitude: "33.76",
-        longitude: "-84.4",
-      },
-      {
-        id: 1850147,
-        name: "Tokyo",
-        feature_class: "P",
-        feature_code: "PPLC",
-        country: "JP",
-        admin1: "Tokyo-to",
-        population: 9733276,
-        latitude: "35.6895",
-        longitude: "139.69171",
-      },
-    ];
-
-    return [
-      {
-        type: "geonames-2",
-        attachment: geonames,
-      },
-    ];
-  }
-
-  /**
-   * Returns remote settings records containing geonames alternates (alternate
-   * names) populated with some names.
-   *
-   * @returns {Array}
-   *   One or more geonames alternates records for storing in remote settings.
-   */
-  geonamesAlternatesRecords() {
-    return [
-      {
-        type: "geonames-alternates",
-        attachment: [
-          {
-            language: "abbr",
-            alternates_by_geoname_id: [
-              [4829764, ["AL"]],
-              [4862182, ["IA"]],
-            ],
-          },
-        ],
-      },
-    ];
-  }
-
-  /**
    * Returns an expected AMO (addons) result that can be passed to
-   * `check_results()` in xpcshell tests.
+   * `check_results()` in xpcshell tests regardless of whether the Rust backend
+   * is enabled.
    *
    * @returns {object}
    *   An object that can be passed to `check_results()`.
    */
   amoResult({
-    source = "rust",
-    provider = "Amo",
+    source,
+    provider,
     title = "Amo Suggestion",
     description = "Amo description",
     url = "https://example.com/amo",
@@ -864,7 +692,6 @@ class _QuickSuggestTestUtils {
         originalUrl,
         icon,
         displayUrl: url.replace(/^https:\/\//, ""),
-        isSponsored: false,
         shouldShowUrl: true,
         bottomTextL10n: { id: "firefox-suggest-addons-recommended" },
         helpUrl: lazy.QuickSuggest.HELP_URL,
@@ -872,17 +699,12 @@ class _QuickSuggestTestUtils {
       },
     };
 
-    if (source == "rust") {
-      result.payload.suggestionObject = new lazy.Suggestion.Amo({
-        title,
-        url: originalUrl,
-        iconUrl: icon,
-        description,
-        rating: "4.7",
-        numberOfRatings: 1,
-        guid: "amo-suggestion@example.com",
-        score: 0.2,
-      });
+    if (lazy.UrlbarPrefs.get("quickSuggestRustEnabled")) {
+      result.payload.source = source || "rust";
+      result.payload.provider = provider || "Amo";
+    } else {
+      result.payload.source = source || "remote-settings";
+      result.payload.provider = provider || "AddonSuggestions";
     }
 
     return result;
@@ -890,7 +712,7 @@ class _QuickSuggestTestUtils {
 
   /**
    * Returns an expected MDN result that can be passed to `check_results()` in
-   * xpcshell tests.
+   * xpcshell tests regardless of whether the Rust backend is enabled.
    *
    * @returns {object}
    *   An object that can be passed to `check_results()`.
@@ -905,7 +727,7 @@ class _QuickSuggestTestUtils {
     );
     finalUrl.searchParams.set("utm_content", "treatment");
 
-    return {
+    let result = {
       isBestMatch: true,
       suggestedIndex: 1,
       type: lazy.UrlbarUtils.RESULT_TYPE.URL,
@@ -917,97 +739,19 @@ class _QuickSuggestTestUtils {
         url: finalUrl.href,
         originalUrl: url,
         displayUrl: finalUrl.href.replace(/^https:\/\//, ""),
-        isSponsored: false,
         description,
         icon: "chrome://global/skin/icons/mdn.svg",
         shouldShowUrl: true,
         bottomTextL10n: { id: "firefox-suggest-mdn-bottom-text" },
-        source: "rust",
-        provider: "Mdn",
-        suggestionObject: new lazy.Suggestion.Mdn({
-          title,
-          url,
-          description,
-          score: 0.2,
-        }),
-      },
-    };
-  }
-
-  /**
-   * Returns an expected Yelp result that can be passed to `check_results()` in
-   * xpcshell tests.
-   *
-   * @returns {object}
-   *   An object that can be passed to `check_results()`.
-   */
-  yelpResult({
-    url,
-    title = undefined,
-    titleL10n = undefined,
-    source = "rust",
-    provider = "Yelp",
-    isTopPick = false,
-    // The default Yelp suggestedIndex is 0, unlike most other Suggest
-    // suggestion types, which use -1.
-    suggestedIndex = 0,
-    isSuggestedIndexRelativeToGroup = true,
-    originalUrl = undefined,
-    suggestedType = lazy.YelpSubjectType.SERVICE,
-  }) {
-    const utmParameters = "&utm_medium=partner&utm_source=mozilla";
-
-    originalUrl ??= url;
-    originalUrl = new URL(originalUrl);
-    originalUrl.searchParams.delete("find_loc");
-    originalUrl = originalUrl.toString();
-
-    url += utmParameters;
-
-    if (isTopPick) {
-      suggestedIndex = 1;
-      isSuggestedIndexRelativeToGroup = false;
-    }
-
-    let result = {
-      type: lazy.UrlbarUtils.RESULT_TYPE.URL,
-      source: lazy.UrlbarUtils.RESULT_SOURCE.SEARCH,
-      isBestMatch: !!isTopPick,
-      suggestedIndex,
-      isSuggestedIndexRelativeToGroup,
-      heuristic: false,
-      payload: {
-        source,
-        provider,
-        telemetryType: "yelp",
-        bottomTextL10n: { id: "firefox-suggest-yelp-bottom-text" },
-        url,
-        originalUrl,
-        title,
-        titleL10n,
-        icon: null,
-        isSponsored: true,
       },
     };
 
-    if (source == "rust") {
-      result.payload.suggestionObject = new lazy.Suggestion.Yelp({
-        url: originalUrl,
-        // `title` will be undefined if the caller passed in `titleL10n`
-        // instead, but the Rust suggestion must be created with a string title.
-        // The Rust suggestion title doesn't actually matter since no test
-        // relies on it directly or indirectly. Pick an arbitrary string, and
-        // make it distinctive so it's easier to track down bugs in case it does
-        // start to matter at some point.
-        title: title ?? "<QuickSuggestTestUtils Yelp suggestion>",
-        icon: null,
-        iconMimeType: null,
-        score: 0.2,
-        hasLocationSign: false,
-        subjectExactMatch: false,
-        subjectType: suggestedType,
-        locationParam: "find_loc",
-      });
+    if (lazy.UrlbarPrefs.get("quickSuggestRustEnabled")) {
+      result.payload.source = "rust";
+      result.payload.provider = "Mdn";
+    } else {
+      result.payload.source = "remote-settings";
+      result.payload.provider = "MDNSuggestions";
     }
 
     return result;
@@ -1015,58 +759,86 @@ class _QuickSuggestTestUtils {
 
   /**
    * Returns an expected weather result that can be passed to `check_results()`
-   * in xpcshell tests.
+   * in xpcshell tests regardless of whether the Rust backend is enabled.
    *
    * @returns {object}
    *   An object that can be passed to `check_results()`.
    */
   weatherResult({
-    source = "rust",
-    provider = "Weather",
-    city = null,
-    region = null,
+    source,
+    provider,
+    telemetryType = undefined,
     temperatureUnit = undefined,
   } = {}) {
     if (!temperatureUnit) {
       temperatureUnit =
         Services.locale.regionalPrefsLocales[0] == "en-US" ? "f" : "c";
     }
-    return {
-      type: lazy.UrlbarUtils.RESULT_TYPE.URL,
+
+    let result = {
+      type: lazy.UrlbarUtils.RESULT_TYPE.DYNAMIC,
       source: lazy.UrlbarUtils.RESULT_SOURCE.SEARCH,
       heuristic: false,
       suggestedIndex: 1,
-      isRichSuggestion: true,
-      richSuggestionIconVariation: "6",
       payload: {
+        temperatureUnit,
         url: lazy.MerinoTestUtils.WEATHER_SUGGESTION.url,
-        titleL10n: {
-          id: "urlbar-result-weather-title",
-          args: {
-            temperature:
-              lazy.MerinoTestUtils.WEATHER_SUGGESTION.current_conditions
-                .temperature[temperatureUnit],
-            unit: temperatureUnit.toUpperCase(),
-            city: city || lazy.MerinoTestUtils.WEATHER_SUGGESTION.city_name,
-            region:
-              region || lazy.MerinoTestUtils.WEATHER_SUGGESTION.region_code,
-          },
-          parseMarkup: true,
-          cacheable: true,
-          excludeArgsFromCacheKey: true,
-        },
-        bottomTextL10n: {
-          id: "urlbar-result-weather-provider-sponsored",
-          args: { provider: "AccuWeather®" },
-          cacheable: true,
-        },
-        source,
-        provider,
-        isSponsored: true,
-        telemetryType: "weather",
-        helpUrl: lazy.QuickSuggest.HELP_URL,
+        iconId: "6",
+        requestId: lazy.MerinoTestUtils.server.response.body.request_id,
+        source: "merino",
+        provider: "accuweather",
+        dynamicType: "weather",
+        city: lazy.MerinoTestUtils.WEATHER_SUGGESTION.city_name,
+        temperature:
+          lazy.MerinoTestUtils.WEATHER_SUGGESTION.current_conditions
+            .temperature[temperatureUnit],
+        currentConditions:
+          lazy.MerinoTestUtils.WEATHER_SUGGESTION.current_conditions.summary,
+        forecast: lazy.MerinoTestUtils.WEATHER_SUGGESTION.forecast.summary,
+        high: lazy.MerinoTestUtils.WEATHER_SUGGESTION.forecast.high[
+          temperatureUnit
+        ],
+        low: lazy.MerinoTestUtils.WEATHER_SUGGESTION.forecast.low[
+          temperatureUnit
+        ],
       },
     };
+
+    if (lazy.UrlbarPrefs.get("quickSuggestRustEnabled")) {
+      result.payload.source = source || "rust";
+      result.payload.provider = provider || "Weather";
+      if (telemetryType !== null) {
+        result.payload.telemetryType = telemetryType || "weather";
+      }
+    } else {
+      result.payload.source = source || "merino";
+      result.payload.provider = provider || "accuweather";
+    }
+
+    return result;
+  }
+
+  /**
+   * Sets the Firefox Suggest scenario and waits for prefs to be updated.
+   *
+   * @param {string} scenario
+   *   Pass falsey to reset the scenario to the default.
+   */
+  async setScenario(scenario) {
+    // If we try to set the scenario before a previous update has finished,
+    // `updateFirefoxSuggestScenario` will bail, so wait.
+    await this.waitForScenarioUpdated();
+    await lazy.UrlbarPrefs.updateFirefoxSuggestScenario({ scenario });
+  }
+
+  /**
+   * Waits for any prior scenario update to finish.
+   */
+  async waitForScenarioUpdated() {
+    await lazy.TestUtils.waitForCondition(
+      () => !lazy.UrlbarPrefs.updatingFirefoxSuggestScenario,
+      "Waiting for updatingFirefoxSuggestScenario to be false"
+    );
   }
 
   /**
@@ -1248,7 +1020,7 @@ class _QuickSuggestTestUtils {
    *   ```
    */
   assertTimestampsReplaced(result, urls) {
-    let { TIMESTAMP_TEMPLATE, TIMESTAMP_LENGTH } = lazy.AmpSuggestions;
+    let { TIMESTAMP_TEMPLATE, TIMESTAMP_LENGTH } = lazy.QuickSuggest;
 
     // Parse the timestamp strings from each payload property and save them in
     // `urls[key].timestamp`.
@@ -1330,16 +1102,38 @@ class _QuickSuggestTestUtils {
     this.#log("enrollExperiment", "Awaiting ExperimentAPI.ready");
     await lazy.ExperimentAPI.ready();
 
+    // Wait for any prior scenario updates to finish. If updates are ongoing,
+    // UrlbarPrefs will ignore the Nimbus update when the experiment is
+    // installed. This shouldn't be a problem in practice because in reality
+    // scenario updates are triggered only on app startup and Nimbus
+    // enrollments, but tests can trigger lots of updates back to back.
+    await this.waitForScenarioUpdated();
+
     let doExperimentCleanup =
-      await lazy.NimbusTestUtils.enrollWithFeatureConfig({
+      await lazy.ExperimentFakes.enrollWithFeatureConfig({
         enabled: true,
         featureId: "urlbar",
         value: valueOverrides,
       });
 
+    // Wait for the pref updates triggered by the experiment enrollment.
+    this.#log(
+      "enrollExperiment",
+      "Awaiting update after enrolling in experiment"
+    );
+    await this.waitForScenarioUpdated();
+
     return async () => {
       this.#log("enrollExperiment.cleanup", "Awaiting experiment cleanup");
-      await doExperimentCleanup();
+      doExperimentCleanup();
+
+      // The same pref updates will be triggered by unenrollment, so wait for
+      // them again.
+      this.#log(
+        "enrollExperiment.cleanup",
+        "Awaiting update after unenrolling in experiment"
+      );
+      await this.waitForScenarioUpdated();
     };
   }
 
@@ -1412,7 +1206,7 @@ class _QuickSuggestTestUtils {
 
     let originalHome = lazy.Region.home;
     if (homeRegion) {
-      lazy.Region._setHomeRegion(homeRegion, true);
+      lazy.Region._setHomeRegion(homeRegion, false);
     }
 
     let available = Services.locale.availableLocales;
@@ -1433,7 +1227,7 @@ class _QuickSuggestTestUtils {
     await callback();
 
     if (homeRegion) {
-      lazy.Region._setHomeRegion(originalHome, true);
+      lazy.Region._setHomeRegion(originalHome, false);
     }
 
     promise = promiseChanges(requested);
@@ -1446,34 +1240,8 @@ class _QuickSuggestTestUtils {
     this.info?.(`QuickSuggestTestUtils.${fnName} ${msg}`);
   }
 
-  #recordsByCollection(records) {
-    // Make a Map from collection name to the array of records that should be
-    // added to that collection.
-    let recordsByCollection = records.reduce((memo, record) => {
-      let collection = record.collection || this.RS_COLLECTION.OTHER;
-      let recs = memo.get(collection);
-      if (!recs) {
-        recs = [];
-        memo.set(collection, recs);
-      }
-      recs.push(record);
-      return memo;
-    }, new Map());
-
-    // Make sure the two main collections, "quicksuggest-amp" and
-    // "quicksuggest-other", are present. Otherwise the Rust component will log
-    // 404 errors because it expects them to exist. The errors are harmless but
-    // annoying.
-    for (let collection of Object.values(this.RS_COLLECTION)) {
-      if (!recordsByCollection.has(collection)) {
-        recordsByCollection.set(collection, []);
-      }
-    }
-
-    return recordsByCollection;
-  }
-
   #remoteSettingsServer;
+  #restoreRemoteSettings;
 }
 
 export var QuickSuggestTestUtils = new _QuickSuggestTestUtils();

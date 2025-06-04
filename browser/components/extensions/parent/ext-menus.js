@@ -792,7 +792,9 @@ class MenuItem {
     }
     let menuMap = gMenuMap.get(this.extension);
     if (!menuMap.has(parentId)) {
-      throw new ExtensionError(`Cannot find menu item with id ${parentId}`);
+      throw new ExtensionError(
+        `Could not find any MenuItem with id: ${parentId}`
+      );
     }
     for (let item = menuMap.get(parentId); item; item = item.parent) {
       if (item === this) {
@@ -1405,7 +1407,7 @@ this.menusInternal = class extends ExtensionAPIPersistent {
 
           let menuItem = gMenuMap.get(extension).get(id);
           if (!menuItem) {
-            throw new ExtensionError(`Cannot find menu item with id ${id}`);
+            return;
           }
 
           menuItem.setProps(updateProperties);
@@ -1419,13 +1421,11 @@ this.menusInternal = class extends ExtensionAPIPersistent {
           }
 
           let menuItem = gMenuMap.get(extension).get(id);
-          if (!menuItem) {
-            throw new ExtensionError(`Cannot find menu item with id ${id}`);
+          if (menuItem) {
+            const menuIds = [menuItem.id, ...menuItem.descendantIds];
+            menuItem.remove();
+            ExtensionMenus.deleteMenus(extension, menuIds);
           }
-
-          const menuIds = [menuItem.id, ...menuItem.descendantIds];
-          menuItem.remove();
-          ExtensionMenus.deleteMenus(extension, menuIds);
         },
 
         removeAll: async () => {

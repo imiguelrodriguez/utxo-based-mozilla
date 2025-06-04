@@ -183,7 +183,7 @@ add_task(async function test_aboutURL() {
   let aboutURLs = [];
 
   // List of about: URLs that will initiate network requests.
-  let networkURLs = ["credits", "logins", "rights"];
+  let networkURLs = ["credits", "logins"];
 
   for (let cid in Cc) {
     let result = cid.match(
@@ -212,12 +212,7 @@ add_task(async function test_aboutURL() {
         aboutType !== "newtab" &&
         // protections kicks of async messaging as soon as it loads,
         // this test closes the tab too soon causing errors
-        aboutType !== "protections" &&
-        // These pages are disabled in certain cases.
-        aboutType !== "profilemanager" &&
-        aboutType !== "editprofile" &&
-        aboutType !== "deleteprofile" &&
-        aboutType !== "newprofile"
+        aboutType !== "protections"
       ) {
         aboutURLs.push(aboutType);
       }

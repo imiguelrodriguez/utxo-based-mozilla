@@ -31,7 +31,7 @@ namespace net {
 
 class nsHttpHandler;
 class ASpdySession;
-class WebTransportSessionBase;
+class Http3WebTransportSession;
 
 enum class ConnectionState : uint32_t {
   HALF_OPEN = 0,
@@ -52,8 +52,12 @@ enum class ConnectionExperienceState : uint32_t {
 MOZ_MAKE_ENUM_CLASS_BITWISE_OPERATORS(ConnectionExperienceState);
 
 // 1dcc863e-db90-4652-a1fe-13fea0b54e46
-#define HTTPCONNECTIONBASE_IID \
-  {0x437e7d26, 0xa2fd, 0x49f2, {0xb3, 0x7c, 0x84, 0x23, 0xf0, 0x94, 0x72, 0x36}}
+#define HTTPCONNECTIONBASE_IID                       \
+  {                                                  \
+    0x437e7d26, 0xa2fd, 0x49f2, {                    \
+      0xb3, 0x7c, 0x84, 0x23, 0xf0, 0x94, 0x72, 0x36 \
+    }                                                \
+  }
 
 //-----------------------------------------------------------------------------
 // nsHttpConnection - represents a connection to a HTTP server (or proxy)
@@ -64,7 +68,7 @@ MOZ_MAKE_ENUM_CLASS_BITWISE_OPERATORS(ConnectionExperienceState);
 
 class HttpConnectionBase : public nsSupportsWeakReference {
  public:
-  NS_INLINE_DECL_STATIC_IID(HTTPCONNECTIONBASE_IID)
+  NS_DECLARE_STATIC_IID_ACCESSOR(HTTPCONNECTIONBASE_IID)
 
   HttpConnectionBase();
 
@@ -97,7 +101,7 @@ class HttpConnectionBase : public nsSupportsWeakReference {
                                                nsIAsyncInputStream**,
                                                nsIAsyncOutputStream**) = 0;
 
-  virtual WebTransportSessionBase* GetWebTransportSession(
+  Http3WebTransportSession* GetWebTransportSession(
       nsAHttpTransaction* aTransaction) {
     return nullptr;
   }
@@ -122,8 +126,8 @@ class HttpConnectionBase : public nsSupportsWeakReference {
   virtual bool NoClientCertAuth() const { return true; }
 
   // HTTP/2 websocket support
-  virtual ExtendedCONNECTSupport GetExtendedCONNECTSupport() {
-    return ExtendedCONNECTSupport::NO_SUPPORT;
+  virtual WebSocketSupport GetWebSocketSupport() {
+    return WebSocketSupport::NO_SUPPORT;
   }
 
   void GetConnectionInfo(nsHttpConnectionInfo** ci) {
@@ -170,7 +174,6 @@ class HttpConnectionBase : public nsSupportsWeakReference {
   }
 
   void RecordConnectionCloseTelemetry(nsresult aReason);
-  void RecordConnectionAddressType();
 
  protected:
   // The capabailities associated with the most recent transaction
@@ -199,9 +202,9 @@ class HttpConnectionBase : public nsSupportsWeakReference {
       ConnectionExperienceState::Not_Experienced;
 
   ConnectionCloseReason mCloseReason = ConnectionCloseReason::UNSET;
-
-  bool mAddressTypeReported{false};
 };
+
+NS_DEFINE_STATIC_IID_ACCESSOR(HttpConnectionBase, HTTPCONNECTIONBASE_IID)
 
 #define NS_DECL_HTTPCONNECTIONBASE                                             \
   [[nodiscard]] nsresult Activate(nsAHttpTransaction*, uint32_t, int32_t)      \

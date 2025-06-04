@@ -4,21 +4,21 @@
 
 "use strict";
 
-/* global browser, onMessageFromTab */
+/* global browser, module, onMessageFromTab */
 
 class AboutCompatBroker {
   constructor(bindings) {
-    this._interventions = bindings.interventions;
+    this._injections = bindings.injections;
+    this._uaOverrides = bindings.uaOverrides;
     this._shims = bindings.shims;
 
-    if (!this._interventions && !this._shims) {
-      throw new Error(
-        "No interventions or shims; about:compat broker is not needed"
-      );
+    if (!this._injections && !this._uaOverrides && !this._shims) {
+      throw new Error("No interventions; about:compat broker is not needed");
     }
 
     this.portsToAboutCompatTabs = this.buildPorts();
-    this._interventions?.bindAboutCompatBroker(this);
+    this._injections?.bindAboutCompatBroker(this);
+    this._uaOverrides?.bindAboutCompatBroker(this);
     this._shims?.bindAboutCompatBroker(this);
   }
 
@@ -41,20 +41,19 @@ class AboutCompatBroker {
     return { broadcast };
   }
 
-  filterInterventions(interventions) {
-    return interventions
-      .filter(intervention => intervention.availableOnPlatform)
-      .map(intervention => {
-        const { id, active, bugs, hidden } = intervention;
-        let domain = intervention.label;
-        let bug = Object.keys(bugs)[0];
+  filterOverrides(overrides) {
+    return overrides
+      .filter(override => override.availableOnPlatform)
+      .map(override => {
+        const { id, active, bug, domain, hidden } = override;
         return { id, active, bug, domain, hidden };
       });
   }
 
   getInterventionById(id) {
     for (const [type, things] of Object.entries({
-      interventions: this._interventions?.getAvailableInterventions() || [],
+      overrides: this._uaOverrides?.getAvailableOverrides() || [],
+      interventions: this._injections?.getAvailableInjections() || [],
       shims: this._shims?.getAvailableShims() || [],
     })) {
       for (const what of things) {
@@ -73,7 +72,9 @@ class AboutCompatBroker {
           const id = msg.id;
           const { type, what } = this.getInterventionById(id);
           if (!what) {
-            return Promise.reject(`No such intervention to toggle: ${id}`);
+            return Promise.reject(
+              `No such override or intervention to toggle: ${id}`
+            );
           }
           const active = type === "shims" ? !what.disabledReason : what.active;
           this.portsToAboutCompatTabs
@@ -82,9 +83,17 @@ class AboutCompatBroker {
               switch (type) {
                 case "interventions": {
                   if (active) {
-                    await this._interventions?.disableIntervention(what);
+                    await this._injections?.disableInjection(what);
                   } else {
-                    await this._interventions?.enableIntervention(what);
+                    await this._injections?.enableInjection(what);
+                  }
+                  break;
+                }
+                case "overrides": {
+                  if (active) {
+                    await this._uaOverrides?.disableOverride(what);
+                  } else {
+                    await this._uaOverrides?.enableOverride(what);
                   }
                   break;
                 }
@@ -108,10 +117,16 @@ class AboutCompatBroker {
         }
         case "getAllInterventions": {
           return Promise.resolve({
+            overrides:
+              (this._uaOverrides?.isEnabled() &&
+                this.filterOverrides(
+                  this._uaOverrides?.getAvailableOverrides()
+                )) ||
+              false,
             interventions:
-              (this._interventions?.isEnabled() &&
-                this.filterInterventions(
-                  this._interventions?.getAvailableInterventions()
+              (this._injections?.isEnabled() &&
+                this.filterOverrides(
+                  this._injections?.getAvailableInjections()
                 )) ||
               false,
             shims: this._shims?.getAvailableShims() || false,
@@ -122,3 +137,5 @@ class AboutCompatBroker {
     });
   }
 }
+
+module.exports = AboutCompatBroker;

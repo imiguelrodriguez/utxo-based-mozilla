@@ -3,12 +3,8 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 :host {
-  --theme-card-border-radius: 10px;
-  --preview-image-border-radius: 9px;
+  --preview-image-border-radius: 6px;
   --theme-card-border-width: 2px;
-
-  box-sizing: border-box;
-  border-radius: var(--theme-card-border-radius);
 }
 
 moz-card {
@@ -17,32 +13,15 @@ moz-card {
 
 .theme-card {
   width: 120px;
-  border-radius: var(--theme-card-border-radius);
-  border: none;
-  box-shadow: none;
+  outline-offset: var(--focus-outline-offset);
+  border: var(--focus-outline-width) solid var(--card-border-color);
 
   &:hover {
     background-color: var(--button-background-color-hover);
   }
 
-  @media (forced-colors) {
-    &:hover {
-      border-color: SelectedItem;
-
-      .theme-name {
-        color: SelectedItem;
-      }
-    }
-
-    :host([checked]) & {
-      background-color: SelectedItem;
-      border-color: SelectedItemText;
-      color: SelectedItemText;
-
-      .theme-name {
-        color: SelectedItemText;
-      }
-    }
+  &:focus-visible {
+    outline: var(--focus-outline);
   }
 }
 
@@ -58,13 +37,6 @@ moz-card {
   border-top-left-radius: var(--preview-image-border-radius);
   border-top-right-radius: var(--preview-image-border-radius);
 
-  /*
-   * We set the background color here in case the
-   * ProfilesThemeCard.theme.contentColor doesn't exist. For example, when the
-   * theme card is a theme from AMO and not one of the default themes.
-   */
-  background-color: var(--newtab-background-color, var(--in-content-page-background));
-
   > img {
     -moz-context-properties: fill, stroke, fill-opacity;
     width: 100%;
@@ -75,19 +47,15 @@ moz-card {
 }
 
 .theme-name {
-  display: block;
-  padding: var(--space-small) var(--space-medium);
+  display: flex;
+  align-items: center;
+  padding-inline-start: var(--space-medium);
+  padding-block: var(--space-small);
 
-  border-inline-width: var(--theme-card-border-width);
-  border-block-end-width: var(--theme-card-border-width);
-  border-block-start: var(--card-border);
+  border-width: var(--theme-card-border-width);
+  border-top: var(--card-border);
+}
 
-  font-size: var(--font-size-small);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-
-  @media (forced-colors) {
-    color: ButtonText;
-  }
+:host([selected]) .theme-card {
+  border-color: var(--focus-outline-color);
 }

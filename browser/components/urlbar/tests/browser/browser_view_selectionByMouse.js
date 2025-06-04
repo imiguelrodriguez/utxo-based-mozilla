@@ -352,6 +352,9 @@ add_task(async function buttons() {
             id: "urlbar-result-menu-learn-more-about-firefox-suggest",
           },
           isBlockable: true,
+          blockL10n: {
+            id: "urlbar-result-menu-dismiss-firefox-suggest",
+          },
         }
       ),
       new UrlbarResult(
@@ -537,12 +540,9 @@ add_task(async function buttons() {
 
 async function waitForElements(selectors) {
   let elements;
-  await BrowserTestUtils.waitForCondition(
-    () => {
-      elements = selectors.map(s => document.querySelector(s));
-      return elements.every(e => e && BrowserTestUtils.isVisible(e));
-    },
-    "Waiting for elements to become visible: " + JSON.stringify(selectors)
-  );
+  await BrowserTestUtils.waitForCondition(() => {
+    elements = selectors.map(s => document.querySelector(s));
+    return elements.every(e => e && BrowserTestUtils.isVisible(e));
+  }, "Waiting for elements to become visible: " + JSON.stringify(selectors));
   return elements;
 }

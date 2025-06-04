@@ -1,4 +1,5 @@
 [DEFAULT]
+skip-if = ["os == 'android'"] # bug 1730213
 head = "head.js"
 firefox-appdir = "browser"
 support-files = ["data/engine.xml"]
@@ -12,8 +13,6 @@ support-files = ["data/engine.xml"]
 ["test_UrlbarController_unit.js"]
 
 ["test_UrlbarPrefs.js"]
-
-["test_UrlbarProviderSemanticHistorySearch.js"]
 
 ["test_UrlbarQueryContext.js"]
 
@@ -89,8 +88,6 @@ prefs = [
 
 ["test_frecency_alternative_nimbus.js"]
 
-["test_geolocationUtils.js"]
-
 ["test_heuristic_cancel.js"]
 
 ["test_hideSponsoredHistory.js"]
@@ -98,6 +95,7 @@ prefs = [
 ["test_history_bookmark_results_on_search_service_failure.js"]
 
 ["test_keywords.js"]
+skip-if = ["os == 'linux'"] # bug 1474616
 
 ["test_l10nCache.js"]
 
@@ -118,16 +116,10 @@ prefs = [
 ["test_protocol_ignore.js"]
 
 ["test_protocol_swap.js"]
-skip-if = [
-  "os == 'linux' && os_version == '24.04' && processor == 'x86_64' && display == 'x11'", # Bug 1968543
-]
 
 ["test_providerAliasEngines.js"]
 
 ["test_providerHeuristicFallback.js"]
-skip-if = [
-  "os == 'linux' && os_version == '24.04' && processor == 'x86_64' && display == 'x11'", # Bug 1968543
-]
 
 ["test_providerHistoryUrlHeuristic.js"]
 
@@ -175,9 +167,6 @@ skip-if = ["!sync"]
 ["test_search_engine_restyle.js"]
 
 ["test_search_suggestions.js"]
-skip-if = [
-  "os == 'linux' && os_version == '24.04' && processor == 'x86_64' && display == 'x11'", # Bug 1968543
-]
 
 ["test_search_suggestions_aliases.js"]
 

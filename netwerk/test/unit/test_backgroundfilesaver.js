@@ -29,7 +29,7 @@ const BackgroundFileSaverStreamListener = Components.Constructor(
 const StringInputStream = Components.Constructor(
   "@mozilla.org/io/string-input-stream;1",
   "nsIStringInputStream",
-  "setByteStringData"
+  "setData"
 );
 
 const REQUEST_SUSPEND_AT = 1024 * 1024 * 4;
@@ -166,7 +166,10 @@ function promiseSaverComplete(aSaver, aOnTargetChangeFn) {
  */
 function promiseCopyToSaver(aSourceString, aSaverOutputStream, aCloseWhenDone) {
   return new Promise((resolve, reject) => {
-    let inputStream = new StringInputStream(aSourceString);
+    let inputStream = new StringInputStream(
+      aSourceString,
+      aSourceString.length
+    );
     let copier = Cc[
       "@mozilla.org/network/async-stream-copier;1"
     ].createInstance(Ci.nsIAsyncStreamCopier);
@@ -213,7 +216,10 @@ function promiseCopyToSaver(aSourceString, aSaverOutputStream, aCloseWhenDone) {
 function promisePumpToSaver(aSourceString, aSaverStreamListener) {
   return new Promise((resolve, reject) => {
     aSaverStreamListener.QueryInterface(Ci.nsIStreamListener);
-    let inputStream = new StringInputStream(aSourceString);
+    let inputStream = new StringInputStream(
+      aSourceString,
+      aSourceString.length
+    );
     let pump = Cc["@mozilla.org/network/input-stream-pump;1"].createInstance(
       Ci.nsIInputStreamPump
     );

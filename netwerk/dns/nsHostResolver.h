@@ -53,6 +53,8 @@ static inline uint32_t MaxResolverThreads() {
   (((x) == nsIDNSService::MODE_NATIVEONLY) || \
    ((x) == nsIDNSService::MODE_TRROFF))
 
+extern mozilla::Atomic<bool, mozilla::Relaxed> gNativeIsLocalhost;
+
 #define MAX_NON_PRIORITY_REQUESTS 150
 
 class AHostResolver {
@@ -101,7 +103,18 @@ class nsHostResolver : public nsISupports, public AHostResolver {
   /**
    * creates an addref'd instance of a nsHostResolver object.
    */
-  static nsresult Create(nsHostResolver** result);
+  static nsresult Create(uint32_t maxCacheEntries,  // zero disables cache
+                         uint32_t defaultCacheEntryLifetime,  // seconds
+                         uint32_t defaultGracePeriod,         // seconds
+                         nsHostResolver** result);
+
+  /**
+   * Set (new) cache limits.
+   */
+  void SetCacheLimits(uint32_t maxCacheEntries,  // zero disables cache
+                      uint32_t defaultCacheEntryLifetime,  // seconds
+                      uint32_t defaultGracePeriod);        // seconds
+
   /**
    * puts the resolver in the shutdown state, which will cause any pending
    * callbacks to be detached.  any future calls to ResolveHost will fail.
@@ -194,7 +207,9 @@ class nsHostResolver : public nsISupports, public AHostResolver {
   bool TRRServiceEnabledForRecord(nsHostRecord* aRec) MOZ_REQUIRES(mLock);
 
  private:
-  explicit nsHostResolver();
+  explicit nsHostResolver(uint32_t maxCacheEntries,
+                          uint32_t defaultCacheEntryLifetime,
+                          uint32_t defaultGracePeriod);
   virtual ~nsHostResolver();
 
   bool DoRetryTRR(AddrHostRecord* aAddrRec,
@@ -235,10 +250,8 @@ class nsHostResolver : public nsISupports, public AHostResolver {
   nsresult ConditionallyCreateThread(nsHostRecord* rec) MOZ_REQUIRES(mLock);
 
   /**
-   * Starts a new lookup in the background for cached entries that are in the
-   * grace period or that are are negative.
-   *
-   * Also records telemetry for type of cache hit (HIT/NEGATIVE_HIT/RENEWAL).
+   * Starts a new lookup in the background for entries that are in the grace
+   * period with a failed connect or all cached entries are negative.
    */
   nsresult ConditionallyRefreshRecord(nsHostRecord* rec, const nsACString& host,
                                       const mozilla::MutexAutoLock& aLock)
@@ -281,6 +294,9 @@ class nsHostResolver : public nsISupports, public AHostResolver {
     METHOD_NETWORK_SHARED = 7
   };
 
+  uint32_t mMaxCacheEntries = 0;
+  uint32_t mDefaultCacheLifetime = 0;  // granularity seconds
+  uint32_t mDefaultGracePeriod = 0;    // granularity seconds
   // mutable so SizeOfIncludingThis can be const
   mutable Mutex mLock{"nsHostResolver.mLock"};
   CondVar mIdleTaskCV;

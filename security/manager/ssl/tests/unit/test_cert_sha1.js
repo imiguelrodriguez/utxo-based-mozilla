@@ -28,7 +28,7 @@ function checkEndEntity(cert, expectedResult) {
     certdb,
     cert,
     expectedResult,
-    Ci.nsIX509CertDB.verifyUsageTLSServer,
+    certificateUsageSSLServer,
     VALIDATION_TIME
   );
 }

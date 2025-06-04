@@ -263,9 +263,7 @@ this.pageAction = class extends ExtensionAPIPersistent {
           menu.id === "pageActionContextMenu" &&
           trigger &&
           getActionId() === this.browserPageAction.id &&
-          !this.browserPageAction.getDisabled(trigger.ownerGlobal) &&
-          (this.extension.hasPermission("contextMenus") ||
-            this.extension.hasPermission("menus"))
+          !this.browserPageAction.getDisabled(trigger.ownerGlobal)
         ) {
           global.actionContextMenu({
             extension: this.extension,

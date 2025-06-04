@@ -131,10 +131,7 @@ export class AboutLoginsParent extends JSWindowActorParent {
         break;
       }
       case "AboutLogins:PrimaryPasswordRequest": {
-        await this.#primaryPasswordRequest(
-          message.data.messageId,
-          message.data.reason
-        );
+        await this.#primaryPasswordRequest(message.data);
         break;
       }
       case "AboutLogins:Subscribe": {
@@ -248,7 +245,7 @@ export class AboutLoginsParent extends JSWindowActorParent {
     this.#ownerGlobal.openPreferences("privacy-logins");
   }
 
-  async #primaryPasswordRequest(messageId, reason) {
+  async #primaryPasswordRequest(messageId) {
     if (!messageId) {
       throw new Error("AboutLogins:PrimaryPasswordRequest: no messageId.");
     }
@@ -280,8 +277,7 @@ export class AboutLoginsParent extends JSWindowActorParent {
       isOSAuthEnabled,
       AboutLogins._authExpirationTime,
       messageText.value,
-      captionText.value,
-      reason
+      captionText.value
     );
     this.sendAsyncMessage("AboutLogins:PrimaryPasswordResponse", {
       result: isAuthorized,
@@ -398,14 +394,12 @@ export class AboutLoginsParent extends JSWindowActorParent {
       ]);
     }
 
-    let reason = "export_logins";
     let { isAuthorized, telemetryEvent } = await lazy.LoginHelper.requestReauth(
       this.browsingContext.embedderElement,
       true,
       null, // Prompt regardless of a recent prompt
       messageText.value,
-      captionText.value,
-      reason
+      captionText.value
     );
 
     let { name, extra = {}, value = null } = telemetryEvent;
@@ -416,13 +410,6 @@ export class AboutLoginsParent extends JSWindowActorParent {
 
     if (!isAuthorized) {
       return;
-    }
-
-    if (!this.browsingContext.canOpenModalPicker) {
-      // Prompting for os auth removed the focus from about:logins.
-      // Waiting for about:logins window to re-gain the focus, because only
-      // active browsing contexts are allowed to open the file picker.
-      await this.sendQuery("AboutLogins:WaitForFocus");
     }
 
     let fp = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
@@ -837,8 +824,9 @@ class AboutLoginsInternal {
     // by other more Sync-specific pages.
     const loggedIn = state.status != lazy.UIState.STATUS_NOT_CONFIGURED;
     const passwordSyncEnabled = state.syncEnabled && lazy.PASSWORD_SYNC_ENABLED;
-    const accountURL =
-      await lazy.FxAccounts.config.promiseManageURI("password-manager");
+    const accountURL = await lazy.FxAccounts.config.promiseManageURI(
+      "password-manager"
+    );
 
     return {
       loggedIn,

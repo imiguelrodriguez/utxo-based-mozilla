@@ -26,7 +26,7 @@ add_task(
       prefs: [["browser.translations.select.enable", true]],
     });
 
-    await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
     await SelectTranslationsTestUtils.testContextMenuItemWithLocales({
       runInPage,

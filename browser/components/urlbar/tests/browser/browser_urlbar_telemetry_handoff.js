@@ -4,7 +4,7 @@
 "use strict";
 
 const { SearchSERPTelemetry } = ChromeUtils.importESModule(
-  "moz-src:///browser/components/search/SearchSERPTelemetry.sys.mjs"
+  "resource:///modules/SearchSERPTelemetry.sys.mjs"
 );
 
 const TEST_PROVIDER_INFO = [
@@ -76,7 +76,9 @@ add_setup(async function () {
 add_task(async function test_search() {
   Services.telemetry.clearScalars();
   Services.telemetry.clearEvents();
-  clearSAPTelemetry();
+
+  const histogram =
+    TelemetryTestUtils.getAndClearKeyedHistogram("SEARCH_COUNTS");
 
   info("Load about:newtab in new window");
   const newtab = "about:newtab";
@@ -97,7 +99,7 @@ add_task(async function test_search() {
   await onLoaded;
 
   info("Check the telemetries");
-  await assertHandoffResult();
+  await assertHandoffResult(histogram);
 
   BrowserTestUtils.removeTab(tab);
 });
@@ -105,7 +107,9 @@ add_task(async function test_search() {
 add_task(async function test_search_private_mode() {
   Services.telemetry.clearScalars();
   Services.telemetry.clearEvents();
-  clearSAPTelemetry();
+
+  const histogram =
+    TelemetryTestUtils.getAndClearKeyedHistogram("SEARCH_COUNTS");
 
   info("Open private window");
   let privateWindow = await BrowserTestUtils.openNewBrowserWindow({
@@ -126,22 +130,28 @@ add_task(async function test_search_private_mode() {
   await onLoaded;
 
   info("Check the telemetries");
-  await assertHandoffResult();
+  await assertHandoffResult(histogram);
 
   await BrowserTestUtils.closeWindow(privateWindow);
 });
 
-async function assertHandoffResult() {
+async function assertHandoffResult(histogram) {
   await assertScalars([
     ["browser.engagement.navigation.urlbar_handoff", "search_enter", 1],
     ["browser.search.content.urlbar_handoff", "example:tagged:ff", 1],
   ]);
+  await assertHistogram(histogram, [["other-Example.urlbar-handoff", 1]]);
+}
 
-  await SearchUITestUtils.assertSAPTelemetry({
-    engineName: "Example",
-    source: "urlbar-handoff",
-    count: 1,
-  });
+async function assertHistogram(histogram, expectedResults) {
+  await TestUtils.waitForCondition(() => {
+    const snapshot = histogram.snapshot();
+    return expectedResults.every(([key]) => key in snapshot);
+  }, "Wait until the histogram has expected keys");
+
+  for (const [key, value] of expectedResults) {
+    TelemetryTestUtils.assertKeyedHistogramSum(histogram, key, value);
+  }
 }
 
 async function assertScalars(expectedResults) {

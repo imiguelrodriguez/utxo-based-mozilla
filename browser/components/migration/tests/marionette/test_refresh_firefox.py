@@ -163,7 +163,7 @@ class TestFirefoxRefresh(MarionetteTestCase):
           let expireTime = Math.floor(Date.now() / 1000) + 15 * 60;
           Services.cookies.add(arguments[0], arguments[1], arguments[2], arguments[3],
                                true, false, false, expireTime, {},
-                               Ci.nsICookie.SAMESITE_UNSET, Ci.nsICookie.SCHEME_UNSET);
+                               Ci.nsICookie.SAMESITE_NONE, Ci.nsICookie.SCHEME_UNSET);
         """,
             script_args=(
                 self._cookieHost,
@@ -306,7 +306,7 @@ class TestFirefoxRefresh(MarionetteTestCase):
         """,
             script_args=(self._historyURL,),
         )
-        if type(historyResult) is str:
+        if type(historyResult) == str:
             self.fail(historyResult)
             return
 
@@ -322,7 +322,7 @@ class TestFirefoxRefresh(MarionetteTestCase):
         """,
             script_args=(self._formHistoryFieldName,),
         )
-        if type(formFieldResults) is str:
+        if type(formFieldResults) == str:
             self.fail(formFieldResults)
             return
 
@@ -357,7 +357,7 @@ class TestFirefoxRefresh(MarionetteTestCase):
           }).then(resolve);
         """,
         )
-        if type(formAutofillResults) is str:
+        if type(formAutofillResults) == str:
             self.fail(formAutofillResults)
             return
 
@@ -465,7 +465,7 @@ class TestFirefoxRefresh(MarionetteTestCase):
           });
         """
         )
-        if type(result) is not dict:
+        if type(result) != dict:
             self.fail(result)
             return
         self.assertEqual(result["accountData"]["email"], "test@test.com")

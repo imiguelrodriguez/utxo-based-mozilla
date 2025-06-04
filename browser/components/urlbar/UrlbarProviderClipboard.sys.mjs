@@ -38,9 +38,6 @@ class ProviderClipboard extends UrlbarProvider {
     return "UrlbarProviderClipboard";
   }
 
-  /**
-   * @returns {Values<typeof UrlbarUtils.PROVIDER_TYPE>}
-   */
   get type() {
     return UrlbarUtils.PROVIDER_TYPE.PROFILE;
   }
@@ -49,7 +46,7 @@ class ProviderClipboard extends UrlbarProvider {
     this.#previousClipboard.value = newValue;
   }
 
-  async isActive(queryContext, controller) {
+  isActive(queryContext, controller) {
     // Return clipboard results only for empty searches.
     if (
       !lazy.UrlbarPrefs.get("clipboard.featureGate") ||
@@ -59,7 +56,20 @@ class ProviderClipboard extends UrlbarProvider {
     ) {
       return false;
     }
+    const obj = {};
+    if (
+      !TelemetryStopwatch.running(
+        "FX_URLBAR_PROVIDER_CLIPBOARD_READ_TIME_MS",
+        obj
+      )
+    ) {
+      TelemetryStopwatch.start(
+        "FX_URLBAR_PROVIDER_CLIPBOARD_READ_TIME_MS",
+        obj
+      );
+    }
     let textFromClipboard = controller.browserWindow.readFromClipboard();
+    TelemetryStopwatch.finish("FX_URLBAR_PROVIDER_CLIPBOARD_READ_TIME_MS", obj);
 
     // Check for spaces in clipboard text to avoid suggesting
     // clipboard content including both a url and the following text.
@@ -92,16 +102,15 @@ class ProviderClipboard extends UrlbarProvider {
   }
 
   #validUrl(clipboardVal) {
-    let givenUrl = URL.parse(clipboardVal);
-    if (!givenUrl) {
+    try {
+      let givenUrl;
+      givenUrl = new URL(clipboardVal);
+      if (givenUrl.protocol == "http:" || givenUrl.protocol == "https:") {
+        return givenUrl.href;
+      }
+    } catch (ex) {
       // Not a valid URI.
-      return null;
     }
-
-    if (givenUrl.protocol == "http:" || givenUrl.protocol == "https:") {
-      return givenUrl.href;
-    }
-
     return null;
   }
 
@@ -125,6 +134,9 @@ class ProviderClipboard extends UrlbarProvider {
         url: [this.#previousClipboard.value, UrlbarUtils.HIGHLIGHT.NONE],
         icon: "chrome://global/skin/icons/clipboard.svg",
         isBlockable: true,
+        blockL10n: {
+          id: "urlbar-result-menu-dismiss-firefox-suggest",
+        },
       })
     );
 

@@ -50,7 +50,9 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
   }
 
   /**
-   * @returns {Values<typeof UrlbarUtils.PROVIDER_TYPE>}
+   * Returns the type of this provider.
+   *
+   * @returns {integer} one of the types from UrlbarUtils.PROVIDER_TYPE.*
    */
   get type() {
     return UrlbarUtils.PROVIDER_TYPE.PROFILE;
@@ -60,8 +62,10 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
    * Whether this provider should be invoked for the given context.
    * If this method returns false, the providers manager won't start a query
    * with this provider, to save on resources.
+   *
+   * @returns {boolean} Whether this provider should be invoked for the search.
    */
-  async isActive() {
+  isActive() {
     // For now we don't actually use this provider to query open tabs, instead
     // we join the temp table in UrlbarProviderPlaces.
     return false;
@@ -77,7 +81,7 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
   /**
    * Return unique urls that are open for given user context id.
    *
-   * @param {number|string} userContextId Containers user context id
+   * @param {integer|string} userContextId Containers user context id
    * @param {boolean} [isInPrivateWindow] In private browsing window or not
    * @returns {Array} urls
    */
@@ -134,18 +138,17 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
    * Return urls registered in the memory table.
    * This is mostly for testing purposes.
    *
-   * @returns {Promise<{url: string, userContextId: number, groupId: string | null, count: number}[]>}
+   * @returns {Array} Array of {url, userContextId, count} objects.
    */
   static async getDatabaseRegisteredOpenTabsForTests() {
     let conn = await lazy.PlacesUtils.promiseLargeCacheDBConnection();
     let rows = await conn.execute(
-      "SELECT url, userContextId, groupId, open_count FROM moz_openpages_temp"
+      "SELECT url, userContextId, open_count FROM moz_openpages_temp"
     );
     return rows.map(r => ({
-      url: r.getResultByName("url"),
-      userContextId: r.getResultByName("userContextId"),
-      tabGroup: r.getResultByName("groupId"),
-      count: r.getResultByName("open_count"),
+      url: r.getResultByIndex(0),
+      userContextId: r.getResultByIndex(1),
+      count: r.getResultByIndex(2),
     }));
   }
 
@@ -153,9 +156,9 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
    * Return userContextId that is used in the moz_openpages_temp table and
    * returned as part of the payload. It differs only for private windows.
    *
-   * @param {number} userContextId Containers user context id
+   * @param {integer} userContextId Containers user context id
    * @param {boolean} isInPrivateWindow In private browsing window or not
-   * @returns {number} userContextId
+   * @returns {interger} userContextId
    */
   static getUserContextIdForOpenPagesTable(userContextId, isInPrivateWindow) {
     return isInPrivateWindow ? PRIVATE_USER_CONTEXT_ID : userContextId;
@@ -164,7 +167,7 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
   /**
    * Return whether the provided userContextId is for a non-private tab.
    *
-   * @param {number} userContextId the userContextId to evaluate
+   * @param {integer} userContextId the userContextId to evaluate
    * @returns {boolean}
    */
   static isNonPrivateUserContextId(userContextId) {
@@ -174,7 +177,7 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
   /**
    * Return whether the provided userContextId is for a container.
    *
-   * @param {number} userContextId the userContextId to evaluate
+   * @param {integer} userContextId the userContextId to evaluate
    * @returns {boolean}
    */
   static isContainerUserContextId(userContextId) {
@@ -192,9 +195,7 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
       // Populate the table with the current cached tabs.
       for (let [userContextId, entries] of gOpenTabUrls) {
         for (let [url, count] of entries) {
-          // TODO bug1964713: Cached items don't store group ID, so we can't
-          // get the group ID the first time a tab is grouped or on session restore
-          await addToMemoryTable(url, userContextId, null, count).catch(
+          await addToMemoryTable(url, userContextId, count).catch(
             console.error
           );
         }
@@ -205,11 +206,10 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
    * Registers a tab as open.
    *
    * @param {string} url Address of the tab
-   * @param {number|string} userContextId Containers user context id
-   * @param {?string} groupId The id of the group the tab belongs to
+   * @param {integer|string} userContextId Containers user context id
    * @param {boolean} isInPrivateWindow In private browsing window or not
    */
-  static async registerOpenTab(url, userContextId, groupId, isInPrivateWindow) {
+  static async registerOpenTab(url, userContextId, isInPrivateWindow) {
     // It's fairly common to retrieve the value from an HTML attribute, that
     // means we're getting sometimes a string, sometimes an integer. As we're
     // using this as key of a Map, we must treat it consistently.
@@ -225,7 +225,6 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
     lazy.logger.info("Registering openTab: ", {
       url,
       userContextId,
-      groupId,
       isInPrivateWindow,
     });
     userContextId = UrlbarProviderOpenTabs.getUserContextIdForOpenPagesTable(
@@ -239,23 +238,17 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
       gOpenTabUrls.set(userContextId, entries);
     }
     entries.set(url, (entries.get(url) ?? 0) + 1);
-    await addToMemoryTable(url, userContextId, groupId).catch(console.error);
+    await addToMemoryTable(url, userContextId).catch(console.error);
   }
 
   /**
    * Unregisters a previously registered open tab.
    *
    * @param {string} url Address of the tab
-   * @param {number|string} userContextId Containers user context id
-   * @param {?string} groupId The id of the group the tab belongs to
+   * @param {integer|string} userContextId Containers user context id
    * @param {boolean} isInPrivateWindow In private browsing window or not
    */
-  static async unregisterOpenTab(
-    url,
-    userContextId,
-    groupId,
-    isInPrivateWindow
-  ) {
+  static async unregisterOpenTab(url, userContextId, isInPrivateWindow) {
     // It's fairly common to retrieve the value from an HTML attribute, that
     // means we're getting sometimes a string, sometimes an integer. As we're
     // using this as key of a Map, we must treat it consistently.
@@ -263,7 +256,6 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
     lazy.logger.info("Unregistering openTab: ", {
       url,
       userContextId,
-      groupId,
       isInPrivateWindow,
     });
     userContextId = UrlbarProviderOpenTabs.getUserContextIdForOpenPagesTable(
@@ -285,9 +277,7 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
       } else {
         entries.set(url, oldCount - 1);
       }
-      await removeFromMemoryTable(url, userContextId, groupId).catch(
-        console.error
-      );
+      await removeFromMemoryTable(url, userContextId).catch(console.error);
     }
   }
 
@@ -310,7 +300,7 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
     await UrlbarProviderOpenTabs.promiseDBPopulated;
     await conn.executeCached(
       `
-      SELECT url, userContextId, groupId
+      SELECT url, userContextId
       FROM moz_openpages_temp
     `,
       {},
@@ -327,7 +317,6 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
             {
               url: row.getResultByName("url"),
               userContextId: row.getResultByName("userContextId"),
-              tabGroup: row.getResultByName("groupId"),
             }
           )
         );
@@ -341,11 +330,10 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
  *
  * @param {string} url Address of the page
  * @param {number} userContextId Containers user context id
- * @param {?string} groupId The id of the group the tab belongs to
  * @param {number} [count] The number of times the page is open
  * @returns {Promise} resolved after the addition.
  */
-async function addToMemoryTable(url, userContextId, groupId, count = 1) {
+async function addToMemoryTable(url, userContextId, count = 1) {
   if (!UrlbarProviderOpenTabs.memoryTableInitialized) {
     return;
   }
@@ -353,20 +341,18 @@ async function addToMemoryTable(url, userContextId, groupId, count = 1) {
     let conn = await lazy.PlacesUtils.promiseLargeCacheDBConnection();
     await conn.executeCached(
       `
-      INSERT OR REPLACE INTO moz_openpages_temp (url, userContextId, groupId, open_count)
+      INSERT OR REPLACE INTO moz_openpages_temp (url, userContextId, open_count)
       VALUES ( :url,
                 :userContextId,
-                :groupId,
                 IFNULL( ( SELECT open_count + 1
                           FROM moz_openpages_temp
                           WHERE url = :url
-                          AND userContextId = :userContextId
-                          AND groupId IS :groupId ),
+                          AND userContextId = :userContextId ),
                         :count
                       )
               )
     `,
-      { url, userContextId, groupId, count }
+      { url, userContextId, count }
     );
   });
 }
@@ -376,10 +362,9 @@ async function addToMemoryTable(url, userContextId, groupId, count = 1) {
  *
  * @param {string} url Address of the page
  * @param {number} userContextId Containers user context id
- * @param {?string} groupId The id of the group the tab belongs to
  * @returns {Promise} resolved after the removal.
  */
-async function removeFromMemoryTable(url, userContextId, groupId) {
+async function removeFromMemoryTable(url, userContextId) {
   if (!UrlbarProviderOpenTabs.memoryTableInitialized) {
     return;
   }
@@ -391,9 +376,8 @@ async function removeFromMemoryTable(url, userContextId, groupId) {
       SET open_count = open_count - 1
       WHERE url = :url
         AND userContextId = :userContextId
-        AND groupId IS :groupId
     `,
-      { url, userContextId, groupId }
+      { url, userContextId }
     );
   });
 }

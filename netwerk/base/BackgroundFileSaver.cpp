@@ -12,7 +12,7 @@
 #include "mozilla/Casting.h"
 #include "mozilla/Logging.h"
 #include "mozilla/ScopeExit.h"
-#include "mozilla/glean/NetwerkMetrics.h"
+#include "mozilla/Telemetry.h"
 #include "nsCOMArray.h"
 #include "nsComponentManagerUtils.h"
 #include "nsDependentSubstring.h"
@@ -750,8 +750,8 @@ nsresult BackgroundFileSaver::NotifySaveComplete() {
   // during the session in a telemetry histogram, and we reset the maximum
   // thread counter for the next download session
   if (sThreadCount == 0) {
-    glean::network::backgroundfilesaver_thread_count.AccumulateSingleSample(
-        sTelemetryMaxThreadCount);
+    Telemetry::Accumulate(Telemetry::BACKGROUNDFILESAVER_THREAD_COUNT,
+                          sTelemetryMaxThreadCount);
     sTelemetryMaxThreadCount = 0;
   }
 

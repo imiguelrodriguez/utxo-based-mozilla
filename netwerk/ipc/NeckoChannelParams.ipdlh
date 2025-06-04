@@ -17,7 +17,6 @@ include ProtocolTypes;
 include "mozilla/dom/DomSecurityIPCUtils.h";
 include "mozilla/dom/FetchIPCTypes.h";
 include "mozilla/dom/FeaturePolicyUtils.h";
-include "mozilla/dom/NavigationAPIIPCUtils.h";
 include "mozilla/dom/PropertyBagUtils.h";
 include "mozilla/dom/ReferrerInfoUtils.h";
 include "mozilla/ipc/URIUtils.h";
@@ -28,7 +27,7 @@ include "mozilla/net/ClassOfService.h";
 using mozilla::OriginAttributes from "mozilla/ipc/BackgroundUtils.h";
 using mozilla::net::RequestHeaderTuples from "mozilla/net/PHttpChannelParams.h";
 using struct nsHttpAtom from "nsHttp.h";
-[MoveOnly] using class mozilla::net::nsHttpResponseHead from "nsHttpResponseHead.h";
+using class mozilla::net::nsHttpResponseHead from "nsHttpResponseHead.h";
 using class mozilla::TimeStamp from "mozilla/TimeStamp.h";
 [RefCounted] using class nsIPropertyBag2 from "nsIPropertyBag2.h";
 [RefCounted] using class nsDOMNavigationTiming from "nsDOMNavigationTiming.h";
@@ -37,15 +36,11 @@ using nsContentPolicyType from "nsIContentPolicy.h";
 using mozilla::net::PreferredAlternativeDataDeliveryTypeIPC from "nsICacheInfoChannel.h";
 using nsILoadInfo::CrossOriginEmbedderPolicy from "nsILoadInfo.h";
 using nsILoadInfo::StoragePermissionState from "nsILoadInfo.h";
-using nsILoadInfo::IPAddressSpace from "nsILoadInfo.h";
 using struct mozilla::dom::LoadingSessionHistoryInfo from "mozilla/dom/SessionHistoryEntry.h";
 using mozilla::dom::RequestMode from "mozilla/dom/RequestBinding.h";
 using mozilla::net::LinkHeader from "nsNetUtil.h";
 using mozilla::dom::FeaturePolicyInfo from "mozilla/dom/FeaturePolicy.h";
 using nsILoadInfo::HTTPSUpgradeTelemetryType from "nsILoadInfo.h";
-using nsILoadInfo::SchemelessInputType from "nsILoadInfo.h";
-using mozilla::dom::UserNavigationInvolvement from "mozilla/dom/UserNavigationInvolvement.h";
-using mozilla::RFPTargetSet from "nsRFPService.h";
 
 namespace mozilla {
 namespace net {
@@ -137,7 +132,6 @@ struct LoadInfoArgs
   bool                        initialSecurityCheckDone;
   bool                        isInThirdPartyContext;
   bool?                       isThirdPartyContextToTopWindow;
-  bool                        isOn3PCBExceptionList;
   bool                        isFormSubmission;
   bool                        isGETRequest;
   bool                        sendCSPViolationEvents;
@@ -145,7 +139,7 @@ struct LoadInfoArgs
   RedirectHistoryEntryInfo[]  redirectChainIncludingInternalRedirects;
   RedirectHistoryEntryInfo[]  redirectChain;
   bool                        hasInjectedCookieForCookieBannerHandling;
-  SchemelessInputType         schemelessInput;
+  bool                        wasSchemelessInput;
   HTTPSUpgradeTelemetryType   httpsUpgradeTelemetry;
 
   /**
@@ -197,16 +191,13 @@ struct LoadInfoArgs
   uint32_t                    requestBlockingReason;
   CSPInfo?                    cspToInheritInfo;
   StoragePermissionState      storagePermission;
-  IPAddressSpace              parentIPAddressSpace;
-  IPAddressSpace              ipAddressSpace;
-  RFPTargetSet?               overriddenFingerprintingSettings;
+  uint64_t?                   overriddenFingerprintingSettings;
   bool                        isMetaRefresh;
   CrossOriginEmbedderPolicy   loadingEmbedderPolicy;
   bool                        originTrialCoepCredentiallessEnabledForTopLevel;
   nullable nsIURI             unstrippedURI;
   InterceptionInfoArg?        interceptionInfo;
   bool                        isNewWindowTarget;
-  UserNavigationInvolvement   userNavigationInvolvement;
 };
 
 /**
@@ -238,7 +229,7 @@ struct ParentLoadInfoForwarderArgs
 
   uint32_t httpsOnlyStatus;
 
-  SchemelessInputType schemelessInput;
+  bool wasSchemelessInput;
 
   HTTPSUpgradeTelemetryType httpsUpgradeTelemetry;
 
@@ -290,7 +281,7 @@ struct ParentLoadInfoForwarderArgs
 
   StoragePermissionState storagePermission;
 
-  RFPTargetSet? overriddenFingerprintingSettings;
+  uint64_t? overriddenFingerprintingSettings;
 
   bool isMetaRefresh;
 
@@ -298,11 +289,7 @@ struct ParentLoadInfoForwarderArgs
 
   bool isInThirdPartyContext;
 
-  bool isOn3PCBExceptionList;
-
   nullable nsIURI unstrippedURI;
-
-  UserNavigationInvolvement userNavigationInvolvement;
 
   // IMPORTANT: when you add new properites here you must also update
   // LoadInfoToParentLoadInfoForwarder and MergeParentLoadInfoForwarder
@@ -399,7 +386,6 @@ struct HttpChannelOpenArgs
   nsString                    classicScriptHintCharset;
   nsString                    documentCharacterSet;
   bool                        isUserAgentHeaderModified;
-  nsString                    initiatorType;
 };
 
 struct HttpChannelConnectArgs
@@ -485,6 +471,7 @@ struct CookieStruct
   bool      isSecure;
   bool      isPartitioned;
   int32_t   sameSite;
+  int32_t   rawSameSite;
   uint8_t   schemeMap;
 };
 
@@ -656,17 +643,15 @@ union GIOChannelCreationArgs
 };
 
 //-----------------------------------------------------------------------------
-// File IPDL structs
+// Data IPDL structs
 //-----------------------------------------------------------------------------
 
-struct FileChannelInfo
+struct DataChannelInfo
 {
   nullable nsIURI        uri;
-  nullable nsIURI        originalURI;
   uint32_t               loadFlags;
   LoadInfoArgs           loadInfo;
   nsCString              contentType;
-  uint64_t               channelId;
 };
 
 struct RemoteStreamInfo {

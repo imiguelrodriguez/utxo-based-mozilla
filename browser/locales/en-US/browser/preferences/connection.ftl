@@ -97,3 +97,5 @@ connection-dns-over-https-url-custom =
     .label = Custom
     .accesskey = C
     .tooltiptext = Enter your preferred URL for resolving DNS over HTTPS
+
+connection-dns-over-https-custom-label = Custom

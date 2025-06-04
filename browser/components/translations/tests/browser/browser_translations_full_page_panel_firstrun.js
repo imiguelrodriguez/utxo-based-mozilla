@@ -4,19 +4,19 @@
 "use strict";
 
 /**
- * Tests that the first run message is displayed prior to performing a
- * translation, but is no longer displayed after a translation occurs.
+ * Tests that the first run message is displayed.
  */
 add_task(async function test_translations_panel_firstrun() {
-  const { cleanup, resolveDownloads, runInPage } = await loadTestPage({
+  const { cleanup } = await loadTestPage({
     page: SPANISH_PAGE_URL,
     languagePairs: LANGUAGE_PAIRS,
+    prefs: [["browser.translations.panelShown", false]],
   });
 
   await FullPageTranslationsTestUtils.openPanel({
     expectedFromLanguage: "es",
     expectedToLanguage: "en",
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewFirstShow,
   });
 
   await FullPageTranslationsTestUtils.clickCancelButton();
@@ -28,28 +28,10 @@ add_task(async function test_translations_panel_firstrun() {
   await FullPageTranslationsTestUtils.openPanel({
     expectedFromLanguage: "es",
     expectedToLanguage: "en",
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
-  });
-
-  await FullPageTranslationsTestUtils.clickTranslateButton({
-    downloadHandler: resolveDownloads,
-  });
-
-  await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated({
-    fromLanguage: "es",
-    toLanguage: "en",
-    runInPage,
-  });
-
-  await FullPageTranslationsTestUtils.openPanel({
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewRevisit,
-  });
-
-  await FullPageTranslationsTestUtils.clickRestoreButton();
-
-  await FullPageTranslationsTestUtils.openPanel({
     onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
   });
+
+  await FullPageTranslationsTestUtils.clickCancelButton();
 
   await cleanup();
 });

@@ -34,10 +34,6 @@ add_setup(async function setup() {
 
   registerCleanupFunction(() => {
     ActionsProviderQuickActions.removeAction("testaction");
-    let notification = window.gNotificationBox.getNotificationWithValue(
-      "install-search-engine"
-    );
-    notification?.close();
   });
 });
 
@@ -50,7 +46,7 @@ add_task(async function test_quickaction() {
 
   Assert.equal(
     UrlbarTestUtils.getResultCount(window),
-    2,
+    1,
     "We matched the action"
   );
 
@@ -166,8 +162,9 @@ add_task(async function test_sitesearch() {
     false,
     expectedUrl
   );
+  gURLBar.value = query;
+  UrlbarTestUtils.fireInputEvent(window);
   EventUtils.synthesizeKey("KEY_Tab");
-  EventUtils.sendString("rch");
   EventUtils.synthesizeKey("KEY_Enter");
   await onLoad;
 
@@ -208,80 +205,4 @@ add_task(async function enter_action_search_mode() {
   );
 
   BrowserTestUtils.removeTab(gBrowser.selectedTab);
-});
-
-add_task(async function test_opensearch() {
-  const TEST_DATA = [
-    {
-      query: "word",
-      expectedUrl: "http://mochi.test:8888/?terms=word",
-    },
-    {
-      query: "word1 word2",
-      expectedUrl: "http://mochi.test:8888/?terms=word1+word2",
-    },
-    {
-      query: "https://example.com/",
-      expectedUrl: "http://mochi.test:8888/?terms=https%3A%2F%2Fexample.com%2F",
-    },
-  ];
-  for (let { query, expectedUrl } of TEST_DATA) {
-    let url = getRootDirectory(gTestPath) + "add_search_engine_one.html";
-    await BrowserTestUtils.withNewTab(url, async () => {
-      await UrlbarTestUtils.promiseAutocompleteResultPopup({
-        window,
-        value: query,
-      });
-      let { result } = await UrlbarTestUtils.getRowAt(window, 1);
-      Assert.equal(result.providerName, "UrlbarProviderGlobalActions");
-
-      let onLoad = BrowserTestUtils.browserLoaded(
-        gBrowser.selectedBrowser,
-        false,
-        expectedUrl
-      );
-      EventUtils.synthesizeKey("KEY_Tab");
-      EventUtils.synthesizeKey("KEY_Enter");
-      await onLoad;
-      Assert.ok(true, "Action for open search works expectedly");
-    });
-  }
-});
-
-add_task(async function test_quickaction() {
-  let MAX_ACTIONS = 3;
-  UrlbarPrefs.set("secondaryActions.maxActionsShown", MAX_ACTIONS);
-
-  let addAction = name =>
-    ActionsProviderQuickActions.addAction(name, {
-      commands: [name],
-      label: "quickactions-downloads2",
-    });
-
-  addAction("matching1");
-  addAction("matching2");
-  addAction("matching3");
-  addAction("matching4");
-
-  await UrlbarTestUtils.promiseAutocompleteResultPopup({
-    window,
-    value: "matching",
-  });
-
-  Assert.equal(
-    window.document.querySelectorAll(".urlbarView-action-btn").length,
-    MAX_ACTIONS,
-    `Only ${MAX_ACTIONS} are displayed`
-  );
-
-  await UrlbarTestUtils.promisePopupClose(window, () => {
-    EventUtils.synthesizeKey("KEY_Escape", {}, window);
-    EventUtils.synthesizeKey("KEY_Escape", {}, window);
-  });
-
-  ActionsProviderQuickActions.removeAction("matching1");
-  ActionsProviderQuickActions.removeAction("matching2");
-  ActionsProviderQuickActions.removeAction("matching3");
-  ActionsProviderQuickActions.removeAction("matching4");
-  UrlbarPrefs.clear("secondaryActions.maxActionsShown");
 });

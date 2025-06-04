@@ -58,14 +58,13 @@
               "audio",
               "launcher",
               "bookmark",
-              "page_action",
               "tab",
               "tools_menu"
             ]
           },
           {
             "type": "string",
-            "enum": ["browser_action"],
+            "enum": ["browser_action", "page_action"],
             "max_manifest_version": 2
           },
           {

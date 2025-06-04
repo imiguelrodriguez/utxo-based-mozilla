@@ -7,7 +7,7 @@ import { BackupResource } from "resource:///modules/backup/BackupResource.sys.mj
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
-  SearchUtils: "moz-src:///toolkit/components/search/SearchUtils.sys.mjs",
+  SearchUtils: "resource://gre/modules/SearchUtils.sys.mjs",
 });
 
 /**
@@ -176,8 +176,9 @@ export class PreferencesBackupResource extends BackupResource {
     }
 
     const chromeDirectoryPath = PathUtils.join(profilePath, "chrome");
-    let chromeDirectorySize =
-      await BackupResource.getDirectorySize(chromeDirectoryPath);
+    let chromeDirectorySize = await BackupResource.getDirectorySize(
+      chromeDirectoryPath
+    );
     if (Number.isInteger(chromeDirectorySize)) {
       fullSize += chromeDirectorySize;
     }

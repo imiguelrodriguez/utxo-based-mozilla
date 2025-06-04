@@ -9,10 +9,6 @@ function handleRequest(request, response) {
     response.write("<body>Not so slow!</body>");
     return;
   }
-  let timeout = DELAY_MS;
-  if (request.queryString.endsWith("slower")) {
-    timeout *= 10;
-  }
   response.processAsync();
   timer = Cc["@mozilla.org/timer;1"].createInstance(Ci.nsITimer);
   timer.init(
@@ -21,7 +17,7 @@ function handleRequest(request, response) {
       response.write("<body>This is a slow loading page.</body>");
       response.finish();
     },
-    timeout,
+    DELAY_MS,
     Ci.nsITimer.TYPE_ONE_SHOT
   );
 }

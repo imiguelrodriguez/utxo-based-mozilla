@@ -1,10 +1,13 @@
 import {
+  EventEmitter,
+  FakePrefs,
   FakensIPrefService,
   GlobalOverrider,
   FakeConsoleAPI,
   FakeLogger,
-} from "asrouter/tests/unit/utils";
+} from "newtab/test/unit/utils";
 import Adapter from "enzyme-adapter-react-16";
+import { chaiAssertions } from "newtab/test/schemas/pings";
 import enzyme from "enzyme";
 
 enzyme.configure({ adapter: new Adapter() });
@@ -28,6 +31,8 @@ const files = req.keys();
 
 // This exposes sinon assertions to chai.assert
 sinon.assert.expose(assert, { prefix: "" });
+
+chai.use(chaiAssertions);
 
 const overrider = new GlobalOverrider();
 
@@ -106,6 +111,9 @@ const TEST_GLOBAL = {
   AppConstants: {
     MOZILLA_OFFICIAL: true,
     MOZ_APP_VERSION: "69.0a1",
+    isChinaRepack() {
+      return false;
+    },
     isPlatformAndVersionAtMost() {
       return false;
     },
@@ -132,9 +140,6 @@ const TEST_GLOBAL = {
     sendToDeviceEmailsSupported() {
       return true;
     },
-    isChinaRepack() {
-      return false;
-    },
   },
   UpdateUtils: { getUpdateChannel() {} },
   BasePromiseWorker: class {
@@ -149,9 +154,13 @@ const TEST_GLOBAL = {
     defineLazyGetter(object, name, f) {
       updateGlobalOrObject(object)[name] = f();
     },
+    defineModuleGetter: updateGlobalOrObject,
     defineESModuleGetters: updateGlobalOrObject,
     generateQI() {
       return {};
+    },
+    import() {
+      return global;
     },
     importESModule() {
       return global;
@@ -176,6 +185,7 @@ const TEST_GLOBAL = {
     },
     isSuccessCode: () => true,
   },
+  ConsoleAPI: FakeConsoleAPI,
   // NB: These are functions/constructors
   // eslint-disable-next-line object-shorthand
   ContentSearchUIController: function () {},
@@ -206,6 +216,17 @@ const TEST_GLOBAL = {
     "@mozilla.org/io/string-input-stream;1": {
       createInstance() {
         return {};
+      },
+    },
+    "@mozilla.org/security/hash;1": {
+      createInstance() {
+        return {
+          init() {},
+          updateFromStream() {},
+          finish() {
+            return "0";
+          },
+        };
       },
     },
     "@mozilla.org/updates/update-checker;1": { createInstance() {} },
@@ -348,6 +369,7 @@ const TEST_GLOBAL = {
       removeListener() {},
     },
   },
+  Preferences: FakePrefs,
   PrivateBrowsingUtils: {
     isBrowserPrivate: () => false,
     isWindowPrivate: () => false,
@@ -392,6 +414,11 @@ const TEST_GLOBAL = {
       addObserver() {},
       removeObserver() {},
       notifyObservers() {},
+    },
+    telemetry: {
+      recordEvent: _eventDetails => {},
+      scalarSet: () => {},
+      keyedScalarAdd: () => {},
     },
     uuid: {
       generateUUID() {
@@ -468,6 +495,7 @@ const TEST_GLOBAL = {
   },
   XPCOMUtils: {
     defineLazyGlobalGetters: updateGlobalOrObject,
+    defineLazyModuleGetters: updateGlobalOrObject,
     defineLazyServiceGetter: updateGlobalOrObject,
     defineLazyServiceGetters: updateGlobalOrObject,
     defineLazyPreferenceGetter(object, name) {
@@ -477,6 +505,7 @@ const TEST_GLOBAL = {
       return {};
     },
   },
+  EventEmitter,
   ShellService: {
     doesAppNeedPin: () => false,
     isDefaultBrowser: () => true,
@@ -503,7 +532,11 @@ const TEST_GLOBAL = {
     },
   },
   FX_MONITOR_OAUTH_CLIENT_ID: "fake_client_id",
-  ExperimentAPI: {},
+  ExperimentAPI: {
+    getExperiment() {},
+    getExperimentMetaData() {},
+    getRolloutMetaData() {},
+  },
   NimbusFeatures: {
     glean: {
       getVariable() {},
@@ -533,6 +566,10 @@ const TEST_GLOBAL = {
       settings: {},
     },
   },
+  TelemetryStopwatch: {
+    start: () => {},
+    finish: () => {},
+  },
   Sampling: {
     ratioSample(_seed, _ratios) {
       return Promise.resolve(0);
@@ -557,9 +594,6 @@ const TEST_GLOBAL = {
   },
   Logger: FakeLogger,
   getFxAccountsSingleton() {},
-  AWEnsureAddonInstalled() {
-    return Promise.resolve({ value: "complete" });
-  },
   AboutNewTab: {},
   Glean: {
     newtab: {

@@ -18,7 +18,7 @@ add_setup(async function () {
   await gCUITestUtils.addSearchBar();
   win = await BrowserTestUtils.openNewBrowserWindow();
 
-  searchBar = win.document.getElementById("searchbar");
+  searchBar = win.BrowserSearch.searchBar;
   searchIcon = searchBar.querySelector(".searchbar-search-button");
 
   searchPopup = win.document.getElementById("PopupSearchAutoComplete");
@@ -87,7 +87,7 @@ add_task(async function emptySearchShift() {
   let promise = BrowserTestUtils.browserLoaded(
     win.gBrowser.selectedBrowser,
     false,
-    `http://mochi.test:8888/browser/browser/components/search/test/browser/`
+    `http://mochi.test:8888/`
   );
   EventUtils.synthesizeMouseAtCenter(oneOffButton, { shiftKey: true }, win);
   await promise;

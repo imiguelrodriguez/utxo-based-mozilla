@@ -11,131 +11,117 @@ const PROFILE_THEMES_MAP = new Map([
   [
     "firefox-compact-light@mozilla.org",
     {
-      dataL10nId: "profiles-light-theme",
       colors: {
         chromeColor: "#F0F0F4",
         toolbarColor: "#F9F9FB",
         contentColor: "#FFFFFF",
       },
-      isDark: false,
-      useInAutomation: true,
     },
   ],
   [
-    "{b90acfd0-f0fc-4add-9195-f6306d25cdfa}",
+    "expressionist-soft-colorway@mozilla.org",
     {
-      dataL10nId: "profiles-marigold-theme-2",
+      name: "Expressionist – Soft",
       downloadURL:
-        "https://addons.mozilla.org/firefox/downloads/file/4381985/marigold-1.9.xpi",
+        "https://addons.mozilla.org/firefox/downloads/file/4066185/expressionist_soft-2.1.xpi",
       colors: {
         chromeColor: "#F1CA52",
         toolbarColor: "#FBDF8C",
         contentColor: "#FEF7E0",
       },
-      isDark: false,
     },
   ],
   [
-    "{388d9fae-8a28-4f9f-9aad-fb9e84e4f3c3}",
+    "lush-soft-colorway@mozilla.org",
     {
-      dataL10nId: "profiles-lichen-theme-2",
+      name: "Lush – Soft",
       downloadURL:
-        "https://addons.mozilla.org/firefox/downloads/file/4381979/lichen_soft-1.3.xpi",
+        "https://addons.mozilla.org/firefox/downloads/file/4066281/lush_soft-2.1.xpi",
       colors: {
         chromeColor: "#D2E4DA",
         toolbarColor: "#E9F2EC",
         contentColor: "#F5F9F7",
       },
-      isDark: false,
     },
   ],
   [
-    "{3ac3b0d7-f017-40e1-b142-a26f794e7015}",
+    "playmaker-soft-colorway@mozilla.org",
     {
-      dataL10nId: "profiles-magnolia-theme-2",
+      name: "Playmaker – Soft",
       downloadURL:
-        "https://addons.mozilla.org/firefox/downloads/file/4381978/magnolia-1.1.xpi",
+        "https://addons.mozilla.org/firefox/downloads/file/4066243/playmaker_soft-2.1.xpi",
       colors: {
         chromeColor: "#FB5B9E",
         toolbarColor: "#F986B6",
         contentColor: "#FBE0ED",
       },
-      isDark: false,
     },
   ],
   [
-    "{ba48d251-0732-45c2-9f2f-39c68e82d047}",
+    "dreamer-soft-colorway@mozilla.org",
     {
-      dataL10nId: "profiles-lavender-theme-2",
+      name: "Dreamer – Soft",
       downloadURL:
-        "https://addons.mozilla.org/firefox/downloads/file/4381983/lavender_soft-1.2.xpi",
+        "https://addons.mozilla.org/firefox/downloads/file/4066182/dreamer_soft-2.1.xpi",
       colors: {
         chromeColor: "#CDC1EA",
         toolbarColor: "#EBE4FA",
         contentColor: "#F4F0FD",
       },
-      isDark: false,
     },
   ],
   [
     "firefox-compact-dark@mozilla.org",
     {
-      dataL10nId: "profiles-dark-theme",
       colors: {
         chromeColor: "#1C1B22",
         toolbarColor: "#2B2A33",
         contentColor: "#42414D",
       },
-      isDark: true,
-      useInAutomation: true,
     },
   ],
   [
-    "{750fa518-b61f-4068-9974-330dcf45442f}",
+    "activist-bold-colorway@mozilla.org",
     {
-      dataL10nId: "profiles-ocean-theme-2",
+      name: "Activist – Bold",
       downloadURL:
-        "https://addons.mozilla.org/firefox/downloads/file/4381977/ocean_dark-1.1.xpi",
+        "https://addons.mozilla.org/firefox/downloads/file/4066178/activist_bold-2.1.xpi",
       colors: {
         chromeColor: "#080D33",
         toolbarColor: "#050D5B",
         contentColor: "#000511",
       },
-      isDark: true,
     },
   ],
   [
-    "{25b5a343-4238-4bae-b1f9-93a33f258167}",
+    "playmaker-bold-colorway@mozilla.org",
     {
-      dataL10nId: "profiles-terracotta-theme-2",
+      name: "Playmaker – Bold",
       downloadURL:
-        "https://addons.mozilla.org/firefox/downloads/file/4381976/terracotta_dark-1.1.xpi",
+        "https://addons.mozilla.org/firefox/downloads/file/4066242/playmaker_bold-2.1.xpi",
       colors: {
         chromeColor: "#591305",
         toolbarColor: "#98240B",
         contentColor: "#060100",
       },
-      isDark: true,
     },
   ],
   [
-    "{f9261f02-c03c-4352-92ee-78dd8b41ca98}",
+    "elemental-bold-colorway@mozilla.org",
     {
-      dataL10nId: "profiles-moss-theme-2",
+      name: "Elemental – Bold",
       downloadURL:
-        "https://addons.mozilla.org/firefox/downloads/file/4381975/moss_dark-1.1.xpi",
+        "https://addons.mozilla.org/firefox/downloads/file/4066261/elemental_bold-2.1.xpi",
       colors: {
         chromeColor: "#405948",
         toolbarColor: "#5B7B65",
         contentColor: "#323433",
       },
-      isDark: true,
     },
   ],
   [
     "default-theme@mozilla.org",
     {
-      dataL10nId: "profiles-system-theme",
       colors: {
         chromeColor: "#1C1B22",
         toolbarColor: "#2B2A33",
@@ -150,108 +136,37 @@ ChromeUtils.defineESModuleGetters(lazy, {
   formAutofillStorage: "resource://autofill/FormAutofillStorage.sys.mjs",
   LoginHelper: "resource://gre/modules/LoginHelper.sys.mjs",
   PlacesDBUtils: "resource://gre/modules/PlacesDBUtils.sys.mjs",
-  PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
   AddonManager: "resource://gre/modules/AddonManager.sys.mjs",
 });
 
 export class ProfilesParent extends JSWindowActorParent {
-  get tab() {
-    const gBrowser = this.browsingContext.topChromeWindow.gBrowser;
-    const tab = gBrowser.getTabForBrowser(this.browsingContext.embedderElement);
-    return tab;
-  }
-
-  actorCreated() {
-    let favicon = this.tab.iconImage;
-    favicon.classList.add("profiles-tab");
-  }
-
-  didDestroy() {
-    const gBrowser = this.browsingContext.topChromeWindow?.gBrowser;
-    if (!gBrowser) {
-      // If gBrowser doesn't exist, then we've closed the tab so we can just return
-      return;
-    }
-    let favicon = this.tab.iconImage;
-    favicon.classList.remove("profiles-tab");
-  }
-
-  async #getProfileContent() {
-    // Make sure SelectableProfileService is initialized
-    await SelectableProfileService.init();
-    let currentProfile = SelectableProfileService.currentProfile;
-    let profiles = await SelectableProfileService.getAllProfiles();
-    let themes = await this.getSafeForContentThemes();
-    return {
-      currentProfile: currentProfile.toObject(),
-      profiles: profiles.map(p => p.toObject()),
-      themes,
-      isInAutomation: Cu.isInAutomation,
-    };
-  }
-
   async receiveMessage(message) {
-    let gBrowser = this.browsingContext.topChromeWindow?.gBrowser;
-    let source = this.browsingContext.embedderElement?.currentURI.displaySpec;
     switch (message.name) {
       case "Profiles:DeleteProfile": {
-        if (source === "about:newprofile") {
-          Glean.profilesNew.closed.record({ value: "delete" });
-        } else if (source === "about:deleteprofile") {
-          Glean.profilesDelete.confirm.record();
-        }
-
-        // Notify windows that a quit has been requested.
-        let cancelQuit = Cc["@mozilla.org/supports-PRBool;1"].createInstance(
-          Ci.nsISupportsPRBool
-        );
-        Services.obs.notifyObservers(cancelQuit, "quit-application-requested");
-
-        if (cancelQuit.data) {
-          // Something blocked our attempt to quit.
-          return null;
-        }
-
-        try {
-          await SelectableProfileService.deleteCurrentProfile();
-
-          // Finally, exit.
-          Services.startup.quit(Ci.nsIAppStartup.eAttemptQuit);
-        } catch (e) {
-          // This is expected in tests.
-          console.error(e);
-        }
+        // TODO (bug 1918523): update default and handle deletion in a
+        //                     background task.
         break;
       }
       case "Profiles:CancelDelete": {
-        Glean.profilesDelete.cancel.record();
-        if (gBrowser.tabs.length === 1) {
-          // If the profiles tab is the only open tab,
-          // open a new tab first so the browser doesn't close
-          gBrowser.addTrustedTab("about:newtab");
-        }
-        gBrowser.removeTab(this.tab);
+        let gBrowser = this.browsingContext.topChromeWindow.gBrowser;
+        gBrowser.removeTab(gBrowser.selectedTab);
         break;
-      }
-      case "Profiles:GetNewProfileContent": {
-        Glean.profilesNew.displayed.record();
-        return this.#getProfileContent();
       }
       case "Profiles:GetEditProfileContent": {
-        Glean.profilesExisting.displayed.record();
-        return this.#getProfileContent();
-      }
-      case "Profiles:MoreThemes": {
-        if (message.data.source === "about:editprofile") {
-          Glean.profilesExisting.learnMore.record();
-        } else if (message.data.source === "about:newprofile") {
-          Glean.profilesNew.learnMore.record();
-        }
-        break;
+        // Make sure SelectableProfileService is initialized
+        await SelectableProfileService.init();
+        let currentProfile = SelectableProfileService.currentProfile;
+        let profiles = await SelectableProfileService.getAllProfiles();
+        let themes = await this.getSafeForContentThemes();
+        return {
+          currentProfile: currentProfile.toObject(),
+          profiles: profiles.map(p => p.toObject()),
+          themes,
+        };
       }
       case "Profiles:OpenDeletePage": {
-        Glean.profilesExisting.deleted.record();
-        this.browsingContext.embedderElement.loadURI(
+        let gBrowser = this.browsingContext.topChromeWindow.gBrowser;
+        gBrowser.selectedBrowser.loadURI(
           Services.io.newURI("about:deleteprofile"),
           {
             triggeringPrincipal:
@@ -260,50 +175,25 @@ export class ProfilesParent extends JSWindowActorParent {
         );
         break;
       }
-      case "Profiles:PageHide": {
-        if (source === "about:editprofile") {
-          Glean.profilesExisting.closed.record({ value: "pagehide" });
-        } else if (source === "about:newprofile") {
-          Glean.profilesNew.closed.record({ value: "pagehide" });
-        }
-        break;
-      }
       case "Profiles:UpdateProfileName": {
-        if (source === "about:editprofile") {
-          Glean.profilesExisting.name.record();
-        } else if (source === "about:newprofile") {
-          Glean.profilesNew.name.record();
-        }
         let profileObj = message.data;
         SelectableProfileService.currentProfile.name = profileObj.name;
         break;
       }
       case "Profiles:GetDeleteProfileContent": {
-        // Make sure SelectableProfileService is initialized
-        await SelectableProfileService.init();
-        Glean.profilesDelete.displayed.record();
-        let profileObj = SelectableProfileService.currentProfile.toObject();
+        let avatar = SelectableProfileService.currentProfile.avatar;
+        let name = SelectableProfileService.currentProfile.name;
         let windowCount = lazy.EveryWindow.readyWindows.length;
         let tabCount = lazy.EveryWindow.readyWindows
-          .flatMap(win => win.gBrowser.openTabs.length)
+          .flatMap(win => win.gBrowser.openTabCount)
           .reduce((total, current) => total + current);
         let loginCount = (await lazy.LoginHelper.getAllUserFacingLogins())
           .length;
 
-        let db = await lazy.PlacesUtils.promiseDBConnection();
-        let bookmarksQuery = `SELECT count(*) FROM moz_bookmarks b
-                    JOIN moz_bookmarks t ON t.id = b.parent
-                    AND t.parent <> :tags_folder
-                    WHERE b.type = :type_bookmark`;
-        let bookmarksQueryParams = {
-          tags_folder: lazy.PlacesUtils.tagsFolderId,
-          type_bookmark: lazy.PlacesUtils.bookmarks.TYPE_BOOKMARK,
-        };
-        let bookmarkCount = (
-          await db.executeCached(bookmarksQuery, bookmarksQueryParams)
-        )[0].getResultByIndex(0);
-
         let stats = await lazy.PlacesDBUtils.getEntitiesStatsAndCounts();
+        let bookmarkCount = stats.find(
+          item => item.entity == "moz_bookmarks"
+        ).count;
         let visitCount = stats.find(
           item => item.entity == "moz_historyvisits"
         ).count;
@@ -316,7 +206,8 @@ export class ProfilesParent extends JSWindowActorParent {
           lazy.formAutofillStorage.creditCards?._data.length;
 
         return {
-          profile: profileObj,
+          avatar,
+          name,
           windowCount,
           tabCount,
           bookmarkCount,
@@ -326,59 +217,24 @@ export class ProfilesParent extends JSWindowActorParent {
         };
       }
       case "Profiles:UpdateProfileAvatar": {
-        let avatar = message.data.avatar;
-        SelectableProfileService.currentProfile.avatar = avatar;
-        if (source === "about:editprofile") {
-          Glean.profilesExisting.avatar.record({ value: avatar });
-        } else if (source === "about:newprofile") {
-          Glean.profilesNew.avatar.record({ value: avatar });
-        }
+        let profileObj = message.data;
+        SelectableProfileService.currentProfile.avatar = profileObj.avatar;
         break;
       }
       case "Profiles:UpdateProfileTheme": {
         let themeId = message.data;
-        // Where the theme was installed from
-        let telemetryInfo = {
-          method: "url",
-          source,
-        };
-        await this.enableTheme(themeId, telemetryInfo);
-        if (source === "about:editprofile") {
-          Glean.profilesExisting.theme.record({ value: themeId });
-        } else if (source === "about:newprofile") {
-          Glean.profilesNew.theme.record({ value: themeId });
-        }
-
-        // The enable theme promise resolves after the
-        // "lightweight-theme-styling-update" observer so we know the profile
-        // theme is up to date at this point.
-        return SelectableProfileService.currentProfile.theme;
-      }
-      case "Profiles:CloseProfileTab": {
-        if (source === "about:editprofile") {
-          Glean.profilesExisting.closed.record({ value: "done_editing" });
-        } else if (source === "about:newprofile") {
-          Glean.profilesNew.closed.record({ value: "done_editing" });
-        }
-        if (gBrowser.tabs.length === 1) {
-          // If the profiles tab is the only open tab,
-          // open a new tab first so the browser doesn't close
-          gBrowser.addTrustedTab("about:newtab");
-        }
-        gBrowser.removeTab(this.tab);
+        this.enableTheme(themeId);
         break;
       }
     }
     return null;
   }
 
-  async enableTheme(themeId, telemetryInfo) {
+  async enableTheme(themeId) {
     let theme = await lazy.AddonManager.getAddonByID(themeId);
     if (!theme) {
       let themeUrl = PROFILE_THEMES_MAP.get(themeId).downloadURL;
-      let themeInstall = await lazy.AddonManager.getInstallForURL(themeUrl, {
-        telemetryInfo,
-      });
+      let themeInstall = await lazy.AddonManager.getInstallForURL(themeUrl);
       await themeInstall.install();
       theme = await lazy.AddonManager.getAddonByID(themeId);
     }
@@ -390,30 +246,21 @@ export class ProfilesParent extends JSWindowActorParent {
     let themes = [];
     for (let [themeId, themeObj] of PROFILE_THEMES_MAP) {
       let theme = await lazy.AddonManager.getAddonByID(themeId);
-      themes.push({
-        id: themeId,
-        dataL10nId: themeObj.dataL10nId,
-        isActive: theme?.isActive ?? false,
-        ...themeObj.colors,
-        isDark: themeObj.isDark,
-        useInAutomation: themeObj?.useInAutomation,
-      });
-    }
-
-    let activeAddons = await lazy.AddonManager.getActiveAddons(["theme"]);
-    let currentTheme = activeAddons.addons[0];
-
-    // Only add the current theme if it's not one of the default 10 themes.
-    if (!themes.find(t => t.id === currentTheme.id)) {
-      let safeCurrentTheme = {
-        id: currentTheme.id,
-        name: currentTheme.name,
-        isActive: currentTheme.isActive,
-        chromeColor: SelectableProfileService.currentProfile.theme.themeBg,
-        toolbarColor: SelectableProfileService.currentProfile.theme.themeFg,
-      };
-
-      themes.push(safeCurrentTheme);
+      if (theme) {
+        themes.push({
+          id: themeId,
+          name: theme.name,
+          isActive: theme.isActive,
+          ...themeObj.colors,
+        });
+      } else {
+        themes.push({
+          id: themeId,
+          name: themeObj.name,
+          isActive: false,
+          ...themeObj.colors,
+        });
+      }
     }
 
     return themes;

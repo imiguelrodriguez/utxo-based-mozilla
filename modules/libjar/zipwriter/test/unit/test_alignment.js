@@ -54,7 +54,7 @@ function test_alignment(align_size) {
   var stream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(
     Ci.nsIStringInputStream
   );
-  stream.setByteStringData(DATA);
+  stream.setData(DATA, DATA.length);
   zipW.addEntryStream(
     FILENAME,
     time * PR_USEC_PER_MSEC,

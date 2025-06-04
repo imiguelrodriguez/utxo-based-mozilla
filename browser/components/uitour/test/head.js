@@ -4,7 +4,7 @@
 /* global gTestTab:true, gContentAPI:true, tests:false */
 
 ChromeUtils.defineESModuleGetters(this, {
-  UITour: "moz-src:///browser/components/uitour/UITour.sys.mjs",
+  UITour: "resource:///modules/UITour.sys.mjs",
 });
 
 const { PermissionTestUtils } = ChromeUtils.importESModule(

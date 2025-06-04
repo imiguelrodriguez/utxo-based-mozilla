@@ -82,7 +82,8 @@ class CommonSocketControl : public nsITLSSocketControl {
     COMMON_SOCKET_CONTROL_ASSERT_ON_OWNING_THREAD();
     return mServerCert != nullptr;
   }
-  void SetStatusErrorBits(nsITransportSecurityInfo::OverridableErrorCategory
+  void SetStatusErrorBits(const nsCOMPtr<nsIX509Cert>& cert,
+                          nsITransportSecurityInfo::OverridableErrorCategory
                               overridableErrorCategory);
   bool HasUserOverriddenCertificateError() {
     COMMON_SOCKET_CONTROL_ASSERT_ON_OWNING_THREAD();

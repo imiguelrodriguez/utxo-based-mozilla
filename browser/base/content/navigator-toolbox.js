@@ -43,7 +43,7 @@ document.addEventListener(
     function onCommand(event) {
       let element = event.target.closest(`
         #firefox-view-button,
-        .content-analysis-indicator,
+        #content-analysis-indicator,
         #bookmarks-toolbar-button,
         #PlacesToolbar,
         #import-button,
@@ -61,12 +61,15 @@ document.addEventListener(
           FirefoxViewHandler.openTab();
           break;
 
+        case "content-analysis-indicator":
+          ContentAnalysis.showPanel(element, PanelUI);
+          break;
+
         case "bookmarks-toolbar-button":
           PlacesToolbarHelper.onPlaceholderCommand();
           break;
 
         case "PlacesToolbar":
-        case "BMB_bookmarksPopup":
           BookmarksEventHandler.onCommand(event);
           break;
 
@@ -78,6 +81,10 @@ document.addEventListener(
 
         case "bookmarks-menu-button":
           BookmarkingUI.onCommand(event);
+          break;
+
+        case "BMB_bookmarksPopup":
+          BookmarksEventHandler.onCommand(event);
           break;
 
         case "BMB_viewBookmarksSidebar":
@@ -93,11 +100,7 @@ document.addEventListener(
           break;
 
         default:
-          if (element.classList.contains("content-analysis-indicator")) {
-            ContentAnalysis.showPanel(element, PanelUI);
-          } else {
-            throw new Error(`Missing case for #${element.id}`);
-          }
+          throw new Error(`Missing case for #${element.id}`);
       }
     }
     navigatorToolbox.addEventListener("command", onCommand);
@@ -153,28 +156,6 @@ document.addEventListener(
     navigatorToolbox.addEventListener("mousedown", onMouseDown);
     widgetOverflow.addEventListener("mousedown", onMouseDown);
 
-    function onMouseUp(event) {
-      let element = event.target.closest(`
-        #PlacesToolbar,
-        #BMB_bookmarksPopup
-        `);
-      if (!element) {
-        return;
-      }
-
-      switch (element.id) {
-        case "PlacesToolbar":
-        case "BMB_bookmarksPopup":
-          BookmarksEventHandler.onMouseUp(event);
-          break;
-
-        default:
-          throw new Error(`Missing case for #${element.id}`);
-      }
-    }
-    navigatorToolbox.addEventListener("mouseup", onMouseUp);
-    widgetOverflow.addEventListener("mouseup", onMouseUp);
-
     function onClick(event) {
       const isLeftClick = event.button === 0;
 
@@ -188,6 +169,7 @@ document.addEventListener(
         #urlbar-go-button,
         #reader-mode-button,
         #picture-in-picture-button,
+        #shopping-sidebar-button,
         #urlbar-zoom-button,
         #star-button-box,
         #personal-toolbar-empty-description,
@@ -197,8 +179,7 @@ document.addEventListener(
         #tracking-protection-icon-container,
         #identity-icon-box,
         #identity-permission-box,
-        #translations-button,
-        #taskbar-tabs-button
+        #translations-button
         `);
       if (!element) {
         return;
@@ -230,6 +211,12 @@ document.addEventListener(
         case "picture-in-picture-button":
           if (isLeftClick) {
             PictureInPicture.toggleUrlbar(event);
+          }
+          break;
+
+        case "shopping-sidebar-button":
+          if (isLeftClick) {
+            ShoppingSidebarParent.urlbarButtonClick(event);
           }
           break;
 
@@ -297,6 +284,7 @@ document.addEventListener(
       let element = event.target.closest(`
         #reader-mode-button,
         #picture-in-picture-button,
+        #shopping-sidebar-button,
         #urlbar-zoom-button,
         #star-button-box,
         #personal-toolbar-empty-description,
@@ -326,6 +314,12 @@ document.addEventListener(
         case "picture-in-picture-button":
           if (isLikeLeftClick) {
             PictureInPicture.toggleUrlbar(event);
+          }
+          break;
+
+        case "shopping-sidebar-button":
+          if (isLikeLeftClick) {
+            ShoppingSidebarParent.urlbarButtonClick(event);
           }
           break;
 
@@ -421,9 +415,9 @@ document.addEventListener(
       switch (element.id) {
         case "new-tab-button":
           if (event.type === "dragenter" || event.type === "dragover") {
-            ToolbarDropHandler.onDragOver(event);
+            newTabButtonObserver.onDragOver(event);
           } else if (event.type === "drop") {
-            ToolbarDropHandler.onDropNewTabButtonObserver(event);
+            newTabButtonObserver.onDrop(event);
           }
           break;
 
@@ -437,9 +431,9 @@ document.addEventListener(
 
         case "new-window-button":
           if (event.type === "dragenter" || event.type === "dragover") {
-            ToolbarDropHandler.onDragOver(event);
+            newWindowButtonObserver.onDragOver(event);
           } else if (event.type === "drop") {
-            ToolbarDropHandler.onDropNewWindowButtonObserver(event);
+            newWindowButtonObserver.onDrop(event);
           }
           break;
 
@@ -462,13 +456,9 @@ document.addEventListener(
 
         case "home-button":
           if (event.type === "dragenter" || event.type === "dragover") {
-            if (HomePage.locked) {
-              return;
-            }
-            ToolbarDropHandler.onDragOver(event);
-            event.dropEffect = "link";
+            homeButtonObserver.onDragOver(event);
           } else if (event.type == "drop") {
-            ToolbarDropHandler.onDropHomeButtonObserver(event);
+            homeButtonObserver.onDrop(event);
           }
           break;
 
@@ -492,15 +482,11 @@ document.addEventListener(
         gIdentityHandler.onDragStart(event);
       });
 
-    let trackingProtectionIconContainer = document.getElementById(
-      "tracking-protection-icon-container"
-    );
-    trackingProtectionIconContainer.addEventListener("focus", () => {
-      gProtectionsHandler.onTrackingProtectionIconHoveredOrFocused();
-    });
-    trackingProtectionIconContainer.addEventListener("mouseover", () => {
-      gProtectionsHandler.onTrackingProtectionIconHoveredOrFocused();
-    });
+    document
+      .getElementById("tracking-protection-icon-container")
+      .addEventListener("focus", () => {
+        gProtectionsHandler.onTrackingProtectionIconHoveredOrFocused();
+      });
   },
   { once: true }
 );

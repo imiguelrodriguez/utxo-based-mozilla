@@ -13,7 +13,7 @@ const { SearchTestUtils } = ChromeUtils.importESModule(
   "resource://testing-common/SearchTestUtils.sys.mjs"
 );
 const { SearchUtils } = ChromeUtils.importESModule(
-  "moz-src:///toolkit/components/search/SearchUtils.sys.mjs"
+  "resource://gre/modules/SearchUtils.sys.mjs"
 );
 
 AddonTestUtils.initMochitest(this);

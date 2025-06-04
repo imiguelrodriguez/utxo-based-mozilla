@@ -3,7 +3,7 @@ http://creativecommons.org/publicdomain/zero/1.0/ */
 
 "use strict";
 
-const { NimbusTestUtils } = ChromeUtils.importESModule(
+const { ExperimentFakes } = ChromeUtils.importESModule(
   "resource://testing-common/NimbusTestUtils.sys.mjs"
 );
 const { ExperimentAPI } = ChromeUtils.importESModule(
@@ -47,7 +47,7 @@ add_task(async function not_major_upgrade() {
 
 add_task(async function remote_disabled() {
   await ExperimentAPI.ready();
-  let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig(
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig(
     {
       featureId: NimbusFeatures.upgradeDialog.featureId,
       value: {
@@ -68,7 +68,7 @@ add_task(async function remote_disabled() {
     "disabled",
   ]);
 
-  await doCleanup();
+  doCleanup();
   await cleanupUpgrade();
 });
 

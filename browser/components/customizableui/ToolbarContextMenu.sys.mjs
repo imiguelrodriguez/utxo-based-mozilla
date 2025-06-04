@@ -26,31 +26,7 @@ XPCOMUtils.defineLazyPreferenceGetter(
   false
 );
 
-// Whether the Extensions button can be hidden via UI. The button can be hidden
-// even with this pref set to false. TODO bug 1967773: Remove this pref.
-XPCOMUtils.defineLazyPreferenceGetter(
-  lazy,
-  "gEnableCustomizableExtensionsButton",
-  "extensions.unifiedExtensions.button.customizable",
-  true
-);
-
-/**
- * Various events handlers to set the state of the toolbar-context-menu popup,
- * as well as to handle some commands from that popup.
- */
 export var ToolbarContextMenu = {
-  /**
-   * Makes visible the "autohide the downloads button" checkbox in the popup
-   * in the event that the downloads button was context clicked. Otherwise,
-   * hides that checkbox.
-   *
-   * This method also sets the checkbox state depending on the current user
-   * configuration for hiding the downloads button.
-   *
-   * @param {Element} popup
-   *   The toolbar-context-menu element for a window.
-   */
   updateDownloadsAutoHide(popup) {
     let { document, DownloadsButton } = popup.ownerGlobal;
     let checkbox = document.getElementById(
@@ -69,30 +45,11 @@ export var ToolbarContextMenu = {
     }
   },
 
-  /**
-   * Handler for the toolbar-context-autohide-downloads-button command event
-   * that is fired when the checkbox for autohiding the downloads button is
-   * changed. This method does the work of updating the internal preference
-   * state for auto-hiding the downloads button.
-   *
-   * @param {CommandEvent} event
-   */
   onDownloadsAutoHideChange(event) {
     let autoHide = event.target.getAttribute("checked") == "true";
     Services.prefs.setBoolPref("browser.download.autohideButton", autoHide);
   },
 
-  /**
-   * Makes visible the "always open downloads panel" checkbox in the popup
-   * in the event that the downloads button was context clicked. Otherwise,
-   * hides that checkbox.
-   *
-   * This method also sets the checkbox state depending on the current user
-   * configuration for always showing the panel.
-   *
-   * @param {Element} popup
-   *   The toolbar-context-menu element for a window.
-   */
   updateDownloadsAlwaysOpenPanel(popup) {
     let { document } = popup.ownerGlobal;
     let separator = document.getElementById(
@@ -112,35 +69,13 @@ export var ToolbarContextMenu = {
       : checkbox.removeAttribute("checked");
   },
 
-  /**
-   * Handler for the toolbar-context-always-open-downloads-panel command event
-   * that is fired when the checkbox for always showing the downloads panel is
-   * changed. This method does the work of updating the internal preference
-   * state for always showing the downloads panel.
-   *
-   * @param {CommandEvent} event
-   */
   onDownloadsAlwaysOpenPanelChange(event) {
     let alwaysOpen = event.target.getAttribute("checked") == "true";
     Services.prefs.setBoolPref("browser.download.alwaysOpenPanel", alwaysOpen);
   },
 
-  /**
-   * This is called when a menupopup for configuring toolbars fires its
-   * popupshowing event. There are multiple such menupopups, and this logic
-   * tries to work for all of them. This method will insert menuitems into
-   * the popup to allow for controlling the toolbars within the browser
-   * toolbox.
-   *
-   * @param {Event} aEvent
-   *   The popupshowing event for the menupopup.
-   * @param {DOMNode} aInsertPoint
-   *   The point within the menupopup to insert the controls for each toolbar.
-   */
-  // eslint-disable-next-line complexity
   onViewToolbarsPopupShowing(aEvent, aInsertPoint) {
     var popup = aEvent.target;
-    let window = popup.ownerGlobal;
     let {
       document,
       BookmarkingUI,
@@ -150,7 +85,7 @@ export var ToolbarContextMenu = {
       gBrowser,
       CustomizationHandler,
       gNavToolbox,
-    } = window;
+    } = popup.ownerGlobal;
 
     // triggerNode can be a nested child element of a toolbaritem.
     let toolbarItem = popup.triggerNode;
@@ -246,34 +181,6 @@ export var ToolbarContextMenu = {
     // Show/hide fullscreen context menu items and set the
     // autohide item's checked state to mirror the autohide pref.
     showFullScreenViewContextMenuItems(popup);
-
-    // Show/hide sidebar and vertical tabs menu items
-    let sidebarRevampEnabled = Services.prefs.getBoolPref("sidebar.revamp");
-    let showSidebarActions =
-      ["tabbrowser-tabs", "sidebar-button"].includes(toolbarItem?.id) ||
-      toolbarItem?.localName == "toolbarspring";
-    let toggleVerticalTabsItem = document.getElementById(
-      "toolbar-context-toggle-vertical-tabs"
-    );
-    toggleVerticalTabsItem.hidden = !showSidebarActions;
-    document.l10n.setAttributes(
-      toggleVerticalTabsItem,
-      gBrowser.tabContainer?.verticalMode
-        ? "toolbar-context-turn-off-vertical-tabs"
-        : "toolbar-context-turn-on-vertical-tabs"
-    );
-    document.getElementById("toolbar-context-customize-sidebar").hidden =
-      !sidebarRevampEnabled ||
-      (toolbarItem?.id != "sidebar-button" &&
-        !gBrowser.tabContainer?.verticalMode) ||
-      (!["tabbrowser-tabs", "sidebar-button"].includes(toolbarItem?.id) &&
-        gBrowser.tabContainer?.verticalMode);
-    document.getElementById("sidebarRevampSeparator").hidden =
-      !showSidebarActions || isVerticalTabStripMenu;
-    document.getElementById("customizationMenuSeparator").hidden =
-      toolbarItem?.id == "tabbrowser-tabs" ||
-      toolbarItem?.localName == "toolbarspring";
-
     // View -> Toolbars menu doesn't have the moveToPanel or removeFromToolbar items.
     if (!moveToPanel || !removeFromToolbar) {
       return;
@@ -301,7 +208,7 @@ export var ToolbarContextMenu = {
     // when hiding the "moveToPanel" and "removeFromToolbar" items on flexible
     // space items. But we need to ensure its hidden state is reset in the case
     // the context menu is subsequently opened on a non-flexible space item.
-    let menuSeparator = document.getElementById("tabbarItemsMenuSeparator");
+    let menuSeparator = document.getElementById("toolbarItemsMenuSeparator");
     menuSeparator.hidden = false;
 
     document.getElementById("toolbarNavigatorItemsMenuSeparator").hidden =
@@ -309,18 +216,11 @@ export var ToolbarContextMenu = {
 
     if (
       !CustomizationHandler.isCustomizing() &&
-      (toolbarItem?.localName.includes("separator") ||
-        toolbarItem?.localName.includes("spring") ||
-        toolbarItem?.localName.includes("spacer") ||
-        toolbarItem?.id.startsWith("customizableui-special"))
+      lazy.CustomizableUI.isSpecialWidget(toolbarItem?.id || "")
     ) {
       moveToPanel.hidden = true;
       removeFromToolbar.hidden = true;
       menuSeparator.hidden = !showTabStripItems;
-    }
-
-    if (toolbarItem?.id != "tabbrowser-tabs") {
-      menuSeparator.hidden = true;
     }
 
     if (showTabStripItems) {
@@ -335,19 +235,18 @@ export var ToolbarContextMenu = {
         multipleTabsSelected;
       document.getElementById("toolbar-context-selectAllTabs").disabled =
         gBrowser.allTabsSelected();
-      let closedCount = lazy.SessionStore.getLastClosedTabCount(window);
-      document
-        .getElementById("History:UndoCloseTab")
-        .setAttribute("disabled", closedCount == 0);
-      document.l10n.setArgs(
-        document.getElementById("toolbar-context-undoCloseTab"),
-        { tabCount: closedCount }
-      );
+      document.getElementById("toolbar-context-undoCloseTab").disabled =
+        lazy.SessionStore.getClosedTabCount() == 0;
       return;
     }
 
+    // fxms-bmb-button is a Firefox Messaging System Bookmarks bar button.
+    let removable = !toolbarItem?.classList?.contains("fxms-bmb-button");
     let movable =
-      toolbarItem?.id && lazy.CustomizableUI.isWidgetRemovable(toolbarItem);
+      toolbarItem?.id &&
+      removable &&
+      !toolbarItem?.classList?.contains("fxms-bmb-button") &&
+      lazy.CustomizableUI.isWidgetRemovable(toolbarItem);
     if (movable) {
       if (lazy.CustomizableUI.isSpecialWidget(toolbarItem.id)) {
         moveToPanel.setAttribute("disabled", true);
@@ -356,21 +255,13 @@ export var ToolbarContextMenu = {
       }
       removeFromToolbar.removeAttribute("disabled");
     } else {
-      removeFromToolbar.setAttribute("disabled", true);
+      if (removable) {
+        removeFromToolbar.setAttribute("disabled", true);
+      }
       moveToPanel.setAttribute("disabled", true);
     }
   },
 
-  /**
-   * Given an opened menupopup, returns the triggerNode that opened that
-   * menupopup. If customize mode is enabled, this will return the unwrapped
-   * underlying triggerNode, rather than the customize mode wrapper around it.
-   *
-   * @param {DOMNode} popup
-   *   The menupopup to get the unwrapped trigger node for.
-   * @returns {DOMNode}
-   *   The underlying trigger node that opened the menupopup.
-   */
   _getUnwrappedTriggerNode(popup) {
     // Toolbar buttons are wrapped in customize mode. Unwrap if necessary.
     let { triggerNode } = popup;
@@ -381,101 +272,17 @@ export var ToolbarContextMenu = {
     return triggerNode;
   },
 
-  /**
-   * For an opened menupopup, if the triggerNode was provided by an extension,
-   * returns the extension ID. Otherwise, return the empty string.
-   *
-   * @param {DOMNode} popup
-   *   The menupopup that was opened.
-   * @returns {string}
-   *   The ID of the extension that provided the triggerNode, or the empty
-   *   string if the triggerNode was not provided by an extension.
-   */
   _getExtensionId(popup) {
     let node = this._getUnwrappedTriggerNode(popup);
     return node && node.getAttribute("data-extensionid");
   },
 
-  /**
-   * For an opened menupopup, if the triggerNode was provided by an extension,
-   * returns the widget ID of the triggerNode. Otherwise, return the empty
-   * string.
-   *
-   * @param {DOMNode} popup
-   *   The menupopup that was opened.
-   * @returns {string}
-   *   The ID of the extension-provided widget that was the triggerNode, or the
-   *   empty string if the trigger node was not provided by an extension
-   *   widget.
-   */
   _getWidgetId(popup) {
     let node = this._getUnwrappedTriggerNode(popup);
     return node?.closest(".unified-extensions-item")?.id;
   },
 
-  /**
-   * Updates the toolbar context menu items unique to gUnifiedExtensions.button.
-   *
-   * @param {Element} popup
-   *   The toolbar-context-menu element for a window.
-   */
-  updateExtensionsButtonContextMenu(popup) {
-    const isExtsButton = popup.triggerNode?.id === "unified-extensions-button";
-    const isCustomizingExtsButton =
-      popup.triggerNode?.id === "wrapper-unified-extensions-button";
-    const { gUnifiedExtensions } = popup.ownerGlobal;
-
-    const checkbox = popup.querySelector(
-      "#toolbar-context-always-show-extensions-button"
-    );
-    if (isCustomizingExtsButton && lazy.gEnableCustomizableExtensionsButton) {
-      checkbox.hidden = false;
-      if (gUnifiedExtensions.buttonAlwaysVisible) {
-        checkbox.setAttribute("checked", "true");
-      } else {
-        checkbox.removeAttribute("checked");
-      }
-    } else if (
-      isExtsButton &&
-      !gUnifiedExtensions.buttonAlwaysVisible &&
-      lazy.gEnableCustomizableExtensionsButton
-    ) {
-      // The button may be visible despite the user's preference, which could
-      // remind the user of the button's existence. Offer an option to unhide
-      // the button, in case the user is looking for a way to do so.
-      checkbox.hidden = false;
-      checkbox.removeAttribute("checked");
-    } else {
-      checkbox.hidden = true;
-    }
-
-    // removeFromToolbar is shown but disabled by default, via an earlier call
-    // to ToolbarContextMenu.onViewToolbarsPopupShowing. Enable/hide if needed.
-    if (isExtsButton && lazy.gEnableCustomizableExtensionsButton) {
-      const removeFromToolbar = popup.querySelector(
-        ".customize-context-removeFromToolbar"
-      );
-      if (gUnifiedExtensions.buttonAlwaysVisible) {
-        removeFromToolbar.removeAttribute("disabled");
-      } else {
-        // No need to show "Remove from Toolbar" even if disabled, because the
-        // "Always Show in Toolbar" checkbox is already shown above.
-        removeFromToolbar.hidden = true;
-      }
-    }
-  },
-
-  /**
-   * Updates the toolbar context menu to show the right state if an
-   * extension-provided widget acted as the triggerNode. This will, for example,
-   * show or hide items for managing the underlying addon.
-   *
-   * @param {DOMNode} popup
-   *   The menupopup for the toolbar context menu.
-   * @returns {Promise<undefined>}
-   *   Resolves once the menupopup state has been set.
-   */
-  async updateExtension(popup) {
+  async updateExtension(popup, event) {
     let removeExtension = popup.querySelector(
       ".customize-context-removeExtension"
     );
@@ -517,20 +324,12 @@ export var ToolbarContextMenu = {
         addon.permissions & lazy.AddonManager.PERM_CAN_UNINSTALL
       );
 
-      if (popup.id === "toolbar-context-menu") {
+      if (event?.target?.id === "toolbar-context-menu") {
         lazy.ExtensionsUI.originControlsMenu(popup, id);
       }
     }
   },
 
-  /**
-   * Handler for the context menu item for removing an extension.
-   *
-   * @param {DOMNode} popup
-   *   The menupopup that triggered the extension removal.
-   * @returns {Promise<undefined>}
-   *   Resolves when the extension has been removed.
-   */
   async removeExtensionForContextAction(popup) {
     let { BrowserAddonUI } = popup.ownerGlobal;
 
@@ -538,31 +337,12 @@ export var ToolbarContextMenu = {
     await BrowserAddonUI.removeAddon(id, "browserAction");
   },
 
-  /**
-   * Handler for the context menu item for issuing a report on an extension.
-   *
-   * @param {DOMNode} popup
-   *   The menupopup that triggered the extension report.
-   * @param {string} reportEntryPoint
-   *   A string describing the UI entrypoint for the report.
-   * @returns {Promise<undefined>}
-   *   Resolves when the extension has been removed.
-   */
   async reportExtensionForContextAction(popup, reportEntryPoint) {
     let { BrowserAddonUI } = popup.ownerGlobal;
     let id = this._getExtensionId(popup);
     await BrowserAddonUI.reportAddon(id, reportEntryPoint);
   },
 
-  /**
-   * Handler for the context menu item for managing an extension.
-   *
-   * @param {DOMNode} popup
-   *   The menupopup that triggered extension management.
-   * @returns {Promise<undefined>}
-   *   Resolves when the extension's about:addons management page has been
-   *   opened.
-   */
   async openAboutAddonsForContextAction(popup) {
     let { BrowserAddonUI } = popup.ownerGlobal;
     let id = this._getExtensionId(popup);

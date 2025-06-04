@@ -8,7 +8,7 @@ const START_VALUE = "http://example.com/%C3%B7?%C3%B7";
 
 add_setup(async function () {
   await SpecialPowers.pushPrefEnv({
-    set: [["browser.urlbar.scotchBonnet.enableOverride", false]],
+    set: [["browser.urlbar.suggest.quickactions", false]],
   });
   const engine = await SearchTestUtils.installOpenSearchEngine({
     url: getRootDirectory(gTestPath) + "searchSuggestionEngine.xml",

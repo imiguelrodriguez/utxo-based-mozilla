@@ -33,9 +33,6 @@ class ProviderRestrictKeywords extends UrlbarProvider {
     return "RestrictKeywords";
   }
 
-  /**
-   * @returns {Values<typeof UrlbarUtils.PROVIDER_TYPE>}
-   */
   get type() {
     return UrlbarUtils.PROVIDER_TYPE.HEURISTIC;
   }
@@ -44,7 +41,7 @@ class ProviderRestrictKeywords extends UrlbarProvider {
     return 1;
   }
 
-  async isActive(queryContext) {
+  isActive(queryContext) {
     if (!lazy.UrlbarPrefs.getScotchBonnetPref(RESTRICT_KEYWORDS_FEATURE_GATE)) {
       return false;
     }
@@ -60,7 +57,7 @@ class ProviderRestrictKeywords extends UrlbarProvider {
       return;
     }
 
-    for (const [token, l10nRestrictKeywords] of tokenToKeyword.entries()) {
+    for (const [token, l10nRestrictKeyword] of tokenToKeyword.entries()) {
       let icon = UrlbarUtils.LOCAL_SEARCH_MODES.find(
         mode => mode.restrict == token
       )?.icon;
@@ -71,10 +68,7 @@ class ProviderRestrictKeywords extends UrlbarProvider {
         ...lazy.UrlbarResult.payloadAndSimpleHighlights(queryContext.tokens, {
           icon,
           keyword: token,
-          l10nRestrictKeywords: [
-            l10nRestrictKeywords,
-            UrlbarUtils.HIGHLIGHT.TYPED,
-          ],
+          l10nRestrictKeyword,
           providesSearchMode: true,
         })
       );

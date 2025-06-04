@@ -74,6 +74,7 @@ class ScreenshotsPreview extends MozLitElement {
 
   close() {
     window.removeEventListener("keydown", this, true);
+    URL.revokeObjectURL(this.previewImg.src);
     window.close();
   }
 
@@ -197,7 +198,7 @@ class ScreenshotsPreview extends MozLitElement {
 
     // Wait for the image to be loaded before we copy it
     let imageSrc = await this.imageLoadedPromise();
-    await lazy.ScreenshotsUtils.copyScreenshotFromBlobURL(
+    await lazy.ScreenshotsUtils.copyScreenshot(
       imageSrc,
       this.openerBrowser,
       "PreviewCopy"

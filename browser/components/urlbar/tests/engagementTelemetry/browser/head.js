@@ -63,10 +63,6 @@ function assertExposureTelemetry(expectedExtraList) {
   assertGleanTelemetry("exposure", expectedExtraList);
 }
 
-function assertDisableTelemetry(expectedExtraList) {
-  assertGleanTelemetry("disable", expectedExtraList);
-}
-
 function assertGleanTelemetry(telemetryName, expectedExtraList) {
   const camelName = telemetryName.replaceAll(/_(.)/g, (match, p1) =>
     p1.toUpperCase()
@@ -102,38 +98,26 @@ async function ensureQuickSuggestInit({ ...args } = {}) {
   return lazy.QuickSuggestTestUtils.ensureQuickSuggestInit({
     remoteSettingsRecords: [
       {
-        collection: lazy.QuickSuggestTestUtils.RS_COLLECTION.AMP,
-        type: lazy.QuickSuggestTestUtils.RS_TYPE.AMP,
+        type: "data",
         attachment: [
           lazy.QuickSuggestTestUtils.ampRemoteSettings({
             keywords: ["amp", "amp and wikipedia"],
           }),
-        ],
-      },
-      {
-        collection: lazy.QuickSuggestTestUtils.RS_COLLECTION.OTHER,
-        type: lazy.QuickSuggestTestUtils.RS_TYPE.WIKIPEDIA,
-        attachment: [
           lazy.QuickSuggestTestUtils.wikipediaRemoteSettings({
             keywords: ["wikipedia", "amp and wikipedia"],
           }),
         ],
       },
-      lazy.QuickSuggestTestUtils.weatherRecord(),
       {
-        type: "dynamic-suggestions",
-        suggestion_type: "test-exposure-aaa",
-        score: 1.0,
-        attachment: [
-          {
-            keywords: ["aaa keyword"],
-            data: {
-              result: {
-                isHiddenExposure: true,
-              },
-            },
-          },
-        ],
+        type: "weather",
+        weather: MerinoTestUtils.WEATHER_RS_DATA,
+      },
+      {
+        type: "exposure-suggestions",
+        suggestion_type: "aaa",
+        attachment: {
+          keywords: ["aaa keyword"],
+        },
       },
     ],
     ...args,
@@ -218,7 +202,8 @@ async function doTest(testFn) {
   await PlacesTestUtils.clearHistoryVisits();
   await PlacesTestUtils.clearInputHistory();
   await UrlbarTestUtils.formHistory.clear(window);
-  await QuickSuggest.clearDismissedSuggestions();
+  await QuickSuggest.blockedSuggestions.clear();
+  await QuickSuggest.blockedSuggestions._test_readyPromise;
   await updateTopSites(() => true);
   await BrowserTestUtils.withNewTab(gBrowser, testFn);
 }

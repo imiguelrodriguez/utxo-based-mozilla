@@ -14,7 +14,7 @@
 #include "nsISocketTransport.h"
 #include "nsSocketTransportService2.h"
 #include "mozilla/StaticPrefs_network.h"
-#include "mozilla/glean/NetwerkProtocolHttpMetrics.h"
+#include "mozilla/Telemetry.h"
 #include "nsIOService.h"
 #include "nsHttpHandler.h"
 
@@ -120,7 +120,7 @@ nsresult Http3Stream::TryActivating() {
 }
 
 void Http3Stream::CurrentBrowserIdChanged(uint64_t id) {
-  MOZ_ASSERT(StaticPrefs::network_http_active_tab_priority());
+  MOZ_ASSERT(gHttpHandler->ActiveTabPriority());
 
   bool previouslyFocused = (mCurrentBrowserId == mTransactionBrowserId);
   mCurrentBrowserId = id;
@@ -390,8 +390,9 @@ nsresult Http3Stream::ReadSegments() {
       mTransaction->OnTransportStatus(nullptr, NS_NET_STATUS_WAITING_FOR, 0);
       mSession->CloseSendingSide(mStreamId);
       mSendState = SEND_DONE;
-      glean::http3::sending_blocked_by_flow_control_per_trans
-          .AccumulateSingleSample(mSendingBlockedByFlowControlCount);
+      Telemetry::Accumulate(
+          Telemetry::HTTP3_SENDING_BLOCKED_BY_FLOW_CONTROL_PER_TRANS,
+          mSendingBlockedByFlowControlCount);
 
 #ifdef DEBUG
       MOZ_ASSERT(mRequestBodyLenSent == mRequestBodyLenExpected);

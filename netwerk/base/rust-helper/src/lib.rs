@@ -2,18 +2,21 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-use std::{
-    fs::File,
-    io::{self, BufRead},
-    net::Ipv4Addr,
-};
+extern crate nserror;
+use self::nserror::*;
 
-use nserror::*;
-use nsstring::{nsACString, nsCString};
-use thin_vec::ThinVec;
+extern crate nsstring;
+use self::nsstring::{nsACString, nsCString};
+
+extern crate thin_vec;
+use self::thin_vec::ThinVec;
+
+use std::fs::File;
+use std::io::{self, BufRead};
+use std::net::Ipv4Addr;
 
 /// HTTP leading whitespace, defined in netwerk/protocol/http/nsHttp.h
-static HTTP_LWS: &[u8] = b" \t";
+static HTTP_LWS: &'static [u8] = &[' ' as u8, '\t' as u8];
 
 /// Trim leading whitespace, trailing whitespace, and quality-value
 /// from a token.
@@ -28,7 +31,7 @@ fn trim_token(token: &[u8]) -> &[u8] {
     // remove "; q=..." if present
     let rtrim = token[ltrim..]
         .iter()
-        .take_while(|c| **c != b';' && HTTP_LWS.iter().all(|ws| ws != *c))
+        .take_while(|c| **c != (';' as u8) && HTTP_LWS.iter().all(|ws| ws != *c))
         .count();
 
     &token[ltrim..ltrim + rtrim]
@@ -46,9 +49,9 @@ fn trim_token(token: &[u8]) -> &[u8] {
 ///
 ///     passing: "en, ja, fr_CA"
 ///     returns: "en,ja;q=0.7,fr_CA;q=0.3"
-pub extern "C" fn rust_prepare_accept_languages(
-    i_accept_languages: &nsACString,
-    o_accept_languages: &mut nsACString,
+pub extern "C" fn rust_prepare_accept_languages<'a, 'b>(
+    i_accept_languages: &'a nsACString,
+    o_accept_languages: &'b mut nsACString,
 ) -> nsresult {
     if i_accept_languages.is_empty() {
         return NS_OK;
@@ -56,9 +59,9 @@ pub extern "C" fn rust_prepare_accept_languages(
 
     let make_tokens = || {
         i_accept_languages
-            .split(|c| *c == b',')
-            .map(trim_token)
-            .filter(|token| !token.is_empty())
+            .split(|c| *c == (',' as u8))
+            .map(|token| trim_token(token))
+            .filter(|token| token.len() != 0)
     };
 
     let n = make_tokens().count();
@@ -70,7 +73,7 @@ pub extern "C" fn rust_prepare_accept_languages(
         }
 
         let token_pos = o_accept_languages.len();
-        o_accept_languages.append(i_token as &[u8]);
+        o_accept_languages.append(&i_token as &[u8]);
 
         {
             let o_token = o_accept_languages.to_mut();
@@ -123,7 +126,7 @@ fn canonicalize_language_tag(token: &mut [u8]) {
         *c = c.to_ascii_lowercase();
     }
 
-    let sub_tags = token.split_mut(|c| *c == b'-');
+    let sub_tags = token.split_mut(|c| *c == ('-' as u8));
     for (i, sub_tag) in sub_tags.enumerate() {
         if i == 0 {
             // ISO 639-1 language code, like the "en" in "en-US"
@@ -150,7 +153,7 @@ fn canonicalize_language_tag(token: &mut [u8]) {
 }
 
 #[no_mangle]
-pub extern "C" fn rust_net_is_valid_ipv4_addr(addr: &nsACString) -> bool {
+pub extern "C" fn rust_net_is_valid_ipv4_addr<'a>(addr: &'a nsACString) -> bool {
     is_valid_ipv4_addr(addr)
 }
 
@@ -159,7 +162,7 @@ fn try_apply_digit(current_octet: u8, digit_to_apply: u8) -> Option<u8> {
     current_octet.checked_mul(10)?.checked_add(digit_to_apply)
 }
 
-pub fn is_valid_ipv4_addr(addr: &[u8]) -> bool {
+pub fn is_valid_ipv4_addr<'a>(addr: &'a [u8]) -> bool {
     let mut current_octet: Option<u8> = None;
     let mut dots: u8 = 0;
     for c in addr {
@@ -172,7 +175,7 @@ pub fn is_valid_ipv4_addr(addr: &[u8]) -> bool {
                         return false;
                     }
                     Some(_) => {
-                        dots += 1;
+                        dots = dots + 1;
                         current_octet = None;
                     }
                 }
@@ -209,11 +212,21 @@ pub fn is_valid_ipv4_addr(addr: &[u8]) -> bool {
 }
 
 #[no_mangle]
-pub extern "C" fn rust_net_is_valid_ipv6_addr(addr: &nsACString) -> bool {
+pub extern "C" fn rust_net_is_valid_ipv6_addr<'a>(addr: &'a nsACString) -> bool {
     is_valid_ipv6_addr(addr)
 }
 
-pub fn is_valid_ipv6_addr(addr: &[u8]) -> bool {
+#[inline(always)]
+fn fast_is_hex_digit(c: u8) -> bool {
+    match c {
+        b'0'..=b'9' => true,
+        b'a'..=b'f' => true,
+        b'A'..=b'F' => true,
+        _ => false,
+    }
+}
+
+pub fn is_valid_ipv6_addr<'a>(addr: &'a [u8]) -> bool {
     let mut double_colon = false;
     let mut colon_before = false;
     let mut digits: u8 = 0;
@@ -227,7 +240,7 @@ pub fn is_valid_ipv6_addr(addr: &[u8]) -> bool {
     //Enumerate with an u8 for cache locality
     for (i, c) in (0u8..).zip(addr) {
         match c {
-            maybe_digit if maybe_digit.is_ascii_hexdigit() => {
+            maybe_digit if fast_is_hex_digit(*maybe_digit) => {
                 // Too many digits in the block
                 if digits == 4 {
                     return false;
@@ -280,7 +293,7 @@ pub extern "C" fn rust_net_is_valid_scheme_char(a_char: u8) -> bool {
 }
 
 #[no_mangle]
-pub extern "C" fn rust_net_is_valid_scheme(scheme: &nsACString) -> bool {
+pub extern "C" fn rust_net_is_valid_scheme<'a>(scheme: &'a nsACString) -> bool {
     if scheme.is_empty() {
         return false;
     }
@@ -302,7 +315,7 @@ fn is_valid_scheme_char(a_char: u8) -> bool {
 pub type ParsingCallback = extern "C" fn(&ThinVec<nsCString>) -> bool;
 
 #[no_mangle]
-pub extern "C" fn rust_parse_etc_hosts(path: &nsACString, callback: ParsingCallback) {
+pub extern "C" fn rust_parse_etc_hosts<'a>(path: &'a nsACString, callback: ParsingCallback) {
     let file = match File::open(&*path.to_utf8()) {
         Ok(file) => io::BufReader::new(file),
         Err(..) => return,

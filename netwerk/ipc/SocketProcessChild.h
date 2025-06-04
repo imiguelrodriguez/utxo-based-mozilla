@@ -135,8 +135,6 @@ class SocketProcessChild final : public PSocketProcessChild {
       GetDNSCacheEntriesResolver&& aResolve);
   mozilla::ipc::IPCResult RecvGetHttpConnectionData(
       GetHttpConnectionDataResolver&& aResolve);
-  mozilla::ipc::IPCResult RecvGetHttp3ConnectionStatsData(
-      GetHttp3ConnectionStatsDataResolver&& aResolve);
 
   mozilla::ipc::IPCResult RecvInitProxyAutoConfigChild(
       Endpoint<PProxyAutoConfigChild>&& aEndpoint);
@@ -158,9 +156,7 @@ class SocketProcessChild final : public PSocketProcessChild {
   already_AddRefed<psm::IPCClientCertsChild> GetIPCClientCertsActor();
   void CloseIPCClientCertsActor();
 
-  mozilla::ipc::IPCResult RecvAddNetAddrOverride(const NetAddr& aFrom,
-                                                 const NetAddr& aTo);
-  mozilla::ipc::IPCResult RecvClearNetAddrOverrides();
+  mozilla::ipc::IPCResult RecvHasThirdPartyRoots(const bool& aResult);
 
  protected:
   friend class SocketProcessImpl;

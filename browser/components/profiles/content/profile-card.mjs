@@ -9,10 +9,6 @@ import { html } from "chrome://global/content/vendor/lit.all.mjs";
 import "chrome://browser/content/profiles/profile-card.mjs";
 // eslint-disable-next-line import/no-unassigned-import
 import "chrome://global/content/elements/moz-card.mjs";
-// eslint-disable-next-line import/no-unassigned-import
-import "chrome://global/content/elements/moz-button.mjs";
-// eslint-disable-next-line import/no-unassigned-import
-import "chrome://global/content/elements/moz-button-group.mjs";
 
 const { SelectableProfile } = ChromeUtils.importESModule(
   "resource:///modules/profiles/SelectableProfile.sys.mjs"
@@ -29,9 +25,6 @@ export class ProfileCard extends MozLitElement {
   static queries = {
     backgroundImage: ".profile-background-image",
     avatarImage: ".profile-avatar",
-    profileCard: ".profile-card",
-    editButton: "#edit-button",
-    deleteButton: "#delete-button",
   };
 
   firstUpdated() {
@@ -76,10 +69,7 @@ export class ProfileCard extends MozLitElement {
   }
 
   handleKeyDown(event) {
-    if (
-      event.target === this.profileCard &&
-      (event.code === "Enter" || event.code === "Space")
-    ) {
+    if (event.code === "Enter" || event.code === "Space") {
       this.launchProfile();
     }
   }
@@ -105,9 +95,7 @@ export class ProfileCard extends MozLitElement {
         rel="stylesheet"
         href="chrome://browser/content/profiles/profile-card.css"
       />
-      <moz-card
-        data-l10n-id="profile-card"
-        data-l10n-args=${JSON.stringify({ profileName: this.profile.name })}
+      <div
         class="profile-card"
         role="button"
         tabindex="0"
@@ -122,22 +110,18 @@ export class ProfileCard extends MozLitElement {
           <h3 class="text-truncated-ellipsis">${this.profile.name}</h3>
           <moz-button-group
             ><moz-button
-              id="edit-button"
-              data-l10n-id="profile-card-edit-button"
               type="ghost"
-              iconsrc="chrome://global/skin/icons/edit-outline.svg"
+              iconsrc="chrome://global/skin/icons/edit.svg"
               @click=${this.handleEditClick}
             ></moz-button
             ><moz-button
-              id="delete-button"
-              data-l10n-id="profile-card-delete-button"
               type="ghost"
               iconsrc="chrome://global/skin/icons/delete.svg"
               @click=${this.handleDeleteClick}
             ></moz-button
           ></moz-button-group>
         </div>
-      </moz-card>`;
+      </div>`;
   }
 }
 

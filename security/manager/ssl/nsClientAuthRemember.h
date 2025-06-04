@@ -85,11 +85,14 @@ class nsClientAuthRememberService final : public nsIClientAuthRememberService {
  protected:
   ~nsClientAuthRememberService() = default;
 
+  static nsIDataStorage::DataType GetDataStorageType(
+      const OriginAttributes& aOriginAttributes);
+
   nsCOMPtr<nsIDataStorage> mClientAuthRememberList;
 
   nsresult AddEntryToList(const nsACString& aHost,
                           const OriginAttributes& aOriginAttributes,
-                          const nsACString& aDBKey, Duration aDuration);
+                          const nsACString& aDBKey);
 
   mozilla::DataMutex<bool> mMigrated;
   void Migrate();

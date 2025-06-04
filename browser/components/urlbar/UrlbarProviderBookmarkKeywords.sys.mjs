@@ -32,7 +32,9 @@ class ProviderBookmarkKeywords extends UrlbarProvider {
   }
 
   /**
-   * @returns {Values<typeof UrlbarUtils.PROVIDER_TYPE>}
+   * Returns the type of this provider.
+   *
+   * @returns {integer} one of the types from UrlbarUtils.PROVIDER_TYPE.*
    */
   get type() {
     return UrlbarUtils.PROVIDER_TYPE.HEURISTIC;
@@ -44,13 +46,14 @@ class ProviderBookmarkKeywords extends UrlbarProvider {
    * with this provider, to save on resources.
    *
    * @param {UrlbarQueryContext} queryContext The query context object
+   * @returns {boolean} Whether this provider should be invoked for the search.
    */
-  async isActive(queryContext) {
+  isActive(queryContext) {
     return (
       (!queryContext.restrictSource ||
         queryContext.restrictSource == UrlbarUtils.RESULT_SOURCE.BOOKMARKS) &&
       !queryContext.searchMode &&
-      !!queryContext.tokens.length
+      queryContext.tokens.length
     );
   }
 

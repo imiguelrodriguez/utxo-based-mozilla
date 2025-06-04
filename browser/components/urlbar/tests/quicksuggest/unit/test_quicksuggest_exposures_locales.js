@@ -8,53 +8,42 @@
 
 "use strict";
 
+ChromeUtils.defineESModuleGetters(this, {
+  ExperimentManager: "resource://nimbus/lib/ExperimentManager.sys.mjs",
+});
+
 const REMOTE_SETTINGS_RECORDS = [
   {
-    type: "dynamic-suggestions",
-    suggestion_type: "test-exposure-aaa",
-    score: 1.0,
-    attachment: [
-      {
-        keywords: ["aaa keyword", "aaa bbb keyword", "amp", "wikipedia"],
-        data: {
-          result: {
-            isHiddenExposure: true,
-            payload: {
-              rsSuggestionType: "test-exposure-aaa",
-            },
-          },
-        },
-      },
-    ],
-  },
-  {
-    type: "dynamic-suggestions",
-    suggestion_type: "test-exposure-bbb",
-    score: 1.0,
+    type: "exposure-suggestions",
+    suggestion_type: "aaa",
     attachment: {
-      keywords: ["bbb keyword", "aaa bbb keyword", "amp", "wikipedia"],
-      data: {
-        result: {
-          isHiddenExposure: true,
-          payload: {
-            rsSuggestionType: "test-exposure-bbb",
-          },
-        },
-      },
+      keywords: ["aaa keyword", "aaa bbb keyword", "amp", "wikipedia"],
     },
   },
   {
-    collection: QuickSuggestTestUtils.RS_COLLECTION.AMP,
-    type: QuickSuggestTestUtils.RS_TYPE.AMP,
-    attachment: [QuickSuggestTestUtils.ampRemoteSettings()],
+    type: "exposure-suggestions",
+    suggestion_type: "bbb",
+    attachment: {
+      keywords: ["bbb keyword", "aaa bbb keyword", "amp", "wikipedia"],
+    },
   },
   {
-    type: QuickSuggestTestUtils.RS_TYPE.WIKIPEDIA,
-    attachment: [QuickSuggestTestUtils.wikipediaRemoteSettings()],
+    type: "data",
+    attachment: [
+      QuickSuggestTestUtils.ampRemoteSettings(),
+      QuickSuggestTestUtils.wikipediaRemoteSettings(),
+    ],
   },
 ];
 
 add_setup(async function () {
+  // This test calls `UrlbarPrefs.updateFirefoxSuggestScenario()`, which relies
+  // on `ExperimentManager` startup, which doesn't happen by default in xpcshell
+  // tests, so trigger that now.
+  info("Awaiting ExperimentManager.onStartup");
+  await ExperimentManager.onStartup();
+  info("Done awaiting ExperimentManager.onStartup");
+
   await QuickSuggestTestUtils.ensureQuickSuggestInit({
     remoteSettingsRecords: REMOTE_SETTINGS_RECORDS,
   });
@@ -76,27 +65,27 @@ add_task(async function suggestEnabledLocales() {
           query: "amp",
           expectedResults: [
             QuickSuggestTestUtils.ampResult(),
-            makeExpectedExposureResult("test-exposure-bbb"),
-            makeExpectedExposureResult("test-exposure-aaa"),
+            makeExpectedExposureResult("bbb"),
+            makeExpectedExposureResult("aaa"),
           ],
         },
         {
           query: "wikipedia",
           expectedResults: [
             QuickSuggestTestUtils.wikipediaResult(),
-            makeExpectedExposureResult("test-exposure-bbb"),
-            makeExpectedExposureResult("test-exposure-aaa"),
+            makeExpectedExposureResult("bbb"),
+            makeExpectedExposureResult("aaa"),
           ],
         },
         {
           query: "aaa keyword",
-          expectedResults: [makeExpectedExposureResult("test-exposure-aaa")],
+          expectedResults: [makeExpectedExposureResult("aaa")],
         },
         {
           query: "aaa bbb keyword",
           expectedResults: [
-            makeExpectedExposureResult("test-exposure-bbb"),
-            makeExpectedExposureResult("test-exposure-aaa"),
+            makeExpectedExposureResult("bbb"),
+            makeExpectedExposureResult("aaa"),
           ],
         },
       ],
@@ -114,27 +103,27 @@ add_task(async function suggestDisabledLocales() {
       query: "amp",
       expectedResults: [
         // No AMP result!
-        makeExpectedExposureResult("test-exposure-bbb"),
-        makeExpectedExposureResult("test-exposure-aaa"),
+        makeExpectedExposureResult("bbb"),
+        makeExpectedExposureResult("aaa"),
       ],
     },
     {
       query: "wikipedia",
       expectedResults: [
         // No Wikipedia result!
-        makeExpectedExposureResult("test-exposure-bbb"),
-        makeExpectedExposureResult("test-exposure-aaa"),
+        makeExpectedExposureResult("bbb"),
+        makeExpectedExposureResult("aaa"),
       ],
     },
     {
       query: "aaa keyword",
-      expectedResults: [makeExpectedExposureResult("test-exposure-aaa")],
+      expectedResults: [makeExpectedExposureResult("aaa")],
     },
     {
       query: "aaa bbb keyword",
       expectedResults: [
-        makeExpectedExposureResult("test-exposure-bbb"),
-        makeExpectedExposureResult("test-exposure-aaa"),
+        makeExpectedExposureResult("bbb"),
+        makeExpectedExposureResult("aaa"),
       ],
     },
   ];
@@ -179,11 +168,11 @@ async function doLocaleTest({
       homeRegion,
       locales: [locale],
       callback: async () => {
-        // Reinitialize Suggest, which will set default-branch values for
+        // Update the Suggest scenario, which will set default-branch values for
         // Suggest prefs appropriate to the locale.
-        info("Reinitializing Suggest");
-        await QuickSuggest._test_reinit();
-        info("Done reinitializing Suggest");
+        info("Updating Suggest scenario");
+        await UrlbarPrefs.updateFirefoxSuggestScenario();
+        info("Done updating Suggest scenario");
 
         // Sanity-check prefs. At this point, the value of `quickSuggestEnabled`
         // will be the value of its fallback pref, `quicksuggest.enabled`.
@@ -197,8 +186,7 @@ async function doLocaleTest({
         // Install an experiment that enables Suggest and exposures.
         let nimbusCleanup = await UrlbarTestUtils.initNimbusFeature({
           quickSuggestEnabled: true,
-          quickSuggestDynamicSuggestionTypes:
-            "test-exposure-aaa,test-exposure-bbb",
+          quickSuggestExposureSuggestionTypes: "aaa,bbb",
         });
         await QuickSuggestTestUtils.forceSync();
 
@@ -229,9 +217,9 @@ async function doLocaleTest({
     });
   }
 
-  // Reinitialize Suggest so prefs go back to their defaults now that the app is
-  // back to its default locale.
-  await QuickSuggest._test_reinit();
+  // Reset Suggest prefs to their defaults by updating the scenario now that the
+  // app is back to its default locale.
+  await UrlbarPrefs.updateFirefoxSuggestScenario();
 }
 
 function assertSuggestPrefs(expectedEnabled) {
@@ -254,19 +242,18 @@ function assertSuggestPrefs(expectedEnabled) {
   }
 }
 
-function makeExpectedExposureResult(rsSuggestionType) {
+function makeExpectedExposureResult(exposureSuggestionType) {
   return {
     type: UrlbarUtils.RESULT_TYPE.DYNAMIC,
     source: UrlbarUtils.RESULT_SOURCE.SEARCH,
     heuristic: false,
     exposureTelemetry: UrlbarUtils.EXPOSURE_TELEMETRY.HIDDEN,
     payload: {
-      rsSuggestionType,
+      exposureSuggestionType,
       source: "rust",
       dynamicType: "exposure",
-      provider: "Dynamic",
+      provider: "Exposure",
       telemetryType: "exposure",
-      isSponsored: false,
     },
   };
 }

@@ -15,13 +15,9 @@ import {
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
-  ActionsProviderContextualSearch:
-    "resource:///modules/ActionsProviderContextualSearch.sys.mjs",
   UrlbarView: "resource:///modules/UrlbarView.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
   UrlbarProviderAutofill: "resource:///modules/UrlbarProviderAutofill.sys.mjs",
-  UrlbarProviderGlobalActions:
-    "resource:///modules/UrlbarProviderGlobalActions.sys.mjs",
   UrlbarResult: "resource:///modules/UrlbarResult.sys.mjs",
   UrlbarSearchUtils: "resource:///modules/UrlbarSearchUtils.sys.mjs",
   UrlbarTokenizer: "resource:///modules/UrlbarTokenizer.sys.mjs",
@@ -115,7 +111,9 @@ class ProviderTabToSearch extends UrlbarProvider {
   }
 
   /**
-   * @returns {Values<typeof UrlbarUtils.PROVIDER_TYPE>}
+   * Returns the type of this provider.
+   *
+   * @returns {integer} one of the types from UrlbarUtils.PROVIDER_TYPE.*
    */
   get type() {
     return UrlbarUtils.PROVIDER_TYPE.PROFILE;
@@ -127,17 +125,14 @@ class ProviderTabToSearch extends UrlbarProvider {
    * with this provider, to save on resources.
    *
    * @param {UrlbarQueryContext} queryContext The query context object
+   * @returns {boolean} Whether this provider should be invoked for the search.
    */
   async isActive(queryContext) {
     return (
       queryContext.searchString &&
       queryContext.tokens.length == 1 &&
       !queryContext.searchMode &&
-      lazy.UrlbarPrefs.get("suggest.engines") &&
-      !(
-        (await lazy.UrlbarProviderGlobalActions.isActive(queryContext)) &&
-        lazy.ActionsProviderContextualSearch.isActive(queryContext)
-      )
+      lazy.UrlbarPrefs.get("suggest.engines")
     );
   }
 
@@ -237,6 +232,54 @@ class ProviderTabToSearch extends UrlbarProvider {
         result,
         checkValue: false,
       });
+    }
+  }
+
+  onImpression(state, queryContext, controller, providerVisibleResults) {
+    try {
+      let regularResultCount = 0;
+      let onboardingResultCount = 0;
+      providerVisibleResults.forEach(({ result }) => {
+        if (result.type === UrlbarUtils.RESULT_TYPE.DYNAMIC) {
+          let scalarKey = lazy.UrlbarSearchUtils.getSearchModeScalarKey({
+            engineName: result?.payload.engine,
+          });
+          Services.telemetry.keyedScalarAdd(
+            "urlbar.tabtosearch.impressions_onboarding",
+            scalarKey,
+            1
+          );
+          onboardingResultCount += 1;
+        } else if (result.type === UrlbarUtils.RESULT_TYPE.SEARCH) {
+          let scalarKey = lazy.UrlbarSearchUtils.getSearchModeScalarKey({
+            engineName: result?.payload.engine,
+          });
+          Services.telemetry.keyedScalarAdd(
+            "urlbar.tabtosearch.impressions",
+            scalarKey,
+            1
+          );
+          regularResultCount += 1;
+        }
+      });
+      Services.telemetry.keyedScalarAdd(
+        "urlbar.tips",
+        "tabtosearch-shown",
+        regularResultCount
+      );
+      Services.telemetry.keyedScalarAdd(
+        "urlbar.tips",
+        "tabtosearch_onboard-shown",
+        onboardingResultCount
+      );
+    } catch (ex) {
+      // If your test throws this error or causes another test to throw it, it
+      // is likely because your test showed a tab-to-search result but did not
+      // start and end the engagement in which it was shown. Be sure to fire an
+      // input event to start an engagement and blur the Urlbar to end it.
+      this.logger.error(
+        `Exception while recording TabToSearch telemetry: ${ex})`
+      );
     }
   }
 

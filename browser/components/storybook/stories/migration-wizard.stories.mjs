@@ -11,10 +11,6 @@ import { MigrationWizardConstants } from "chrome://browser/content/migration/mig
 // Imported for side-effects.
 import "toolkit-widgets/named-deck.js";
 
-window.MozXULElement.insertFTLIfNeeded(
-  "locales-preview/migrationWizardChromeWindows.ftl"
-);
-
 export default {
   title: "Domain-specific UI Widgets/Migration Wizard",
   component: "migration-wizard",
@@ -550,7 +546,7 @@ FileImportProgress.args = {
   dialogMode: true,
   state: {
     page: MigrationWizardConstants.PAGES.FILE_IMPORT_PROGRESS,
-    title: "Importing passwords",
+    title: "Importing Passwords",
     progress: {
       [MigrationWizardConstants.DISPLAYED_FILE_RESOURCE_TYPES
         .PASSWORDS_FROM_FILE]: {
@@ -565,7 +561,7 @@ FileImportSuccess.args = {
   dialogMode: true,
   state: {
     page: MigrationWizardConstants.PAGES.FILE_IMPORT_PROGRESS,
-    title: "Passwords imported successfully",
+    title: "Passwords Imported Successfully",
     progress: {
       [MigrationWizardConstants.DISPLAYED_FILE_RESOURCE_TYPES.PASSWORDS_NEW]: {
         value: MigrationWizardConstants.PROGRESS_VALUE.SUCCESS,
@@ -593,14 +589,6 @@ SafariPasswordPermissions.args = {
   dialogMode: true,
   state: {
     page: MigrationWizardConstants.PAGES.SAFARI_PASSWORD_PERMISSION,
-  },
-};
-
-export const ChromeWindowsPasswordPermissions = Template.bind({});
-ChromeWindowsPasswordPermissions.args = {
-  dialogMode: true,
-  state: {
-    page: MigrationWizardConstants.PAGES.CHROME_WINDOWS_PASSWORD_PERMISSION,
   },
 };
 

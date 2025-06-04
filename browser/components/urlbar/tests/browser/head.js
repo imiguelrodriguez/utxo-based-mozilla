@@ -7,12 +7,11 @@ ChromeUtils.defineESModuleGetters(this, {
   AboutNewTab: "resource:///modules/AboutNewTab.sys.mjs",
   BrowsetUIUtils: "resource:///modules/BrowserUIUtils.sys.mjs",
   ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
-  NimbusTestUtils: "resource://testing-common/NimbusTestUtils.sys.mjs",
+  ExperimentFakes: "resource://testing-common/NimbusTestUtils.sys.mjs",
   ObjectUtils: "resource://gre/modules/ObjectUtils.sys.mjs",
   PromptTestUtils: "resource://testing-common/PromptTestUtils.sys.mjs",
   ResetProfile: "resource://gre/modules/ResetProfile.sys.mjs",
-  SearchUITestUtils: "resource://testing-common/SearchUITestUtils.sys.mjs",
-  SearchUtils: "moz-src:///toolkit/components/search/SearchUtils.sys.mjs",
+  SearchUtils: "resource://gre/modules/SearchUtils.sys.mjs",
   TelemetryTestUtils: "resource://testing-common/TelemetryTestUtils.sys.mjs",
   UrlbarController: "resource:///modules/UrlbarController.sys.mjs",
   UrlbarEventBufferer: "resource:///modules/UrlbarEventBufferer.sys.mjs",
@@ -30,8 +29,6 @@ ChromeUtils.defineLazyGetter(this, "PlacesFrecencyRecalculator", () => {
     Ci.nsIObserver
   ).wrappedJSObject;
 });
-
-SearchUITestUtils.init(this);
 
 let sandbox;
 
@@ -376,8 +373,6 @@ async function searchWithTab(
     waitForFocus,
     value: searchString,
     fireInputEvent: true,
-    selectionStart: 0,
-    selectionEnd: searchString.length - 1,
   });
   EventUtils.synthesizeKey("KEY_Enter");
   await browserLoadedPromise;
@@ -388,28 +383,4 @@ async function searchWithTab(
   }
 
   return { tab, expectedSearchUrl };
-}
-
-async function focusSwitcher(win = window) {
-  await UrlbarTestUtils.promiseAutocompleteResultPopup({
-    window: win,
-    waitForFocus: true,
-    value: "",
-    fireInputEvent: true,
-  });
-  Assert.ok(win.gURLBar.hasAttribute("focused"));
-
-  EventUtils.synthesizeKey("KEY_Tab", { shiftKey: true }, win);
-  let switcher = win.document.getElementById("urlbar-searchmode-switcher");
-  await BrowserTestUtils.waitForCondition(
-    () => win.document.activeElement == switcher
-  );
-}
-
-/**
- * Clears the SAP telemetry probes (SEARCH_COUNTS and all of Glean).
- */
-function clearSAPTelemetry() {
-  TelemetryTestUtils.getAndClearKeyedHistogram("SEARCH_COUNTS");
-  Services.fog.testResetFOG();
 }

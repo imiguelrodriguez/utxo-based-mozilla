@@ -97,8 +97,8 @@ class ZipArchiveLogger {
 
     if (!mFd) {
       nsCOMPtr<nsIFile> logFile;
-      nsresult rv =
-          NS_NewLocalFile(NS_ConvertUTF8toUTF16(env), getter_AddRefs(logFile));
+      nsresult rv = NS_NewLocalFile(NS_ConvertUTF8toUTF16(env), false,
+                                    getter_AddRefs(logFile));
       if (NS_FAILED(rv)) return;
 
       // Create the log file and its parent directory (in case it doesn't exist)
@@ -237,12 +237,12 @@ nsresult nsZipHandle::Init(nsIFile* file, nsZipHandle** ret, PRFileDesc** aFd) {
   return NS_OK;
 }
 
-nsresult nsZipHandle::Init(nsZipArchive* zip, const nsACString& entry,
+nsresult nsZipHandle::Init(nsZipArchive* zip, const char* entry,
                            nsZipHandle** ret) {
   RefPtr<nsZipHandle> handle = new nsZipHandle();
   if (!handle) return NS_ERROR_OUT_OF_MEMORY;
 
-  LOG(("ZipHandle::Init entry %s", PromiseFlatCString(entry).get()));
+  LOG(("ZipHandle::Init entry %s", entry));
 
   nsZipItem* item = zip->GetItem(entry);
   if (item && item->Compression() == DEFLATED &&
@@ -414,10 +414,10 @@ already_AddRefed<nsZipArchive> nsZipArchive::OpenArchive(nsIFile* aFile) {
 //---------------------------------------------
 //  nsZipArchive::Test
 //---------------------------------------------
-nsresult nsZipArchive::Test(const nsACString& aEntryName) {
+nsresult nsZipArchive::Test(const char* aEntryName) {
   nsZipItem* currItem;
 
-  if (aEntryName.Length())  // only test specified item
+  if (aEntryName)  // only test specified item
   {
     currItem = GetItem(aEntryName);
     if (!currItem) return NS_ERROR_FILE_NOT_FOUND;
@@ -442,13 +442,12 @@ nsresult nsZipArchive::Test(const nsACString& aEntryName) {
 //---------------------------------------------
 // nsZipArchive::GetItem
 //---------------------------------------------
-nsZipItem* nsZipArchive::GetItem(const nsACString& aEntryName) {
+nsZipItem* nsZipArchive::GetItem(const char* aEntryName) {
   MutexAutoLock lock(mLock);
 
-  LOG(("ZipHandle::GetItem[%p] %s", this,
-       PromiseFlatCString(aEntryName).get()));
-  if (aEntryName.Length()) {
-    uint32_t len = aEntryName.Length();
+  LOG(("ZipHandle::GetItem[%p] %s", this, aEntryName));
+  if (aEntryName) {
+    uint32_t len = strlen(aEntryName);
     //-- If the request is for a directory, make sure that synthetic entries
     //-- are created for the directories without their own entry.
     if (!mBuiltSynthetics) {
@@ -457,14 +456,14 @@ nsZipItem* nsZipArchive::GetItem(const nsACString& aEntryName) {
       }
     }
     MMAP_FAULT_HANDLER_BEGIN_HANDLE(mFd)
-    nsZipItem* item = mFiles[HashName(aEntryName.BeginReading(), len)];
+    nsZipItem* item = mFiles[HashName(aEntryName, len)];
     while (item) {
       if ((len == item->nameLength) &&
-          (!memcmp(aEntryName.BeginReading(), item->Name(), len))) {
+          (!memcmp(aEntryName, item->Name(), len))) {
         // Successful GetItem() is a good indicator that the file is about to be
         // read
         if (mUseZipLog && mURI.Length()) {
-          zipLog.Write(mURI, aEntryName.BeginReading());
+          zipLog.Write(mURI, aEntryName);
         }
         return item;  //-- found it
       }
@@ -1203,8 +1202,8 @@ uint8_t* nsZipCursor::ReadOrCopy(uint32_t* aBytesRead, bool aCopy) {
   return buf;
 }
 
-nsZipItemPtr_base::nsZipItemPtr_base(nsZipArchive* aZip,
-                                     const nsACString& aEntryName, bool doCRC)
+nsZipItemPtr_base::nsZipItemPtr_base(nsZipArchive* aZip, const char* aEntryName,
+                                     bool doCRC)
     : mReturnBuf(nullptr), mReadlen(0) {
   // make sure the ziparchive hangs around
   mZipHandle = aZip->GetFD();

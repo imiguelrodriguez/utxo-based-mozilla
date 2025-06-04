@@ -5,132 +5,81 @@
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
   NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
-  Preferences: "resource://gre/modules/Preferences.sys.mjs",
-  Region: "resource://gre/modules/Region.sys.mjs",
-  TelemetryEnvironment: "resource://gre/modules/TelemetryEnvironment.sys.mjs",
+  rawSuggestionUrlMatches: "resource://gre/modules/RustSuggest.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
   UrlbarUtils: "resource:///modules/UrlbarUtils.sys.mjs",
 });
 
-// See the `QuickSuggest.SETTINGS_UI` jsdoc below.
-const SETTINGS_UI = Object.freeze({
-  FULL: 0,
-  NONE: 1,
-  // Only settings relevant to offline will be shown. Settings that pertain to
-  // online will be hidden.
-  OFFLINE_ONLY: 2,
-});
-
-// This defines the home regions and locales where Suggest will be enabled.
-// Suggest will remain disabled for regions and locales not defined here. More
-// generally it defines important Suggest prefs that require special handling.
-// Each entry in this object defines a pref name and information about that
-// pref. Pref names are relative to `browser.urlbar.` The value in each entry is
-// an object with the following properties:
-//
-// {object} defaultValues
-//   This controls the home regions and locales where Suggest and each of its
-//   subfeatures will be enabled. If the pref should be initialized on the
-//   default branch depending on the user's home region and locale, then this
-//   should be set to an object where each entry maps a region name to a tuple
-//   `[localPrefixes, prefValue]`. `localePrefixes` is an array of strings and
-//   `prefValue` is the value that should be set when the region and locale
-//   prefixes match the user's region and locale. If the user's region and
-//   locale do not match any of the entries in `defaultValues`, then the pref
-//   will retain its default value as defined in `firefox.js`.
-// {string} nimbusVariableIfExposedInUi
-//   If the pref is exposed in the settings UI and it's a fallback for a Nimbus
-//   variable, then this should be set to the variable's name. See point 3 in
-//   the comment in `#initDefaultPrefs()` for more.
-const SUGGEST_PREFS = Object.freeze({
-  // Prefs related to Suggest overall
-  "quicksuggest.dataCollection.enabled": {
-    nimbusVariableIfExposedInUi: "quickSuggestDataCollectionEnabled",
-  },
-  "quicksuggest.enabled": {
-    defaultValues: {
-      GB: [["en"], true],
-      US: [["en"], true],
-    },
-  },
-  "quicksuggest.settingsUi": {
-    defaultValues: {
-      GB: [["en"], SETTINGS_UI.OFFLINE_ONLY],
-      US: [["en"], SETTINGS_UI.FULL],
-    },
-  },
-  "suggest.quicksuggest.nonsponsored": {
-    nimbusVariableIfExposedInUi: "quickSuggestNonSponsoredEnabled",
-    defaultValues: {
-      GB: [["en"], true],
-      US: [["en"], true],
-    },
-  },
-  "suggest.quicksuggest.sponsored": {
-    nimbusVariableIfExposedInUi: "quickSuggestSponsoredEnabled",
-    defaultValues: {
-      GB: [["en"], true],
-      US: [["en"], true],
-    },
-  },
-
-  // Prefs related to individual features
-  "addons.featureGate": {
-    defaultValues: {
-      US: [["en"], true],
-    },
-  },
-  "mdn.featureGate": {
-    defaultValues: {
-      US: [["en"], true],
-    },
-  },
-  "weather.featureGate": {
-    defaultValues: {
-      GB: [["en"], true],
-      US: [["en"], true],
-    },
-  },
-  "yelp.featureGate": {
-    defaultValues: {
-      US: [["en"], true],
-    },
-  },
-});
-
-// Suggest features classes. On init, `QuickSuggest` creates an instance of each
-// class and keeps it in the `#featuresByName` map. See `SuggestFeature`.
+// Quick suggest features. On init, QuickSuggest creates an instance of each and
+// keeps it in the `#features` map. See `BaseFeature`.
 const FEATURES = {
   AddonSuggestions:
     "resource:///modules/urlbar/private/AddonSuggestions.sys.mjs",
-  AmpSuggestions: "resource:///modules/urlbar/private/AmpSuggestions.sys.mjs",
+  AdmWikipedia: "resource:///modules/urlbar/private/AdmWikipedia.sys.mjs",
+  BlockedSuggestions:
+    "resource:///modules/urlbar/private/BlockedSuggestions.sys.mjs",
+  ExposureSuggestions:
+    "resource:///modules/urlbar/private/ExposureSuggestions.sys.mjs",
   FakespotSuggestions:
     "resource:///modules/urlbar/private/FakespotSuggestions.sys.mjs",
-  DynamicSuggestions:
-    "resource:///modules/urlbar/private/DynamicSuggestions.sys.mjs",
   ImpressionCaps: "resource:///modules/urlbar/private/ImpressionCaps.sys.mjs",
   MDNSuggestions: "resource:///modules/urlbar/private/MDNSuggestions.sys.mjs",
-  OfflineWikipediaSuggestions:
-    "resource:///modules/urlbar/private/OfflineWikipediaSuggestions.sys.mjs",
-  SuggestBackendMerino:
-    "resource:///modules/urlbar/private/SuggestBackendMerino.sys.mjs",
-  SuggestBackendMl:
-    "resource:///modules/urlbar/private/SuggestBackendMl.sys.mjs",
+  PocketSuggestions:
+    "resource:///modules/urlbar/private/PocketSuggestions.sys.mjs",
+  SuggestBackendJs:
+    "resource:///modules/urlbar/private/SuggestBackendJs.sys.mjs",
   SuggestBackendRust:
     "resource:///modules/urlbar/private/SuggestBackendRust.sys.mjs",
-  WeatherSuggestions:
-    "resource:///modules/urlbar/private/WeatherSuggestions.sys.mjs",
+  Weather: "resource:///modules/urlbar/private/Weather.sys.mjs",
   YelpSuggestions: "resource:///modules/urlbar/private/YelpSuggestions.sys.mjs",
 };
 
+const TIMESTAMP_TEMPLATE = "%YYYYMMDDHH%";
+const TIMESTAMP_LENGTH = 10;
+const TIMESTAMP_REGEXP = /^\d{10}$/;
+
+// Values returned by the onboarding dialog depending on the user's response.
+// These values are used in telemetry events, so be careful about changing them.
+const ONBOARDING_CHOICE = {
+  ACCEPT_2: "accept_2",
+  CLOSE_1: "close_1",
+  DISMISS_1: "dismiss_1",
+  DISMISS_2: "dismiss_2",
+  LEARN_MORE_1: "learn_more_1",
+  LEARN_MORE_2: "learn_more_2",
+  NOT_NOW_2: "not_now_2",
+  REJECT_2: "reject_2",
+};
+
+const ONBOARDING_URI =
+  "chrome://browser/content/urlbar/quicksuggestOnboarding.html";
+
 /**
- * This class manages Firefox Suggest and has related helpers.
+ * This class manages the quick suggest feature (a.k.a Firefox Suggest) and has
+ * related helpers.
  */
 class _QuickSuggest {
   /**
    * @returns {string}
-   *   The help URL for Suggest.
+   *   The timestamp template string used in quick suggest URLs.
+   */
+  get TIMESTAMP_TEMPLATE() {
+    return TIMESTAMP_TEMPLATE;
+  }
+
+  /**
+   * @returns {number}
+   *   The length of the timestamp in quick suggest URLs.
+   */
+  get TIMESTAMP_LENGTH() {
+    return TIMESTAMP_LENGTH;
+  }
+
+  /**
+   * @returns {string}
+   *   The help URL for the Quick Suggest feature.
    */
   get HELP_URL() {
     return (
@@ -139,56 +88,46 @@ class _QuickSuggest {
     );
   }
 
-  /**
-   * @returns {object}
-   *   Possible values of the `quickSuggestSettingsUi` Nimbus variable and its
-   *   fallback pref `browser.urlbar.quicksuggest.settingsUi`. When Suggest is
-   *   enabled, these values determine the Suggest settings that will be visible
-   *   in `about:preferences`. When Suggest is disabled, the variable/pref are
-   *   ignored and Suggest settings are hidden.
-   */
-  get SETTINGS_UI() {
-    return SETTINGS_UI;
+  get ONBOARDING_CHOICE() {
+    return { ...ONBOARDING_CHOICE };
+  }
+
+  get ONBOARDING_URI() {
+    return ONBOARDING_URI;
   }
 
   /**
-   * @returns {Promise}
-   *   Resolved when Suggest initialization finishes.
+   * @returns {SuggestBackendJs|SuggestBackendRust}
+   *   The currently active backend.
    */
-  get initPromise() {
-    return this.#initResolvers.promise;
-  }
-
-  /**
-   * @returns {Array}
-   *   Enabled Suggest backends.
-   */
-  get enabledBackends() {
-    // This getter may be accessed before `init()` is called, so the backends
-    // may not be registered yet. Don't assume they're non-null.
-    return [
-      this.rustBackend,
-      this.#featuresByName.get("SuggestBackendMerino"),
-      this.#featuresByName.get("SuggestBackendMl"),
-    ].filter(b => b?.isEnabled);
+  get backend() {
+    return lazy.UrlbarPrefs.get("quickSuggestRustEnabled")
+      ? this.rustBackend
+      : this.jsBackend;
   }
 
   /**
    * @returns {SuggestBackendRust}
-   *   The Rust backend, which manages the Rust component.
+   *   The Rust backend. Not used when the JS backend is enabled.
    */
   get rustBackend() {
-    return this.#featuresByName.get("SuggestBackendRust");
+    return this.#features.SuggestBackendRust;
   }
 
   /**
-   * @returns {object}
-   *   Global Suggest configuration stored in remote settings and ingested by
-   *   the Rust component. See remote settings or the Rust component for the
-   *   latest schema.
+   * @returns {SuggestBackendJs}
+   *   The JS backend. Not used when the Rust backend is enabled.
    */
-  get config() {
-    return this.rustBackend?.config || {};
+  get jsBackend() {
+    return this.#features.SuggestBackendJs;
+  }
+
+  /**
+   * @returns {BlockedSuggestions}
+   *   The blocked suggestions feature.
+   */
+  get blockedSuggestions() {
+    return this.#features.BlockedSuggestions;
   }
 
   /**
@@ -196,25 +135,24 @@ class _QuickSuggest {
    *   The impression caps feature.
    */
   get impressionCaps() {
-    return this.#featuresByName.get("ImpressionCaps");
+    return this.#features.ImpressionCaps;
+  }
+
+  /**
+   * @returns {Weather}
+   *   A feature that periodically fetches weather suggestions from Merino.
+   */
+  get weather() {
+    return this.#features.Weather;
   }
 
   /**
    * @returns {Set}
    *   The set of features that manage Rust suggestion types, as determined by
-   *   each feature's `rustSuggestionType`.
+   *   each feature's `rustSuggestionTypes`.
    */
   get rustFeatures() {
-    return new Set(this.#featuresByRustSuggestionType.values());
-  }
-
-  /**
-   * @returns {Set}
-   *   The set of features that manage ML suggestion types, as determined by
-   *   each feature's `mlIntent`.
-   */
-  get mlFeatures() {
-    return new Set(this.#featuresByMlIntent.values());
+    return this.#rustFeatures;
   }
 
   get logger() {
@@ -225,50 +163,28 @@ class _QuickSuggest {
   }
 
   /**
-   * Initializes Suggest. It's safe to call more than once.
-   *
-   * @param {object} testOverrides
-   *   This is intended for tests only. See `#initDefaultPrefs()`.
+   * Initializes the quick suggest feature. This must be called before using
+   * quick suggest. It's safe to call more than once.
    */
-  async init(testOverrides = null) {
-    if (this.#initStarted) {
-      await this.initPromise;
+  init() {
+    if (Object.keys(this.#features).length) {
+      // Already initialized.
       return;
     }
-    this.#initStarted = true;
 
-    // Wait for dependencies to finish before initializing prefs.
-    //
-    // (1) Whether Suggest should be enabled depends on the user's region.
-    await lazy.Region.init();
-
-    // (2) The default-branch values of Suggest prefs that are both exposed in
-    // the UI and configurable by Nimbus depend on Nimbus.
-    await lazy.NimbusFeatures.urlbar.ready();
-
-    // (3) `TelemetryEnvironment` records the values of some Suggest prefs.
-    if (!this._testSkipTelemetryEnvironmentInit) {
-      await lazy.TelemetryEnvironment.onInitialized();
-    }
-
-    this.#initDefaultPrefs(testOverrides);
-
-    // Create an instance of each feature and keep it in `#featuresByName`.
+    // Create an instance of each feature and keep it in `#features`.
     for (let [name, uri] of Object.entries(FEATURES)) {
       let { [name]: ctor } = ChromeUtils.importESModule(uri);
       let feature = new ctor();
-      this.#featuresByName.set(name, feature);
+      this.#features[name] = feature;
       if (feature.merinoProvider) {
         this.#featuresByMerinoProvider.set(feature.merinoProvider, feature);
       }
-      if (feature.rustSuggestionType) {
-        this.#featuresByRustSuggestionType.set(
-          feature.rustSuggestionType,
-          feature
-        );
+      for (let type of feature.rustSuggestionTypes) {
+        this.#featuresByRustSuggestionType.set(type, feature);
       }
-      if (feature.mlIntent) {
-        this.#featuresByMlIntent.set(feature.mlIntent, feature);
+      if (feature.rustSuggestionTypes.length) {
+        this.#rustFeatures.add(feature);
       }
 
       // Update the map from enabling preferences to features.
@@ -286,33 +202,32 @@ class _QuickSuggest {
     }
 
     this.#updateAll();
+    lazy.NimbusFeatures.urlbar.onUpdate(() => this.#updateAll());
     lazy.UrlbarPrefs.addObserver(this);
-
-    this.#initResolvers.resolve();
   }
 
   /**
-   * Returns a Suggest feature by name.
+   * Returns a quick suggest feature by name.
    *
    * @param {string} name
    *   The name of the feature's JS class.
-   * @returns {SuggestFeature}
-   *   The feature object, an instance of a subclass of `SuggestFeature`.
+   * @returns {BaseFeature}
+   *   The feature object, an instance of a subclass of `BaseFeature`.
    */
   getFeature(name) {
-    return this.#featuresByName.get(name);
+    return this.#features[name];
   }
 
   /**
-   * Returns a Suggest feature by the name of the Merino provider that serves
-   * its suggestions (as defined by `feature.merinoProvider`). Not all features
-   * correspond to a Merino provider.
+   * Returns a quick suggest feature by the name of the Merino provider that
+   * serves its suggestions (as defined by `feature.merinoProvider`). Not all
+   * features correspond to a Merino provider.
    *
    * @param {string} provider
    *   The name of a Merino provider.
-   * @returns {SuggestProvider}
-   *   The feature object, an instance of a subclass of `SuggestProvider`, or
-   *   null if no feature corresponds to the Merino provider.
+   * @returns {BaseFeature}
+   *   The feature object, an instance of a subclass of `BaseFeature`, or null
+   *   if no feature corresponds to the Merino provider.
    */
   getFeatureByMerinoProvider(provider) {
     return this.#featuresByMerinoProvider.get(provider);
@@ -320,240 +235,17 @@ class _QuickSuggest {
 
   /**
    * Returns a Suggest feature by the type of Rust suggestion it manages (as
-   * defined by `feature.rustSuggestionType`). Not all features correspond to a
+   * defined by `feature.rustSuggestionTypes`). Not all features correspond to a
    * Rust suggestion type.
    *
    * @param {string} type
    *   The name of a Rust suggestion type.
-   * @returns {SuggestProvider}
-   *   The feature object, an instance of a subclass of `SuggestProvider`, or
-   *   null if no feature corresponds to the type.
+   * @returns {BaseFeature}
+   *   The feature object, an instance of a subclass of `BaseFeature`, or null
+   *   if no feature corresponds to the type.
    */
   getFeatureByRustSuggestionType(type) {
     return this.#featuresByRustSuggestionType.get(type);
-  }
-
-  /**
-   * Returns a Suggest feature by the ML intent name (as defined by
-   * `feature.mlIntent` and `MLSuggest`). Not all features support ML.
-   *
-   * @param {string} intent
-   *   The name of an ML intent.
-   * @returns {SuggestProvider}
-   *   The feature object, an instance of a subclass of `SuggestProvider`, or
-   *   null if no feature corresponds to the intent.
-   */
-  getFeatureByMlIntent(intent) {
-    return this.#featuresByMlIntent.get(intent);
-  }
-
-  /**
-   * Gets the Suggest feature that manages suggestions for urlbar result.
-   *
-   * @param {UrlbarResult} result
-   *   The urlbar result.
-   * @returns {SuggestProvider}
-   *   The feature instance or null if none was found.
-   */
-  getFeatureByResult(result) {
-    return this.getFeatureBySource(result.payload);
-  }
-
-  /**
-   * Gets the Suggest feature that manages suggestions for a source and provider
-   * name. The source and provider name can be supplied from either a suggestion
-   * object or the payload of a `UrlbarResult` object.
-   *
-   * @param {object} options
-   *   Options object.
-   * @param {string} options.source
-   *   The suggestion source, one of: "merino", "ml", "rust"
-   * @param {string} options.provider
-   *   This value depends on `source`. The possible values per source are:
-   *
-   *   merino:
-   *     The name of the Merino provider that serves the suggestion type
-   *   ml:
-   *     The name of the intent as determined by `MLSuggest`
-   *   rust:
-   *     The name of the suggestion type as defined in Rust
-   * @returns {SuggestProvider}
-   *   The feature instance or null if none was found.
-   */
-  getFeatureBySource({ source, provider }) {
-    switch (source) {
-      case "merino":
-        return this.getFeatureByMerinoProvider(provider);
-      case "rust":
-        return this.getFeatureByRustSuggestionType(provider);
-      case "ml":
-        return this.getFeatureByMlIntent(provider);
-    }
-    return null;
-  }
-
-  /**
-   * Registers a dismissal with the Rust backend. A
-   * `quicksuggest-dismissals-changed` notification topic is sent when done.
-   *
-   * @param {UrlbarResult} result
-   *   The result to dismiss.
-   */
-  async dismissResult(result) {
-    if (result.payload.source == "rust") {
-      await this.rustBackend?.dismissRustSuggestion(
-        result.payload.suggestionObject
-      );
-    } else {
-      let key = getDismissalKey(result);
-      if (key) {
-        await this.rustBackend?.dismissByKey(key);
-      }
-    }
-
-    Services.obs.notifyObservers(null, "quicksuggest-dismissals-changed");
-  }
-
-  /**
-   * Returns whether a dismissal is recorded for a result.
-   *
-   * @param {UrlbarResult} result
-   *   The result to check.
-   * @returns {boolean}
-   *   Whether the result has been dismissed.
-   */
-  async isResultDismissed(result) {
-    let promises = [
-      // Check whether the result was dismissed using the old API, where
-      // dismissals were recorded as URL digests.
-      getDigest(result.payload.originalUrl || result.payload.url).then(digest =>
-        this.rustBackend?.isDismissedByKey(digest)
-      ),
-    ];
-
-    if (result.payload.source == "rust") {
-      promises.push(
-        this.rustBackend?.isRustSuggestionDismissed(
-          result.payload.suggestionObject
-        )
-      );
-    } else {
-      let key = getDismissalKey(result);
-      if (key) {
-        promises.push(this.rustBackend?.isDismissedByKey(key));
-      }
-    }
-
-    let values = await Promise.all(promises);
-    return values.some(v => !!v);
-  }
-
-  /**
-   * Clears all dismissed suggestions, including individually dismissed
-   * suggestions and dismissed suggestion types. The following notification
-   * topics are sent when done, in this order:
-   *
-   * ```
-   * quicksuggest-dismissals-changed
-   * quicksuggest-dismissals-cleared
-   * ```
-   */
-  async clearDismissedSuggestions() {
-    // Clear the user value of each feature's primary user-controlled pref if
-    // its value is `false`.
-    for (let [name, feature] of this.#featuresByName) {
-      let pref = feature.primaryUserControlledPreference;
-      // This should never throw, but try-catch to avoid breaking the entire
-      // loop if `UrlbarPrefs` doesn't recognize a pref in one iteration.
-      try {
-        if (pref && !lazy.UrlbarPrefs.get(pref)) {
-          lazy.UrlbarPrefs.clear(pref);
-        }
-      } catch (error) {
-        this.logger.error("Error clearing primaryEnablingPreference", {
-          "feature.name": name,
-          pref,
-          error,
-        });
-      }
-    }
-
-    // Clear individually dismissed suggestions, which are stored in the Rust
-    // component regardless of their source.
-    await this.rustBackend?.clearDismissedSuggestions();
-
-    Services.obs.notifyObservers(null, "quicksuggest-dismissals-changed");
-    Services.obs.notifyObservers(null, "quicksuggest-dismissals-cleared");
-  }
-
-  /**
-   * Whether there are any dismissed suggestions that can be cleared, including
-   * individually dismissed suggestions and dismissed suggestion types.
-   *
-   * @returns {boolean}
-   *   Whether dismissals can be cleared.
-   */
-  async canClearDismissedSuggestions() {
-    // Return true if any feature's primary user-controlled pref is `false` on
-    // the user branch.
-    for (let [name, feature] of this.#featuresByName) {
-      let pref = feature.primaryUserControlledPreference;
-      // This should never throw, but try-catch to avoid breaking the entire
-      // loop if `UrlbarPrefs` doesn't recognize a pref in one iteration.
-      try {
-        if (
-          pref &&
-          !lazy.UrlbarPrefs.get(pref) &&
-          lazy.UrlbarPrefs.hasUserValue(pref)
-        ) {
-          return true;
-        }
-      } catch (error) {
-        this.logger.error("Error accessing primaryUserControlledPreference", {
-          "feature.name": name,
-          pref,
-          error,
-        });
-      }
-    }
-
-    // Return true if there are any individually dismissed suggestions.
-    if (await this.rustBackend?.anyDismissedSuggestions()) {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Gets the intended default Suggest prefs for a home region and locale.
-   *
-   * @param {string} region
-   *   A home region, typically from `Region.home`.
-   * @param {string} locale
-   *   A locale.
-   * @returns {object}
-   *   An object that maps pref names to their intended default values. Pref
-   *   names are relative to `browser.urlbar.`.
-   */
-  intendedDefaultPrefs(region, locale) {
-    let regionLocalePrefs = Object.fromEntries(
-      Object.entries(SUGGEST_PREFS)
-        .map(([prefName, { defaultValues }]) => {
-          if (defaultValues?.hasOwnProperty(region)) {
-            let [localePrefixes, prefValue] = defaultValues[region];
-            if (localePrefixes.some(p => locale.startsWith(p))) {
-              return [prefName, prefValue];
-            }
-          }
-          return null;
-        })
-        .filter(entry => !!entry)
-    );
-    return {
-      ...this.#unmodifiedDefaultPrefs,
-      ...regionLocalePrefs,
-    };
   }
 
   /**
@@ -563,236 +255,226 @@ class _QuickSuggest {
    *   The name of the pref relative to `browser.urlbar`.
    */
   onPrefChanged(pref) {
-    // If any feature's enabling preferences changed, update it now.
+    // If any feature's enabling preference changed, update it now.
     let features = this.#featuresByEnablingPrefs.get(pref);
-    if (!features) {
-      return;
-    }
-
-    let isPrimaryUserControlledPref = false;
-
-    for (let f of features) {
-      f.update();
-      if (pref == f.primaryUserControlledPreference) {
-        isPrimaryUserControlledPref = true;
+    if (features) {
+      for (let f of features) {
+        f.update();
       }
     }
-
-    if (isPrimaryUserControlledPref) {
-      Services.obs.notifyObservers(null, "quicksuggest-dismissals-changed");
-    }
   }
 
   /**
-   * Called when a urlbar Nimbus variable changes.
+   * Returns whether a given URL and quick suggest's URL are equivalent. URLs
+   * are equivalent if they are identical except for substrings that replaced
+   * templates in the original suggestion URL.
    *
-   * @param {string} variable
-   *   The name of the variable.
-   */
-  onNimbusChanged(variable) {
-    // If a change occurred to a variable that corresponds to a pref exposed in
-    // the UI, sync the variable to the pref on the default branch.
-    this.#syncNimbusVariablesToUiPrefs(variable);
-
-    // Update features.
-    this.#updateAll();
-  }
-
-  /**
-   * Returns whether a given URL and result URL map back to the same original
-   * suggestion URL.
+   * For example, a suggestion URL from the backing suggestions source might
+   * include a timestamp template "%YYYYMMDDHH%" like this:
    *
-   * Some features may create result URLs that are potentially unique per query.
-   * Typically this is done by modifying an original suggestion URL at query
-   * time, for example by adding timestamps or query-specific search params. In
-   * that case, a single original suggestion URL will map to many result URLs.
-   * This function returns whether the given URL and result URL are equal
-   * excluding any such modifications.
+   *   http://example.com/foo?bar=%YYYYMMDDHH%
+   *
+   * When a quick suggest result is created from this suggestion URL, it's
+   * created with a URL that is a copy of the suggestion URL but with the
+   * template replaced with a real timestamp value, like this:
+   *
+   *   http://example.com/foo?bar=2021111610
+   *
+   * All URLs created from this single suggestion URL are considered equivalent
+   * regardless of their real timestamp values.
    *
    * @param {string} url
-   *   The URL to check, typically from the user's history.
+   *   The URL to check.
    * @param {UrlbarResult} result
-   *   The Suggest result.
+   *   The quick suggest result. Will compare {@link url} to `result.payload.url`
    * @returns {boolean}
-   *   Whether `url` is equivalent to the result's URL.
+   *   Whether `url` is equivalent to `result.payload.url`.
    */
-  isUrlEquivalentToResultUrl(url, result) {
-    let feature = this.getFeatureByResult(result);
-    return feature
-      ? feature.isUrlEquivalentToResultUrl(url, result)
-      : url == result.payload.url;
-  }
+  isURLEquivalentToResultURL(url, result) {
+    // If the URLs aren't the same length, they can't be equivalent.
+    let resultURL = result.payload.url;
+    if (resultURL.length != url.length) {
+      return false;
+    }
 
-  /**
-   * @returns {object}
-   *   An object that maps from Nimbus variable names to their corresponding
-   *   prefs, for prefs in `SUGGEST_PREFS` with `nimbusVariableIfExposedInUi`
-   *   set.
-   */
-  get #uiPrefsByNimbusVariable() {
-    return Object.fromEntries(
-      Object.entries(SUGGEST_PREFS)
-        .map(([prefName, { nimbusVariableIfExposedInUi }]) =>
-          nimbusVariableIfExposedInUi
-            ? [nimbusVariableIfExposedInUi, prefName]
-            : null
-        )
-        .filter(entry => !!entry)
+    if (result.payload.source == "rust") {
+      // The Rust implementation has its own equivalence function.
+      return lazy.rawSuggestionUrlMatches(result.payload.originalUrl, url);
+    }
+
+    // If the result URL doesn't have a timestamp, then do a straight string
+    // comparison.
+    let { urlTimestampIndex } = result.payload;
+    if (typeof urlTimestampIndex != "number" || urlTimestampIndex < 0) {
+      return resultURL == url;
+    }
+
+    // Compare the first parts of the strings before the timestamps.
+    if (
+      resultURL.substring(0, urlTimestampIndex) !=
+      url.substring(0, urlTimestampIndex)
+    ) {
+      return false;
+    }
+
+    // Compare the second parts of the strings after the timestamps.
+    let remainderIndex = urlTimestampIndex + TIMESTAMP_LENGTH;
+    if (resultURL.substring(remainderIndex) != url.substring(remainderIndex)) {
+      return false;
+    }
+
+    // Test the timestamp against the regexp.
+    let maybeTimestamp = url.substring(
+      urlTimestampIndex,
+      urlTimestampIndex + TIMESTAMP_LENGTH
     );
+    return TIMESTAMP_REGEXP.test(maybeTimestamp);
   }
 
   /**
-   * Sets appropriate default-branch values of Suggest prefs depending on
-   * whether Suggest should be enabled by default.
+   * Some suggestion properties like `url` and `click_url` include template
+   * substrings that must be replaced with real values. This method replaces
+   * templates with appropriate values in place.
    *
-   * @param {object} testOverrides
-   *   This is intended for tests only. Pass to force the following:
-   *   `{ region, locale, migrationVersion, defaultPrefs }`
+   * @param {object} suggestion
+   *   A suggestion object fetched from remote settings or Merino.
    */
-  #initDefaultPrefs(testOverrides = null) {
-    // Updating prefs is tricky and it's important to preserve the user's
-    // choices, so we describe the process in detail below. tl;dr:
-    //
-    // * Prefs exposed in the settings UI should be sticky.
-    // * Prefs that are both exposed in the settings UI and configurable via
-    //   Nimbus should be added to `SUGGEST_PREFS` with
-    //   `nimbusVariableIfExposedInUi` set appropriately.
-    // * Prefs with `nimbusVariableIfExposedInUi` set should not be specified as
-    //   `fallbackPref` for their Nimbus variables. Access these prefs directly
-    //   instead of through their variables.
-    //
-    // The pref-update process is described next.
-    //
-    // 1. Determine the appropriate values for Suggest prefs according to the
-    //    user's home region and locale.
-    //
-    // 2. Set the prefs on the default branch. We use the default branch and not
-    //    the user branch because we want to distinguish default prefs from the
-    //    user's choices.
-    //
-    //    In particular it's important to consider prefs that are exposed in the
-    //    UI, like whether sponsored suggestions are enabled. Once the user
-    //    makes a choice to change a default, we want to preserve that choice
-    //    indefinitely regardless of whether Suggest is currently enabled or
-    //    will be enabled in the future. User choices are of course recorded on
-    //    the user branch, so if we set defaults on the user branch too, we
-    //    wouldn't be able to distinguish user choices from default values. This
-    //    is also why prefs that are exposed in the UI should be sticky. Unlike
-    //    non-sticky prefs, sticky prefs retain their user-branch values even
-    //    when those values are the same as the ones on the default branch.
-    //
-    //    It's important to note that the defaults we set here do not persist
-    //    across app restarts. (This is a feature of the pref service; prefs set
-    //    programmatically on the default branch are not stored anywhere
-    //    permanent like firefox.js or user.js.) That's why BrowserGlue calls
-    //    `init()` on every startup.
-    //
-    // 3. Some prefs are both exposed in the UI and configurable via Nimbus,
-    //    like whether data collection is enabled. We absolutely want to
-    //    preserve the user's past choices for these prefs. But if the user
-    //    hasn't yet made a choice for a particular pref, then it should be
-    //    configurable.
-    //
-    //    For any such prefs that have values defined in Nimbus, we set their
-    //    default-branch values to their Nimbus values. (These defaults
-    //    therefore override any set in the previous step.) If a pref has a user
-    //    value, accessing the pref will return the user value; if it does not
-    //    have a user value, accessing it will return the value that was
-    //    specified in Nimbus.
-    //
-    //    This isn't strictly necessary. Since prefs exposed in the UI are
-    //    sticky, they will always preserve their user-branch values regardless
-    //    of their default-branch values, and as long as a pref is listed as a
-    //    `fallbackPref` for its corresponding Nimbus variable, Nimbus will use
-    //    the user-branch value. So we could instead specify fallback prefs in
-    //    Nimbus and always access values through Nimbus instead of through
-    //    prefs. But that would make preferences UI code a little harder to
-    //    write since the checked state of a checkbox would depend on something
-    //    other than its pref. Since we're already setting default-branch values
-    //    here as part of the previous step, it's not much more work to set
-    //    defaults for these prefs too, and it makes the UI code a little nicer.
-    //
-    // 4. Migrate prefs as necessary. This refers to any pref changes that are
-    //    neccesary across app versions: introducing and initializing new prefs,
-    //    removing prefs, or changing the meaning of existing prefs.
+  replaceSuggestionTemplates(suggestion) {
+    let now = new Date();
+    let timestampParts = [
+      now.getFullYear(),
+      now.getMonth() + 1,
+      now.getDate(),
+      now.getHours(),
+    ];
+    let timestamp = timestampParts
+      .map(n => n.toString().padStart(2, "0"))
+      .join("");
+    for (let key of ["url", "click_url"]) {
+      let value = suggestion[key];
+      if (!value) {
+        continue;
+      }
 
-    // We use `Preferences` because it lets us access prefs without worrying
-    // about their types and can do so on the default branch. Most of our prefs
-    // are bools but not all.
-    let defaults = new lazy.Preferences({
-      branch: "browser.urlbar.",
-      defaultBranch: true,
-    });
-
-    // Before setting defaults, save their original unmodifed values as defined
-    // in `firefox.js` so we can restore them if Suggest becomes disabled.
-    if (!this.#unmodifiedDefaultPrefs) {
-      this.#unmodifiedDefaultPrefs = Object.fromEntries(
-        Object.keys(SUGGEST_PREFS).map(name => [name, defaults.get(name)])
-      );
+      let timestampIndex = value.indexOf(TIMESTAMP_TEMPLATE);
+      if (timestampIndex >= 0) {
+        if (key == "url") {
+          suggestion.urlTimestampIndex = timestampIndex;
+        }
+        // We could use replace() here but we need the timestamp index for
+        // `suggestion.urlTimestampIndex`, and since we already have that, avoid
+        // another O(n) substring search and manually replace the template with
+        // the timestamp.
+        suggestion[key] =
+          value.substring(0, timestampIndex) +
+          timestamp +
+          value.substring(timestampIndex + TIMESTAMP_TEMPLATE.length);
+      }
     }
-
-    // 1. Determine the appropriate values for Suggest prefs according to the
-    //    user's home region and locale.
-    if (testOverrides?.defaultPrefs) {
-      this.#intendedDefaultPrefs = testOverrides.defaultPrefs;
-    } else {
-      let region = testOverrides?.region ?? lazy.Region.home;
-      let locale = testOverrides?.locale ?? Services.locale.appLocaleAsBCP47;
-      this.#intendedDefaultPrefs = this.intendedDefaultPrefs(region, locale);
-    }
-
-    // 2. Set the prefs on the default branch.
-    for (let [name, value] of Object.entries(this.#intendedDefaultPrefs)) {
-      defaults.set(name, value);
-    }
-
-    // 3. Set default-branch values for prefs that are both exposed in the
-    // settings UI and configurable via Nimbus.
-    this.#syncNimbusVariablesToUiPrefs();
-
-    // 4. Migrate prefs across app versions.
-    let shouldEnableSuggest =
-      !!this.#intendedDefaultPrefs["quicksuggest.enabled"];
-    this._ensureFirefoxSuggestPrefsMigrated(shouldEnableSuggest, testOverrides);
   }
 
   /**
-   * Sets default-branch values for prefs in `#uiPrefsByNimbusVariable`, i.e.,
-   * prefs that are both exposed in the settings UI and configurable via Nimbus.
+   * An onboarding dialog can be shown to the users who are enrolled into
+   * the QuickSuggest experiments or rollouts. This behavior is controlled
+   * by the pref `browser.urlbar.quicksuggest.shouldShowOnboardingDialog`
+   * which can be remotely configured by Nimbus.
    *
-   * @param {string} variable
-   *   If defined, only the pref corresponding to this variable will be set. If
-   *   there is no UI pref for this variable, this function is a no-op.
+   * Given that the release may overlap with another onboarding dialog, we may
+   * wait for a few restarts before showing the QuickSuggest dialog. This can
+   * be remotely configured by Nimbus through
+   * `quickSuggestShowOnboardingDialogAfterNRestarts`, the default is 0.
+   *
+   * @returns {boolean}
+   *   True if the dialog was shown and false if not.
    */
-  #syncNimbusVariablesToUiPrefs(variable = null) {
-    let prefsByVariable = this.#uiPrefsByNimbusVariable;
+  async maybeShowOnboardingDialog() {
+    // The call to this method races scenario initialization on startup, and the
+    // Nimbus variables we rely on below depend on the scenario, so wait for it
+    // to be initialized.
+    await lazy.UrlbarPrefs.firefoxSuggestScenarioStartupPromise;
 
-    if (variable) {
-      if (!prefsByVariable.hasOwnProperty(variable)) {
-        // `variable` does not correspond to a pref exposed in the UI.
-        return;
-      }
-      // Restrict `prefsByVariable` only to `variable`.
-      prefsByVariable = { [variable]: prefsByVariable[variable] };
+    // If the feature is disabled, the user has already seen the dialog, or the
+    // user has already opted in, don't show the onboarding.
+    if (
+      !lazy.UrlbarPrefs.get("quickSuggestEnabled") ||
+      lazy.UrlbarPrefs.get("quicksuggest.showedOnboardingDialog") ||
+      lazy.UrlbarPrefs.get("quicksuggest.dataCollection.enabled")
+    ) {
+      return false;
     }
 
-    let defaults = new lazy.Preferences({
-      branch: "browser.urlbar.",
-      defaultBranch: true,
-    });
-
-    for (let [v, pref] of Object.entries(prefsByVariable)) {
-      let value = lazy.NimbusFeatures.urlbar.getVariable(v);
-      if (value === undefined) {
-        value = this.#intendedDefaultPrefs[pref];
-      }
-      defaults.set(pref, value);
+    // Wait a number of restarts before showing the dialog.
+    let restartsSeen = lazy.UrlbarPrefs.get("quicksuggest.seenRestarts");
+    if (
+      restartsSeen <
+      lazy.UrlbarPrefs.get("quickSuggestShowOnboardingDialogAfterNRestarts")
+    ) {
+      lazy.UrlbarPrefs.set("quicksuggest.seenRestarts", restartsSeen + 1);
+      return false;
     }
+
+    let win = lazy.BrowserWindowTracker.getTopWindow();
+
+    // Don't show the dialog on top of about:welcome for new users.
+    if (win.gBrowser?.currentURI?.spec == "about:welcome") {
+      return false;
+    }
+
+    if (
+      !lazy.UrlbarPrefs.get("quickSuggestShouldShowOnboardingDialog") ||
+      lazy.UrlbarPrefs.get("quicksuggest.contextualOptIn")
+    ) {
+      return false;
+    }
+
+    let variationType;
+    try {
+      // An error happens if the pref is not in user prefs.
+      variationType = lazy.UrlbarPrefs.get(
+        "quickSuggestOnboardingDialogVariation"
+      ).toLowerCase();
+    } catch (e) {}
+
+    let params = { choice: undefined, variationType, visitedMain: false };
+    await win.gDialogBox.open(ONBOARDING_URI, params);
+
+    lazy.UrlbarPrefs.set("quicksuggest.showedOnboardingDialog", true);
+    lazy.UrlbarPrefs.set(
+      "quicksuggest.onboardingDialogVersion",
+      JSON.stringify({ version: 1, variation: variationType })
+    );
+
+    // Record the user's opt-in choice on the user branch. This pref is sticky,
+    // so it will retain its user-branch value regardless of what the particular
+    // default was at the time.
+    let optedIn = params.choice == ONBOARDING_CHOICE.ACCEPT_2;
+    lazy.UrlbarPrefs.set("quicksuggest.dataCollection.enabled", optedIn);
+
+    switch (params.choice) {
+      case ONBOARDING_CHOICE.LEARN_MORE_1:
+      case ONBOARDING_CHOICE.LEARN_MORE_2:
+        win.openTrustedLinkIn(this.HELP_URL, "tab");
+        break;
+      case ONBOARDING_CHOICE.ACCEPT_2:
+      case ONBOARDING_CHOICE.REJECT_2:
+      case ONBOARDING_CHOICE.NOT_NOW_2:
+      case ONBOARDING_CHOICE.CLOSE_1:
+        // No other action required.
+        break;
+      default:
+        params.choice = params.visitedMain
+          ? ONBOARDING_CHOICE.DISMISS_2
+          : ONBOARDING_CHOICE.DISMISS_1;
+        break;
+    }
+
+    lazy.UrlbarPrefs.set("quicksuggest.onboardingDialogChoice", params.choice);
+
+    return true;
   }
 
   /**
-   * Updates all features.
+   * Updates state based on whether quick suggest and its features are enabled.
    */
   #updateAll() {
     // IMPORTANT: This method is a `NimbusFeatures.urlbar.onUpdate()` callback,
@@ -800,141 +482,13 @@ class _QuickSuggest {
     // for a urlbar Nimbus variable.
 
     // Update features.
-    for (let feature of this.#featuresByName.values()) {
+    for (let feature of Object.values(this.#features)) {
       feature.update();
     }
   }
 
-  /**
-   * The current version of the Firefox Suggest prefs.
-   *
-   * @returns {number}
-   */
-  get MIGRATION_VERSION() {
-    return 2;
-  }
-
-  /**
-   * Migrates Firefox Suggest prefs to the current version if they haven't been
-   * migrated already.
-   *
-   * @param {boolean} shouldEnableSuggest
-   *   Whether Suggest should be enabled right now.
-   * @param {object} testOverrides
-   *   This is intended for tests only. Pass to force a migration version:
-   *   `{ migrationVersion }`
-   */
-  _ensureFirefoxSuggestPrefsMigrated(shouldEnableSuggest, testOverrides) {
-    let currentVersion =
-      testOverrides?.migrationVersion !== undefined
-        ? testOverrides.migrationVersion
-        : this.MIGRATION_VERSION;
-    let lastSeenVersion = Math.max(
-      0,
-      lazy.UrlbarPrefs.get("quicksuggest.migrationVersion")
-    );
-    if (currentVersion <= lastSeenVersion) {
-      // Migration up to date.
-      return;
-    }
-
-    // Migrate from the last-seen version up to the current version.
-    let version = lastSeenVersion;
-    for (; version < currentVersion; version++) {
-      let nextVersion = version + 1;
-      let methodName = "_migrateFirefoxSuggestPrefsTo_" + nextVersion;
-      try {
-        this[methodName](shouldEnableSuggest);
-      } catch (error) {
-        console.error(
-          `Error migrating Firefox Suggest prefs to version ${nextVersion}:`,
-          error
-        );
-        break;
-      }
-    }
-
-    // Record the new last-seen migration version.
-    lazy.UrlbarPrefs.set("quicksuggest.migrationVersion", version);
-  }
-
-  _migrateFirefoxSuggestPrefsTo_1(shouldEnableSuggest) {
-    // Copy `suggest.quicksuggest` to `suggest.quicksuggest.nonsponsored` and
-    // clear the first.
-    let suggestQuicksuggest = "browser.urlbar.suggest.quicksuggest";
-    if (Services.prefs.prefHasUserValue(suggestQuicksuggest)) {
-      lazy.UrlbarPrefs.set(
-        "suggest.quicksuggest.nonsponsored",
-        Services.prefs.getBoolPref(suggestQuicksuggest)
-      );
-      Services.prefs.clearUserPref(suggestQuicksuggest);
-    }
-
-    // In the unversioned prefs, sponsored suggestions were shown only if the
-    // main suggestions pref `suggest.quicksuggest` was true, but now there are
-    // two independent prefs, so disable sponsored if the main pref was false.
-    if (
-      shouldEnableSuggest &&
-      !lazy.UrlbarPrefs.get("suggest.quicksuggest.nonsponsored")
-    ) {
-      // Set the pref on the user branch. Suggestions are enabled by default
-      // for offline; we want to preserve the user's choice of opting out,
-      // and we want to preserve the default-branch true value.
-      lazy.UrlbarPrefs.set("suggest.quicksuggest.sponsored", false);
-    }
-  }
-
-  _migrateFirefoxSuggestPrefsTo_2() {
-    // In previous versions of the prefs for online, suggestions were disabled
-    // by default; in version 2, they're enabled by default. For users who were
-    // already in online and did not enable suggestions (because they did not
-    // opt in, they did opt in but later disabled suggestions, or they were not
-    // shown the modal) we don't want to suddenly enable them, so if the prefs
-    // do not have user-branch values, set them to false.
-    let scenario = Services.prefs.getCharPref(
-      "browser.urlbar.quicksuggest.scenario",
-      ""
-    );
-    if (scenario == "online") {
-      if (
-        !Services.prefs.prefHasUserValue(
-          "browser.urlbar.suggest.quicksuggest.nonsponsored"
-        )
-      ) {
-        lazy.UrlbarPrefs.set("suggest.quicksuggest.nonsponsored", false);
-      }
-      if (
-        !Services.prefs.prefHasUserValue(
-          "browser.urlbar.suggest.quicksuggest.sponsored"
-        )
-      ) {
-        lazy.UrlbarPrefs.set("suggest.quicksuggest.sponsored", false);
-      }
-    }
-  }
-
-  async _test_reinit(testOverrides = null) {
-    if (this.#initStarted) {
-      await this.initPromise;
-      this.#initStarted = false;
-      this.#initResolvers = Promise.withResolvers();
-    }
-
-    if (this.rustBackend) {
-      // Make sure to await any queued ingests before re-initializing.  Otherwise there could be a race
-      // between when that ingestion finishes and when the test finishes and calls
-      // `SharedRemoteSettingsService.updateServer()` to reset the remote settings server.
-      await this.rustBackend.ingestPromise;
-    }
-
-    await this.init(testOverrides);
-  }
-
-  #initStarted = false;
-  #initResolvers = Promise.withResolvers();
-
   // Maps from Suggest feature class names to feature instances.
-  #featuresByName = new Map();
+  #features = {};
 
   // Maps from Merino provider names to Suggest feature instances.
   #featuresByMerinoProvider = new Map();
@@ -942,34 +496,11 @@ class _QuickSuggest {
   // Maps from Rust suggestion types to Suggest feature instances.
   #featuresByRustSuggestionType = new Map();
 
-  // Maps from ML intent strings to Suggest feature instances.
-  #featuresByMlIntent = new Map();
+  // Set of feature instances that manage Rust suggestion types.
+  #rustFeatures = new Set();
 
   // Maps from preference names to the `Set` of feature instances they enable.
   #featuresByEnablingPrefs = new Map();
-
-  // A plain JS object that maps pref names relative to `browser.urlbar.` to
-  // their intended defaults depending on whether Suggest should be enabled.
-  #intendedDefaultPrefs;
-
-  // A plain JS object that maps pref names relative to `browser.urlbar.` to
-  // their original unmodified values as defined in `firefox.js`.
-  #unmodifiedDefaultPrefs;
-}
-
-function getDismissalKey(result) {
-  return (
-    result.payload.dismissalKey ||
-    result.payload.originalUrl ||
-    result.payload.url
-  );
-}
-
-async function getDigest(string) {
-  let stringArray = new TextEncoder().encode(string);
-  let hashBuffer = await crypto.subtle.digest("SHA-1", stringArray);
-  let hashArray = new Uint8Array(hashBuffer);
-  return Array.from(hashArray, b => b.toString(16).padStart(2, "0")).join("");
 }
 
 export const QuickSuggest = new _QuickSuggest();

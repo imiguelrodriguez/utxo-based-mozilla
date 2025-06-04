@@ -542,7 +542,6 @@ sec_pkcs7_decoder_start_decrypt(SEC_PKCS7DecoderContext *p7dcx, int depth,
      * We are done with (this) bulkkey now.
      */
     PK11_FreeSymKey(bulkkey);
-    bulkkey = NULL;
 
     if (decryptobj == NULL) {
         p7dcx->error = PORT_GetError();
@@ -850,8 +849,6 @@ sec_pkcs7_decoder_notify(void *arg, PRBool before, void *dest, int depth)
 
         case SEC_OID_PKCS7_DIGESTED_DATA:
             digd = cinfo->content.digestedData;
-            if (digd == NULL)
-                break;
 
             /*
              * XXX Want to do the digest or not?  Maybe future enhancement...

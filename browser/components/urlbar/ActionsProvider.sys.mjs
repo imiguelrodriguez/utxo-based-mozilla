@@ -10,7 +10,6 @@ export class ActionsProvider {
    * Unique name for the provider.
    *
    * @abstract
-   * @returns {string}
    */
   get name() {
     return "ActionsProviderBase";
@@ -33,10 +32,11 @@ export class ActionsProvider {
    * Query for actions based on the current users input.
    *
    * @param {UrlbarQueryContext} _queryContext The query context object.
-   * @returns {Promise<ActionsResult[]>}
+   * @param {UrlbarController} _controller The urlbar controller.
+   * @returns {ActionsResult}
    * @abstract
    */
-  async queryActions(_queryContext) {
+  async queryAction(_queryContext, _controller) {
     throw new Error("Not implemented.");
   }
 
@@ -45,7 +45,7 @@ export class ActionsProvider {
    *
    * @param {UrlbarQueryContext} _queryContext The query context object.
    * @param {UrlbarController} _controller The urlbar controller.
-   * @param {Element} _element The element that was selected.
+   * @param {DOMElement} _element The element that was selected.
    * @abstract
    */
   pickAction(_queryContext, _controller, _element) {
@@ -57,10 +57,6 @@ export class ActionsProvider {
  * Class used to create an Actions Result.
  */
 export class ActionsResult {
-  /**
-   * @type {string}
-   *   The name of the `ActionsProvider` that provided this actions result.
-   */
   providerName;
 
   #key;
@@ -68,49 +64,28 @@ export class ActionsResult {
   #l10nArgs;
   #icon;
   #dataset;
-  #onPick;
-  #onSelection;
-  #engine;
 
   /**
    * @param {object} options
    *    An option object.
-   * @param {string} options.key
+   * @param { string } options.key
    *    A string key used to distinguish between different actions.
-   * @param {string} options.l10nId
+   * @param { string } options.l10nId
    *    The id of the l10n string displayed in the action button.
-   * @param {{[arg: string]: any}} [options.l10nArgs]
+   * @param { string } options.l10nArgs
    *    Arguments passed to construct the above string
-   * @param {string} options.icon
+   * @param { string } options.icon
    *    The icon displayed in the button.
-   * @param {{[key: string]: any}} [options.dataset]
+   * @param {object} options.dataset
    *    An object of properties we set on the action button that
    *    can be used to pass data when it is selected.
-   * @param {(context: UrlbarQueryContext, controller: UrlbarController) => void} options.onPick
-   *    A callback function called when the result has been picked.
-   * @param {(result: UrlbarResult, resultElement: Element) => void} [options.onSelection]
-   *    A callback function called when the result has been selected.
-   * @param {string} [options.engine]
-   *    The name of an installed engine if the action prompts search mode.
    */
-  constructor({
-    key,
-    l10nId,
-    l10nArgs,
-    icon,
-    dataset,
-    onPick,
-    onSelection,
-    engine,
-  }) {
+  constructor({ key, l10nId, l10nArgs, icon, dataset }) {
     this.#key = key;
     this.#l10nId = l10nId;
     this.#l10nArgs = l10nArgs;
     this.#icon = icon;
     this.#dataset = dataset;
-    this.#onPick = onPick;
-    this.#onSelection = onSelection;
-    this.#engine = engine;
   }
 
   get key() {
@@ -131,17 +106,5 @@ export class ActionsResult {
 
   get dataset() {
     return this.#dataset;
-  }
-
-  get onPick() {
-    return this.#onPick;
-  }
-
-  get onSelection() {
-    return this.#onSelection;
-  }
-
-  get engine() {
-    return this.#engine;
   }
 }

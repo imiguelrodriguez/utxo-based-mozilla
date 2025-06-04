@@ -31,8 +31,9 @@ add_task(async function test_ArchiveEncryptionState_enable() {
  */
 add_task(
   async function test_ArchiveEncryptionState_serialization_deserialization() {
-    let { instance: encState } =
-      await ArchiveEncryptionState.initialize(TEST_RECOVERY_CODE);
+    let { instance: encState } = await ArchiveEncryptionState.initialize(
+      TEST_RECOVERY_CODE
+    );
     let serialization = await encState.serialize();
 
     // We'll pretend to write this serialization to disk by stringifying it,
@@ -45,8 +46,9 @@ add_task(
       "The ArchiveEncryptionState version was included in the serialization."
     );
 
-    let { instance: recoveredState } =
-      await ArchiveEncryptionState.initialize(serialization);
+    let { instance: recoveredState } = await ArchiveEncryptionState.initialize(
+      serialization
+    );
 
     Assert.deepEqual(
       encState.publicKey,
@@ -73,8 +75,9 @@ add_task(
  * a serialized state from a newer version of ArchiveEncryptionState.
  */
 add_task(async function test_ArchiveEncryptionState_deserialize_newer() {
-  let { instance: encState } =
-    await ArchiveEncryptionState.initialize(TEST_RECOVERY_CODE);
+  let { instance: encState } = await ArchiveEncryptionState.initialize(
+    TEST_RECOVERY_CODE
+  );
   let serialization = await encState.serialize();
 
   // We'll pretend to write this serialization to disk by stringifying it,

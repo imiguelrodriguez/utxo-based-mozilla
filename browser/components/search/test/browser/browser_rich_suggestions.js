@@ -75,6 +75,8 @@ add_task(async function test_trending_results() {
 });
 
 async function check_results({ featureEnabled = false }) {
+  Services.telemetry.clearEvents();
+  Services.telemetry.clearScalars();
   await SpecialPowers.pushPrefEnv({
     set: [["browser.urlbar.richSuggestions.featureGate", featureEnabled]],
   });
@@ -98,6 +100,13 @@ async function check_results({ featureEnabled = false }) {
       Assert.ok(result.payload.icon.startsWith("data:"));
     }
   }
+
+  info("Select first remote search suggestion & hit Enter.");
+  EventUtils.synthesizeKey("KEY_ArrowDown", {}, window);
+  EventUtils.synthesizeKey("VK_RETURN", {}, window);
+
+  let scalars = TelemetryTestUtils.getProcessScalars("parent", false, true);
+  TelemetryTestUtils.assertScalar(scalars, "urlbar.engagement", 1);
 
   await SpecialPowers.popPrefEnv();
 }

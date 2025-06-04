@@ -4,7 +4,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#include "mozilla/dom/BrowsingContext.h"
 #include "nsJAR.h"
 #include "nsJARChannel.h"
 #include "nsJARProtocolHandler.h"
@@ -25,7 +24,7 @@
 #include "mozilla/Preferences.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/StaticPrefs_network.h"
-#include "mozilla/glean/LibjarMetrics.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "private/pprio.h"
 #include "nsInputStreamPump.h"
 #include "nsThreadUtils.h"
@@ -825,18 +824,16 @@ nsJARChannel::SetContentLength(int64_t aContentLength) {
 
 static void RecordZeroLengthEvent(bool aIsSync, const nsCString& aSpec,
                                   nsresult aStatus, bool aCanceled,
-                                  const nsCString& aCanceledReason,
                                   nsILoadInfo* aLoadInfo) {
   if (!StaticPrefs::network_jar_record_failure_reason()) {
     return;
   }
 
-  // If the BrowsingContext performing the load has already been discarded, and
-  // we're getting a zero-length event due to the channel being canceled, this
-  // event isn't interesting for YSOD analysis, so can be skipped.
-  if (RefPtr<mozilla::dom::BrowsingContext> targetBC =
-          aLoadInfo->GetTargetBrowsingContext()) {
-    if (targetBC->IsDiscarded() && aCanceled) {
+  if (aLoadInfo) {
+    bool shouldSkipCheckForBrokenURLOrZeroSized;
+    MOZ_ALWAYS_SUCCEEDS(aLoadInfo->GetShouldSkipCheckForBrokenURLOrZeroSized(
+        &shouldSkipCheckForBrokenURLOrZeroSized));
+    if (shouldSkipCheckForBrokenURLOrZeroSized) {
       return;
     }
   }
@@ -884,7 +881,6 @@ static void RecordZeroLengthEvent(bool aIsSync, const nsCString& aSpec,
     }
 
     glean::zero_byte_load::LoadFtlExtra extra = {
-        .cancelReason = Some(aCanceledReason),
         .cancelled = Some(aCanceled),
         .fileName = Some(fileName),
         .status = Some(errorCString),
@@ -899,7 +895,6 @@ static void RecordZeroLengthEvent(bool aIsSync, const nsCString& aSpec,
     }
 
     glean::zero_byte_load::LoadDtdExtra extra = {
-        .cancelReason = Some(aCanceledReason),
         .cancelled = Some(aCanceled),
         .fileName = Some(fileName),
         .status = Some(errorCString),
@@ -908,7 +903,6 @@ static void RecordZeroLengthEvent(bool aIsSync, const nsCString& aSpec,
     glean::zero_byte_load::load_dtd.Record(Some(extra));
   } else if (StringEndsWith(fileName, ".properties"_ns)) {
     glean::zero_byte_load::LoadPropertiesExtra extra = {
-        .cancelReason = Some(aCanceledReason),
         .cancelled = Some(aCanceled),
         .fileName = Some(fileName),
         .status = Some(errorCString),
@@ -926,7 +920,6 @@ static void RecordZeroLengthEvent(bool aIsSync, const nsCString& aSpec,
     }
 
     glean::zero_byte_load::LoadJsExtra extra = {
-        .cancelReason = Some(aCanceledReason),
         .cancelled = Some(aCanceled),
         .fileName = Some(fileName),
         .status = Some(errorCString),
@@ -935,7 +928,6 @@ static void RecordZeroLengthEvent(bool aIsSync, const nsCString& aSpec,
     glean::zero_byte_load::load_js.Record(Some(extra));
   } else if (StringEndsWith(fileName, ".xml"_ns)) {
     glean::zero_byte_load::LoadXmlExtra extra = {
-        .cancelReason = Some(aCanceledReason),
         .cancelled = Some(aCanceled),
         .fileName = Some(fileName),
         .status = Some(errorCString),
@@ -955,7 +947,6 @@ static void RecordZeroLengthEvent(bool aIsSync, const nsCString& aSpec,
     }
 
     glean::zero_byte_load::LoadXhtmlExtra extra = {
-        .cancelReason = Some(aCanceledReason),
         .cancelled = Some(aCanceled),
         .fileName = Some(fileName),
         .status = Some(errorCString),
@@ -975,7 +966,6 @@ static void RecordZeroLengthEvent(bool aIsSync, const nsCString& aSpec,
     }
 
     glean::zero_byte_load::LoadCssExtra extra = {
-        .cancelReason = Some(aCanceledReason),
         .cancelled = Some(aCanceled),
         .fileName = Some(fileName),
         .status = Some(errorCString),
@@ -993,7 +983,6 @@ static void RecordZeroLengthEvent(bool aIsSync, const nsCString& aSpec,
     }
 
     glean::zero_byte_load::LoadJsonExtra extra = {
-        .cancelReason = Some(aCanceledReason),
         .cancelled = Some(aCanceled),
         .fileName = Some(fileName),
         .status = Some(errorCString),
@@ -1008,14 +997,13 @@ static void RecordZeroLengthEvent(bool aIsSync, const nsCString& aSpec,
 
     // See bug 1695560. "activity-stream-noscripts.html" with NS_ERROR_FAILURE
     // is filtered out.
-    if (fileName.EqualsLiteral("omni.ja!/chrome/browser/res/newtab/"
+    if (fileName.EqualsLiteral("omni.ja!/chrome/browser/res/activity-stream/"
                                "prerendered/activity-stream-noscripts.html") &&
         aStatus == NS_ERROR_FAILURE) {
       return;
     }
 
     glean::zero_byte_load::LoadHtmlExtra extra = {
-        .cancelReason = Some(aCanceledReason),
         .cancelled = Some(aCanceled),
         .fileName = Some(fileName),
         .status = Some(errorCString),
@@ -1030,7 +1018,6 @@ static void RecordZeroLengthEvent(bool aIsSync, const nsCString& aSpec,
     }
 
     glean::zero_byte_load::LoadPngExtra extra = {
-        .cancelReason = Some(aCanceledReason),
         .cancelled = Some(aCanceled),
         .fileName = Some(fileName),
         .status = Some(errorCString),
@@ -1044,7 +1031,6 @@ static void RecordZeroLengthEvent(bool aIsSync, const nsCString& aSpec,
       return;
     }
     glean::zero_byte_load::LoadSvgExtra extra = {
-        .cancelReason = Some(aCanceledReason),
         .cancelled = Some(aCanceled),
         .fileName = Some(fileName),
         .status = Some(errorCString),
@@ -1068,8 +1054,14 @@ static void RecordZeroLengthEvent(bool aIsSync, const nsCString& aSpec,
       return;
     }
 
+    // See bug 1695560. "update.locale" with
+    // NS_ERROR_FILE_NOT_FOUND is filtered out.
+    if (fileName.EqualsLiteral("omni.ja!/update.locale") &&
+        aStatus == NS_ERROR_FILE_NOT_FOUND) {
+      return;
+    }
+
     glean::zero_byte_load::LoadOthersExtra extra = {
-        .cancelReason = Some(aCanceledReason),
         .cancelled = Some(aCanceled),
         .fileName = Some(fileName),
         .status = Some(errorCString),
@@ -1089,8 +1081,7 @@ nsJARChannel::Open(nsIInputStream** aStream) {
 
   auto recordEvent = MakeScopeExit([&] {
     if (mContentLength <= 0 || NS_FAILED(rv)) {
-      RecordZeroLengthEvent(true, mSpec, rv, mCanceled, mCanceledReason,
-                            mLoadInfo);
+      RecordZeroLengthEvent(true, mSpec, rv, mCanceled, mLoadInfo);
     }
   });
 
@@ -1312,8 +1303,7 @@ nsJARChannel::OnStopRequest(nsIRequest* req, nsresult status) {
 
   if (mListener) {
     if (!mOnDataCalled || NS_FAILED(status)) {
-      RecordZeroLengthEvent(false, mSpec, status, mCanceled, mCanceledReason,
-                            mLoadInfo);
+      RecordZeroLengthEvent(false, mSpec, status, mCanceled, mLoadInfo);
     }
 
     mListener->OnStopRequest(this, status);

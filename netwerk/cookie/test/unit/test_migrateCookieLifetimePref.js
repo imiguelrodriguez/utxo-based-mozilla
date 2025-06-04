@@ -26,7 +26,7 @@ add_task(async function migrateSanitizationPrefsClearCleaningPrefs() {
   );
   Services.prefs.setBoolPref("privacy.clearOnShutdown_v2.cache", false);
   Services.prefs.setBoolPref(
-    "privacy.clearOnShutdown_v2.browsingHistoryAndDownloads",
+    "privacy.clearOnShutdown_v2.historyFormDataAndDownloads",
     true
   );
 
@@ -78,9 +78,9 @@ add_task(async function migrateSanitizationPrefsClearCleaningPrefs() {
 
   Assert.ok(
     !Services.prefs.getBoolPref(
-      "privacy.clearOnShutdown_v2.browsingHistoryAndDownloads"
+      "privacy.clearOnShutdown_v2.historyFormDataAndDownloads"
     ),
-    "Clearing browsing history and downloads (v2) on shutdown is not set anymore"
+    "Clearing history, form data and downloads (v2) on shutdown is not set anymore"
   );
 
   Assert.ok(

@@ -10,6 +10,8 @@
 #define CryptoX_Result int
 #define CryptoX_Success 0
 #define CryptoX_Error (-1)
+#define CryptoX_Succeeded(X) ((X) == CryptoX_Success)
+#define CryptoX_Failed(X) ((X) != CryptoX_Success)
 
 #if defined(MAR_NSS)
 

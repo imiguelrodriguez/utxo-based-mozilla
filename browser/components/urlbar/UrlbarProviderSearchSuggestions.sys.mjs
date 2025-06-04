@@ -17,7 +17,7 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   FormHistory: "resource://gre/modules/FormHistory.sys.mjs",
   SearchSuggestionController:
-    "moz-src:///toolkit/components/search/SearchSuggestionController.sys.mjs",
+    "resource://gre/modules/SearchSuggestionController.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
   UrlbarProviderTopSites: "resource:///modules/UrlbarProviderTopSites.sys.mjs",
   UrlbarResult: "resource:///modules/UrlbarResult.sys.mjs",
@@ -73,7 +73,9 @@ class ProviderSearchSuggestions extends UrlbarProvider {
   }
 
   /**
-   * @returns {Values<typeof UrlbarUtils.PROVIDER_TYPE>}
+   * Returns the type of this provider.
+   *
+   * @returns {integer} one of the types from UrlbarUtils.PROVIDER_TYPE.*
    */
   get type() {
     return UrlbarUtils.PROVIDER_TYPE.NETWORK;
@@ -85,8 +87,9 @@ class ProviderSearchSuggestions extends UrlbarProvider {
    * with this provider, to save on resources.
    *
    * @param {UrlbarQueryContext} queryContext The query context object
+   * @returns {boolean} Whether this provider should be invoked for the search.
    */
-  async isActive(queryContext) {
+  isActive(queryContext) {
     // If the sources don't include search or the user used a restriction
     // character other than search, don't allow any suggestions.
     if (
@@ -115,9 +118,7 @@ class ProviderSearchSuggestions extends UrlbarProvider {
       lazy.UrlbarPrefs.get("maxHistoricalSearchSuggestions") &&
       queryContext.trimmedSearchString;
 
-    return (
-      !!wantsLocalSuggestions || this._allowRemoteSuggestions(queryContext)
-    );
+    return wantsLocalSuggestions || this._allowRemoteSuggestions(queryContext);
   }
 
   /**
@@ -546,7 +547,7 @@ class ProviderSearchSuggestions extends UrlbarProvider {
    *
    * @param {UrlbarQueryContext} queryContext
    *   The query context object.
-   * @returns {Promise<EngineAlias?>} aliasEngine
+   * @returns {EngineAlias?} aliasEngine
    *   A representation of the aliased engine. Null if there's no match.
    */
   async _maybeGetAlias(queryContext) {
@@ -574,8 +575,9 @@ class ProviderSearchSuggestions extends UrlbarProvider {
     }
 
     // Check if the user entered an engine alias directly.
-    let engineMatch =
-      await lazy.UrlbarSearchUtils.engineForAlias(possibleAlias);
+    let engineMatch = await lazy.UrlbarSearchUtils.engineForAlias(
+      possibleAlias
+    );
     if (engineMatch) {
       return {
         engine: engineMatch,
@@ -612,7 +614,7 @@ class ProviderSearchSuggestions extends UrlbarProvider {
    * Send telemetry to indicating trending results have been hidden.
    */
   #recordTrendingBlockedTelemetry() {
-    Glean.urlbarTrending.block.add(1);
+    Services.telemetry.scalarAdd("urlbar.trending.block", 1);
   }
 
   /*

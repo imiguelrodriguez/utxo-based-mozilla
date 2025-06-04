@@ -42,7 +42,7 @@ function checkCertNotInNameSpace(cert) {
     certdb,
     cert,
     SEC_ERROR_CERT_NOT_IN_NAME_SPACE,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
 }
 
@@ -51,7 +51,7 @@ function checkCertInNameSpace(cert) {
     certdb,
     cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
 }
 

@@ -21,7 +21,7 @@ add_task(
       openFromAppMenu: true,
       expectedFromLanguage: "es",
       expectedToLanguage: "en",
-      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
     });
 
     await FullPageTranslationsTestUtils.openTranslationsSettingsMenu();
@@ -34,14 +34,12 @@ add_task(
     await FullPageTranslationsTestUtils.assertIsAlwaysTranslateLanguage("es", {
       checked: true,
     });
-    await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated(
-      {
-        fromLanguage: "es",
-        toLanguage: "en",
-        runInPage,
-        message: "The page should be automatically translated.",
-      }
-    );
+    await FullPageTranslationsTestUtils.assertPageIsTranslated({
+      fromLanguage: "es",
+      toLanguage: "en",
+      runInPage,
+      message: "The page should be automatically translated.",
+    });
 
     await FullPageTranslationsTestUtils.openPanel({
       expectedToLanguage: "en",
@@ -61,7 +59,7 @@ add_task(
       }
     );
 
-    await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
     await cleanup();
   }
 );
@@ -88,7 +86,7 @@ add_task(
       openFromAppMenu: true,
       expectedFromLanguage: "es",
       expectedToLanguage: "en",
-      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+      onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
     });
 
     await FullPageTranslationsTestUtils.openTranslationsSettingsMenu();
@@ -101,14 +99,12 @@ add_task(
     await FullPageTranslationsTestUtils.assertIsAlwaysTranslateLanguage("es", {
       checked: true,
     });
-    await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated(
-      {
-        fromLanguage: "es",
-        toLanguage: "en",
-        runInPage,
-        message: "The page should be automatically translated.",
-      }
-    );
+    await FullPageTranslationsTestUtils.assertPageIsTranslated({
+      fromLanguage: "es",
+      toLanguage: "en",
+      runInPage,
+      message: "The page should be automatically translated.",
+    });
 
     await FullPageTranslationsTestUtils.openPanel({
       expectedToLanguage: "en",
@@ -127,7 +123,7 @@ add_task(
       SPANISH_PAGE_URL,
       { checked: true }
     );
-    await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
     await FullPageTranslationsTestUtils.openPanel({
       openFromAppMenu: true,
@@ -143,7 +139,7 @@ add_task(
       SPANISH_PAGE_URL,
       { checked: true }
     );
-    await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+    await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
     await FullPageTranslationsTestUtils.assertIsNeverTranslateLanguage("es", {
       checked: false,

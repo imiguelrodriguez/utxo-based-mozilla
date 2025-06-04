@@ -18,15 +18,6 @@ const TEST_PROFILE_DE = {
   "street-address": "Schlesische Str 999",
 };
 
-const TEST_PROFILE_DE2 = {
-  email: "address_de@mozilla.org",
-  organization: "Mozilla",
-  country: "DE",
-  "address-level2": "Berlin",
-  "street-address": "Schlesische Str 999\nApt 216",
-  "postal-code": "90002",
-};
-
 add_autofill_heuristic_tests([
   {
     description: "Test autofill with house number",
@@ -149,7 +140,6 @@ add_autofill_heuristic_tests([
           {
             fieldName: "address-line1",
             autofill: "160 Main St",
-            reason: "update-heuristic",
           },
           { fieldName: "address-line2", autofill: "Apartment 306" },
         ],
@@ -175,145 +165,8 @@ add_autofill_heuristic_tests([
           {
             fieldName: "address-line1",
             autofill: "Schlesische Str 999",
-            reason: "update-heuristic",
           },
           { fieldName: "address-line2", autofill: "" },
-        ],
-      },
-    ],
-  },
-  {
-    description:
-      "Test autofill with street and house number with address2 non-adjacent",
-    fixtureData: `<form>
-      <input id="strasse">
-      <input id="haus">
-      <input id="organization">
-      <input id="city">
-      <input id="address2">
-      <input id="postal-code">
-    </form>`,
-    profile: TEST_PROFILE_DE2,
-    expectedResult: [
-      {
-        default: {
-          reason: "regex-heuristic",
-        },
-        fields: [
-          { fieldName: "address-line1", autofill: "Schlesische Str" },
-          { fieldName: "address-housenumber", autofill: "999" },
-          {
-            fieldName: "organization",
-            autofill: TEST_PROFILE_DE2.organization,
-          },
-          {
-            fieldName: "address-level2",
-            autofill: TEST_PROFILE_DE2["address-level2"],
-          },
-          { fieldName: "address-line2", autofill: "Apt 216" },
-          {
-            fieldName: "postal-code",
-            autofill: TEST_PROFILE_DE2["postal-code"],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    description: "Test autofill with house number and street with labels",
-    fixtureData: `<form>
-      <input id="email">
-      <label for="address1">House Number</label><input id="address1">
-      <label for="address2">Street</label><input id="address2">
-      <input id="postal-code">
-    </form>`,
-    profile: TEST_PROFILE_CA,
-    expectedResult: [
-      {
-        default: {
-          reason: "regex-heuristic",
-        },
-        fields: [
-          { fieldName: "email", autofill: TEST_PROFILE_CA.email },
-          { fieldName: "address-housenumber", autofill: "160" },
-          { fieldName: "street-address", autofill: "Main St" },
-          {
-            fieldName: "postal-code",
-            autofill: TEST_PROFILE_CA["postal-code"],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    description:
-      "Test autofill with house number, street and apartment with labels",
-    fixtureData: `<form>
-      <input id="email">
-      <label for="address1">House Number</label><input id="address1">
-      <label for="address2">Street</label><input id="address2">
-      <label for="address-apt">Apartment</label><input id="address-apt">
-      <input id="postal-code">
-    </form>`,
-    profile: TEST_PROFILE_CA,
-    expectedResult: [
-      {
-        default: {
-          reason: "regex-heuristic",
-        },
-        fields: [
-          { fieldName: "email", autofill: TEST_PROFILE_CA.email },
-          { fieldName: "address-housenumber", autofill: "160" },
-          {
-            fieldName: "address-line1",
-            autofill: "Main St",
-            reason: "update-heuristic",
-          },
-          { fieldName: "address-line2", autofill: "Apartment 306" },
-          {
-            fieldName: "postal-code",
-            autofill: TEST_PROFILE_CA["postal-code"],
-          },
-        ],
-      },
-    ],
-  },
-  {
-    description:
-      "Test autofill with the house number field being recognized in alternative field name",
-    // house number field is recognized as both cc-number and house-number
-    fixtureData: `<form>
-      <input id="email" autocomplete="email">
-      <input id="address-line1" autocomplete="address-line1">
-      <label for="delivery-houseNumber">Numero civico*</label>
-      <input id="delivery-houseNumber" name="delivery-houseNumber">
-      <label for="delivery-line2">Indirizzo aggiuntivo</label>
-      <input id="delivery-line2" name="delivery-line2">
-      <input id="postal-code" autocomplete="postal-code">
-    </form>`,
-    profile: TEST_PROFILE_CA,
-    expectedResult: [
-      {
-        default: {
-          reason: "autocomplete",
-        },
-        fields: [
-          { fieldName: "email", autofill: TEST_PROFILE_CA.email },
-          { fieldName: "address-line1", autofill: "Main St" },
-          {
-            fieldName: "address-housenumber",
-            autofill: "160",
-            reason: "update-heuristic",
-          },
-          {
-            fieldName: "address-line2",
-            autofill: "Apartment 306",
-            reason: "update-heuristic",
-          },
-          {
-            fieldName: "postal-code",
-            autofill: TEST_PROFILE_CA["postal-code"],
-          },
         ],
       },
     ],

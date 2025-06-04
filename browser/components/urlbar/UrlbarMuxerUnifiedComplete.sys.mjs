@@ -21,6 +21,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "resource:///modules/UrlbarProviderQuickSuggest.sys.mjs",
   UrlbarProviderTabToSearch:
     "resource:///modules/UrlbarProviderTabToSearch.sys.mjs",
+  UrlbarProviderWeather: "resource:///modules/UrlbarProviderWeather.sys.mjs",
   UrlbarSearchUtils: "resource:///modules/UrlbarSearchUtils.sys.mjs",
 });
 
@@ -179,7 +180,7 @@ class MuxerUnifiedComplete extends UrlbarMuxer {
       context.searchMode?.engineName || !showSearchSuggestionsFirst
         ? lazy.UrlbarPrefs.makeResultGroups({ showSearchSuggestionsFirst })
         : lazy.UrlbarPrefs.resultGroups;
-    lazy.logger.debug("Root groups", rootGroup);
+    lazy.logger.debug(`Groups: ${JSON.stringify(rootGroup)}`);
 
     // Fill the root group.
     let [sortedResults] = this._fillGroup(
@@ -697,7 +698,10 @@ class MuxerUnifiedComplete extends UrlbarMuxer {
         return true;
       }
 
-      if (state.quickSuggestResult && state.quickSuggestResult != result) {
+      if (
+        state.weatherResult ||
+        (state.quickSuggestResult && state.quickSuggestResult != result)
+      ) {
         // A Suggest result was already added.
         return false;
       }
@@ -912,10 +916,7 @@ class MuxerUnifiedComplete extends UrlbarMuxer {
     // previously added suggestions.
     if (
       result.source == UrlbarUtils.RESULT_SOURCE.HISTORY &&
-      result.type == UrlbarUtils.RESULT_TYPE.URL &&
-      // If there's no suggestions, we're not going to have anything to match
-      // against, so avoid processing the url.
-      state.suggestions.size
+      result.type == UrlbarUtils.RESULT_TYPE.URL
     ) {
       let submission = Services.search.parseSubmissionURL(result.payload.url);
       if (submission) {
@@ -965,7 +966,7 @@ class MuxerUnifiedComplete extends UrlbarMuxer {
       state.quickSuggestResult &&
       !result.heuristic &&
       result.type == UrlbarUtils.RESULT_TYPE.URL &&
-      lazy.QuickSuggest.isUrlEquivalentToResultUrl(
+      lazy.QuickSuggest.isURLEquivalentToResultURL(
         result.payload.url,
         state.quickSuggestResult
       )
@@ -985,7 +986,10 @@ class MuxerUnifiedComplete extends UrlbarMuxer {
       );
       if (param) {
         let [key, value] = param.split("=");
-        let searchParams = URL.parse(result.payload.url)?.searchParams;
+        let searchParams;
+        try {
+          ({ searchParams } = new URL(result.payload.url));
+        } catch (error) {}
         if (
           (value === undefined && searchParams?.has(key)) ||
           (value !== undefined && searchParams?.getAll(key).includes(value))
@@ -1186,6 +1190,10 @@ class MuxerUnifiedComplete extends UrlbarMuxer {
 
     if (result.providerName == lazy.UrlbarProviderQuickSuggest.name) {
       state.quickSuggestResult ??= result;
+    }
+
+    if (result.providerName == lazy.UrlbarProviderWeather.name) {
+      state.weatherResult = result;
     }
 
     state.hasUnitConversionResult =

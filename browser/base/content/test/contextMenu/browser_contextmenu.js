@@ -72,6 +72,8 @@ add_setup(async function () {
   await SpecialPowers.pushPrefEnv({
     set: [
       ["browser.search.separatePrivateDefault.ui.enabled", true],
+      ["extensions.screenshots.disabled", false],
+      ["layout.forms.reveal-password-context-menu.enabled", true],
       ["privacy.query_stripping.strip_on_share.canDisable", false],
     ],
   });
@@ -228,114 +230,6 @@ add_task(async function test_link_in_shadow_dom() {
       offsetY: 6,
     }
   );
-});
-
-add_task(async function test_linkpreviewcommand() {
-  await SpecialPowers.pushPrefEnv({
-    set: [["browser.ml.linkPreview.prefetchOnEnable", false]],
-  });
-  await SpecialPowers.pushPrefEnv({
-    set: [["browser.ml.linkPreview.enabled", true]],
-  });
-  await test_contextmenu("#test-link", [
-    "context-openlinkintab",
-    true,
-    ...(hasContainers ? ["context-openlinkinusercontext-menu", true] : []),
-    // We need a blank entry here because the containers submenu is
-    // dynamically generated with no ids.
-    ...(hasContainers ? ["", null] : []),
-    "context-openlink",
-    true,
-    "context-openlinkprivate",
-    true,
-    "context-previewlink",
-    true,
-    "---",
-    null,
-    "context-bookmarklink",
-    true,
-    "context-savelink",
-    true,
-    ...(hasPocket ? ["context-savelinktopocket", true] : []),
-    "context-copylink",
-    true,
-    ...(hasStripOnShare ? ["context-stripOnShareLink", true] : []),
-    "---",
-    null,
-    "context-searchselect",
-    true,
-    "context-searchselect-private",
-    true,
-    ...(hasSelectTranslations ? ["context-translate-selection", true] : []),
-  ]);
-
-  await SpecialPowers.popPrefEnv();
-});
-
-add_task(async function test_linkpreviewcommand_disabled() {
-  await SpecialPowers.pushPrefEnv({
-    set: [["browser.ml.linkPreview.enabled", false]],
-  });
-  await test_contextmenu("#test-link", [
-    "context-openlinkintab",
-    true,
-    ...(hasContainers ? ["context-openlinkinusercontext-menu", true] : []),
-    // We need a blank entry here because the containers submenu is
-    // dynamically generated with no ids.
-    ...(hasContainers ? ["", null] : []),
-    "context-openlink",
-    true,
-    "context-openlinkprivate",
-    true,
-    //missing context-previewlink is expected
-    "---",
-    null,
-    "context-bookmarklink",
-    true,
-    "context-savelink",
-    true,
-    ...(hasPocket ? ["context-savelinktopocket", true] : []),
-    "context-copylink",
-    true,
-    ...(hasStripOnShare ? ["context-stripOnShareLink", true] : []),
-    "---",
-    null,
-    "context-searchselect",
-    true,
-    "context-searchselect-private",
-    true,
-    ...(hasSelectTranslations ? ["context-translate-selection", true] : []),
-  ]);
-  await SpecialPowers.popPrefEnv();
-});
-
-add_task(async function test_linkpreviewcommand_not_on_text() {
-  await SpecialPowers.pushPrefEnv({
-    set: [["browser.ml.linkPreview.prefetchOnEnable", false]],
-  });
-  await SpecialPowers.pushPrefEnv({
-    set: [["browser.ml.linkPreview.enabled", true]],
-  });
-
-  // Verify that context-previewlink doesn't appear in the context menu for text elements
-  await test_contextmenu("#test-text", [
-    ...NAVIGATION_ITEMS,
-    "context-savepage",
-    true,
-    ...(hasPocket ? ["context-pocket", true] : []),
-    "context-selectall",
-    true,
-    "---",
-    null,
-    "context-take-screenshot",
-    true,
-    "---",
-    null,
-    "context-viewsource",
-    true,
-  ]);
-
-  await SpecialPowers.popPrefEnv();
 });
 
 add_task(async function test_link_over_shadow_dom() {
@@ -802,10 +696,6 @@ add_task(async function test_iframe() {
     true,
     "---",
     null,
-    "context-take-screenshot",
-    true,
-    "---",
-    null,
     "frame",
     null,
     getThisFrameSubMenu([
@@ -828,6 +718,10 @@ add_task(async function test_iframe() {
       "---",
       null,
       "context-printframe",
+      true,
+      "---",
+      null,
+      "context-take-frame-screenshot",
       true,
       "---",
       null,
@@ -893,10 +787,6 @@ add_task(async function test_video_in_iframe() {
     true,
     "---",
     null,
-    "context-take-screenshot",
-    true,
-    "---",
-    null,
     "frame",
     null,
     getThisFrameSubMenu([
@@ -919,6 +809,10 @@ add_task(async function test_video_in_iframe() {
       "---",
       null,
       "context-printframe",
+      true,
+      "---",
+      null,
+      "context-take-frame-screenshot",
       true,
       "---",
       null,
@@ -976,10 +870,6 @@ add_task(async function test_video_in_iframe() {
     true,
     "---",
     null,
-    "context-take-screenshot",
-    true,
-    "---",
-    null,
     "frame",
     null,
     getThisFrameSubMenu([
@@ -1002,6 +892,10 @@ add_task(async function test_video_in_iframe() {
       "---",
       null,
       "context-printframe",
+      true,
+      "---",
+      null,
+      "context-take-frame-screenshot",
       true,
       "---",
       null,
@@ -1101,10 +995,6 @@ add_task(async function test_image_in_iframe() {
     true,
     "---",
     null,
-    "context-take-screenshot",
-    true,
-    "---",
-    null,
     "frame",
     null,
     getThisFrameSubMenu([
@@ -1130,6 +1020,10 @@ add_task(async function test_image_in_iframe() {
       true,
       "---",
       null,
+      "context-take-frame-screenshot",
+      true,
+      "---",
+      null,
       "context-viewframeinfo",
       true,
     ]),
@@ -1146,10 +1040,6 @@ add_task(async function test_pdf_viewer_in_iframe() {
       true,
       ...(hasPocket ? ["context-pocket", true] : []),
       "context-selectall",
-      true,
-      "---",
-      null,
-      "context-take-screenshot",
       true,
       "---",
       null,
@@ -1175,6 +1065,10 @@ add_task(async function test_pdf_viewer_in_iframe() {
         "---",
         null,
         "context-printframe",
+        true,
+        "---",
+        null,
+        "context-take-frame-screenshot",
         true,
         "---",
         null,
@@ -1440,9 +1334,7 @@ add_task(async function test_dom_full_screen() {
   await exited;
 
   await BrowserTestUtils.waitForCondition(() => {
-    return !gBrowser.selectedBrowser.browsingContext.currentWindowGlobal.getActor(
-      "DOMFullscreen"
-    ).timerId;
+    return !TelemetryStopwatch.running("FULLSCREEN_CHANGE_MS");
   });
 
   if (AppConstants.platform == "macosx") {
@@ -1518,39 +1410,40 @@ add_task(async function test_select_text() {
 });
 
 add_task(async function test_select_text_search_service_not_initialized() {
-  let statuses = ["not initialized", "failed", "started"];
-  for (let status of statuses) {
-    Services.search.wrappedJSObject.forceInitializationStatusForTests(status);
-    await test_contextmenu(
-      "#test-select-text",
-      [
-        "context-copy",
-        true,
-        "context-selectall",
-        true,
-        "context-print-selection",
-        true,
-        "---",
-        null,
-        "context-take-screenshot",
-        true,
-        ...(hasSelectTranslations
-          ? ["---", null, "context-translate-selection", true]
-          : []),
-        "---",
-        null,
-        "context-viewpartialsource-selection",
-        true,
-      ],
-      {
-        offsetX: 6,
-        offsetY: 6,
-        async preCheckContextMenuFn() {
-          await selectText("#test-select-text");
-        },
-      }
-    );
-  }
+  // Pretend the search service is not initialised.
+  Services.search.wrappedJSObject.forceInitializationStatusForTests(
+    "not initialized"
+  );
+  await test_contextmenu(
+    "#test-select-text",
+    [
+      "context-copy",
+      true,
+      "context-selectall",
+      true,
+      "context-print-selection",
+      true,
+      "---",
+      null,
+      "context-take-screenshot",
+      true,
+      ...(hasSelectTranslations
+        ? ["---", null, "context-translate-selection", true]
+        : []),
+      "---",
+      null,
+      "context-viewpartialsource-selection",
+      true,
+    ],
+    {
+      offsetX: 6,
+      offsetY: 6,
+      async preCheckContextMenuFn() {
+        await selectText("#test-select-text");
+      },
+    }
+  );
+
   // Restore the search service initialization status
   Services.search.wrappedJSObject.forceInitializationStatusForTests("success");
 });
@@ -1577,7 +1470,6 @@ add_task(async function test_select_text_link() {
       true,
       "context-savelink",
       true,
-      ...(hasStripOnShare ? ["context-stripOnShareLink", true] : []),
       "---",
       null,
       "context-copy",
@@ -1778,10 +1670,6 @@ add_task(async function test_srcdoc() {
     true,
     "---",
     null,
-    "context-take-screenshot",
-    true,
-    "---",
-    null,
     "frame",
     null,
     getThisFrameSubMenu([
@@ -1794,6 +1682,10 @@ add_task(async function test_srcdoc() {
       "---",
       null,
       "context-printframe",
+      true,
+      "---",
+      null,
+      "context-take-frame-screenshot",
       true,
       "---",
       null,

@@ -10,7 +10,7 @@ const { Preferences } = ChromeUtils.importESModule(
   "resource://gre/modules/Preferences.sys.mjs"
 );
 const { SearchSettings } = ChromeUtils.importESModule(
-  "moz-src:///toolkit/components/search/SearchSettings.sys.mjs"
+  "resource://gre/modules/SearchSettings.sys.mjs"
 );
 const { updateAppInfo, getAppInfo } = ChromeUtils.importESModule(
   "resource://testing-common/AppInfo.sys.mjs"

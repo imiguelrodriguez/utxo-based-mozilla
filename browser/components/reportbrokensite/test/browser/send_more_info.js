@@ -34,8 +34,6 @@ async function reformatExpectedWebCompatInfo(tab, overrides) {
   const { devicePixelRatio, hasTouchScreen } = graphics;
   const { antitracking, languages, useragentString } = tabInfo;
 
-  const addons = overrides.addons || [];
-  const experiments = overrides.experiments || [];
   const atOverrides = overrides.antitracking;
   const blockList = atOverrides?.blockList ?? antitracking.blockList;
   const hasMixedActiveContentBlocked =
@@ -49,9 +47,6 @@ async function reformatExpectedWebCompatInfo(tab, overrides) {
     antitracking.hasTrackingContentBlocked;
   const isPrivateBrowsing =
     atOverrides?.isPrivateBrowsing ?? antitracking.isPrivateBrowsing;
-  const btpHasPurgedSite =
-    atOverrides?.btpHasPurgedSite ?? antitracking.btpHasPurgedSite;
-  const etpCategory = atOverrides?.etpCategory ?? antitracking.etpCategory;
 
   const extra_labels = [];
   const frameworks = overrides.frameworks ?? {
@@ -69,8 +64,6 @@ async function reformatExpectedWebCompatInfo(tab, overrides) {
     forcedAcceleratedLayers: "layers.acceleration.force-enabled",
     globalPrivacyControlEnabled: "privacy.globalprivacycontrol.enabled",
     installtriggerEnabled: "extensions.InstallTrigger.enabled",
-    h1InSectionUseragentStylesEnabled:
-      "layout.css.h1-in-section-ua-styles.enabled",
     opaqueResponseBlocking: "browser.opaqueResponseBlocking",
     resistFingerprintingEnabled: "privacy.resistFingerprinting",
     softwareWebrender: "gfx.webrender.software",
@@ -88,12 +81,10 @@ async function reformatExpectedWebCompatInfo(tab, overrides) {
     blockList,
     details: {
       additionalData: {
-        addons,
         applicationName,
         blockList,
         buildId: snapshot.application.buildID,
         devicePixelRatio: parseInt(devicePixelRatio),
-        experiments,
         finalUserAgent: useragentString,
         fissionEnabled,
         gfxData: {
@@ -117,9 +108,7 @@ async function reformatExpectedWebCompatInfo(tab, overrides) {
         hasMixedActiveContentBlocked,
         hasMixedDisplayContentBlocked,
         hasTrackingContentBlocked,
-        btpHasPurgedSite,
         isPB: isPrivateBrowsing,
-        etpCategory,
         languages,
         locales: snapshot.intl.localeService.available,
         memoryMB: browserInfo.system.memory,
@@ -141,7 +130,6 @@ async function reformatExpectedWebCompatInfo(tab, overrides) {
       "tracking content blocked": hasTrackingContentBlocked
         ? `true (${blockList})`
         : "false",
-      "btp has purged site": btpHasPurgedSite,
     },
     extra_labels,
     src: "desktop-reporter",
@@ -202,7 +190,6 @@ async function reformatExpectedWebCompatInfo(tab, overrides) {
     delete reformatted.details["mixed active content blocked"];
     delete reformatted.details["mixed passive content blocked"];
     delete reformatted.details["tracking content blocked"];
-    delete reformatted.details["btp has purged site"];
   } else {
     const { fastclick, mobify, marfeel } = frameworks;
     if (fastclick) {
@@ -231,41 +218,13 @@ async function testSendMoreInfo(tab, menu, expectedOverrides = {}) {
   let rbs = await menu.openAndPrefillReportBrokenSite(url, description);
 
   const receivedData = await rbs.clickSendMoreInfo();
-  await checkWebcompatComPayload(
-    tab,
-    url,
-    description,
-    expectedOverrides,
-    receivedData
-  );
+  const { message } = receivedData;
 
-  // re-opening the panel, the url and description should be reset
-  rbs = await menu.openReportBrokenSite();
-  rbs.isMainViewResetToCurrentTab();
-  rbs.close();
-}
-
-async function testWebcompatComFallback(tab, menu) {
-  const url = menu.win.gBrowser.currentURI.spec;
-  const receivedData =
-    await menu.clickReportBrokenSiteAndAwaitWebCompatTabData();
-  await checkWebcompatComPayload(tab, url, "", {}, receivedData);
-  menu.close();
-}
-
-async function checkWebcompatComPayload(
-  tab,
-  url,
-  description,
-  expectedOverrides,
-  receivedData
-) {
   const expected = await reformatExpectedWebCompatInfo(tab, expectedOverrides);
   expected.url = url;
   expected.description = description;
 
   // sanity checks
-  const { message } = receivedData;
   const { details } = message;
   const { additionalData } = details;
   ok(message.url?.length, "Got a URL");
@@ -291,7 +250,10 @@ async function checkWebcompatComPayload(
     ok(isScreenshotValid, "Got a valid screenshot");
   }
 
-  filterFrameworkDetectorFails(message.details, expected.details);
-
   ok(areObjectsEqual(message, expected), "sent info matches expectations");
+
+  // re-opening the panel, the url and description should be reset
+  rbs = await menu.openReportBrokenSite();
+  rbs.isMainViewResetToCurrentTab();
+  rbs.close();
 }

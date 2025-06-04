@@ -2,7 +2,15 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-do-not-track-removal = We no longer support the “Do Not Track” signal
+do-not-track-description = Send websites a “Do Not Track” signal that you don’t want to be tracked
+do-not-track-description2 =
+    .label = Send websites a “Do Not Track” request
+    .accesskey = d
+do-not-track-learn-more = Learn more
+do-not-track-option-default-content-blocking-known =
+    .label = Only when { -brand-short-name } is set to block known trackers
+do-not-track-option-always =
+    .label = Always
 
 global-privacy-control-description =
     .label = Tell websites not to sell or share my data
@@ -155,6 +163,9 @@ windows-launch-on-login =
 windows-launch-on-login-disabled = This preference has been disabled in Windows. To change, visit <a data-l10n-name="startup-link">Startup Apps</a> in System settings.
 windows-launch-on-login-profile-disabled = Enable this preference by checking “{ profile-manager-use-selected.label }” in the “Choose User Profile” window.
 
+startup-restore-warn-on-quit =
+    .label = Warn you when quitting the browser
+
 disable-extension =
     .label = Disable Extension
 
@@ -163,12 +174,6 @@ preferences-data-migration-description = Import bookmarks, passwords, history, a
 preferences-data-migration-button =
     .label = Import Data
     .accesskey = m
-
-preferences-profiles-header = Profiles
-preferences-manage-profiles-description = Each profile has separate browsing data and settings, including history, passwords, and more.
-preferences-manage-profiles-learn-more = Learn more
-preferences-manage-profiles-button =
-  .label = Manage Profiles
 
 tabs-group-header = Tabs
 
@@ -180,8 +185,8 @@ open-new-link-as-tabs =
     .label = Open links in tabs instead of new windows
     .accesskey = w
 
-ask-on-close-multiple-tabs =
-    .label = Ask before closing multiple tabs
+confirm-on-close-multiple-tabs =
+    .label = Confirm before closing multiple tabs
     .accesskey = m
 
 # This string is used for the confirm before quitting preference.
@@ -189,8 +194,8 @@ ask-on-close-multiple-tabs =
 #   $quitKey (string) - the quit keyboard shortcut, and formatted
 #                       in the same manner as it would appear,
 #                       for example, in the File menu.
-ask-on-quit-with-key =
-    .label = Ask before quitting with { $quitKey }
+confirm-on-quit-with-key =
+    .label = Confirm before quitting with { $quitKey }
     .accesskey = b
 
 warn-on-open-many-tabs =
@@ -253,21 +258,6 @@ settings-tabs-show-image-in-preview =
     .label = Show an image preview when you hover on a tab
     .accessKey = h
 
-
-browser-layout-header = Browser Layout
-
-browser-layout-horizontal-tabs =
-    .label = Horizontal tabs
-browser-layout-horizontal-tabs-desc = Display at top of browser
-
-browser-layout-vertical-tabs =
-    .label = Vertical tabs
-browser-layout-vertical-tabs-desc = Display on the side, in the sidebar
-
-browser-layout-show-sidebar =
-    .label = Show sidebar
-browser-layout-show-sidebar-desc = Quickly access bookmarks, tabs from your phone, AI chatbots, and more without leaving your main view.
-
 ## General Section - Language & Appearance
 
 language-and-appearance-header = Language and Appearance
@@ -298,28 +288,16 @@ preferences-web-appearance-choice-input-dark =
 
 # This can appear when using windows HCM or "Override colors: always" without
 # system colors.
-preferences-web-appearance-override-warning3 =
-    .message = Your contrast control settings are overriding website appearance.
+preferences-web-appearance-override-warning2 =
+    .message = Your color selections are overriding website appearance.
 
 # This message contains one link. It can be moved within the sentence as needed
 # to adapt to your language, but should not be changed.
 preferences-web-appearance-footer = Manage { -brand-short-name } themes in <a data-l10n-name="themes-link">Extensions & Themes</a>
 
-preferences-contrast-control-header = Contrast Control
+preferences-colors-header = Colors
 
-preferences-contrast-control-description = Websites have a variety of foreground and background colors. Configure { -brand-short-name } to use the same colors across websites for improved readability.
-
-preferences-contrast-control-use-platform-settings =
-    .label = Automatic (use system settings)
-    .accesskey = A
-
-preferences-contrast-control-off =
-    .label = Off
-    .accesskey = O
-
-preferences-contrast-control-custom =
-    .label = Custom
-    .accesskey = C
+preferences-colors-description = Override { -brand-short-name }’s default colors for text, website backgrounds, and links.
 
 preferences-colors-manage-button =
     .label = Manage Colors…
@@ -467,12 +445,19 @@ applications-type-description-with-type = { $type-description } ({ $type })
 #   $type (string) - The MIME type (e.g application/binary)
 applications-file-ending-with-type = { applications-file-ending } ({ $type })
 
+# Variables:
+#   $plugin-name (string) - Name of a plugin (e.g Adobe Flash)
+applications-use-plugin-in =
+    .label = Use { $plugin-name } (in { -brand-short-name })
 applications-open-inapp =
     .label = Open in { -brand-short-name }
 
 ## The strings in this group are used to populate
 ## selected label element based on the string from
 ## the selected menu item.
+
+applications-use-plugin-in-label =
+    .value = { applications-use-plugin-in.label }
 
 applications-action-save-label =
     .value = { applications-action-save.label }
@@ -537,6 +522,10 @@ update-application-check-choose =
     .label = Check for updates but let you choose to install them
     .accesskey = C
 
+update-application-manual =
+    .label = Never check for updates (not recommended)
+    .accesskey = N
+
 update-application-background-enabled =
     .label = When { -brand-short-name } is not running
     .accesskey = W
@@ -597,8 +586,6 @@ performance-default-content-process-count =
 ## General Section - Browsing
 
 browsing-title = Browsing
-browsing-group-label =
-    .aria-label = Browsing
 
 browsing-use-autoscroll =
     .label = Use autoscrolling
@@ -636,9 +623,13 @@ browsing-picture-in-picture-toggle-enabled =
     .label = Enable Picture-in-Picture video controls
     .accesskey = E
 
+browsing-picture-in-picture-learn-more = Learn more
+
 browsing-media-control =
     .label = Control media via keyboard, headset, or virtual interface
     .accesskey = v
+
+browsing-media-control-learn-more = Learn more
 
 browsing-cfr-recommendations =
     .label = Recommend extensions as you browse
@@ -646,6 +637,8 @@ browsing-cfr-recommendations =
 browsing-cfr-features =
     .label = Recommend features as you browse
     .accesskey = f
+
+browsing-cfr-recommendations-learn-more = Learn more
 
 ## General Section - Proxy
 
@@ -734,6 +727,8 @@ home-prefs-highlights-options-bookmarks =
     .label = Bookmarks
 home-prefs-highlights-option-most-recent-download =
     .label = Most recent download
+home-prefs-highlights-option-saved-to-pocket =
+    .label = Pages saved to { -pocket-brand-name }
 
 home-prefs-recent-activity-header =
     .label = Recent activity
@@ -742,17 +737,6 @@ home-prefs-weather-header =
   .label = Weather
 home-prefs-weather-description = Today’s forecast at a glance
 home-prefs-weather-learn-more-link = Learn more
-
-home-prefs-trending-search-header =
-    .label = Trending searches
-home-prefs-trending-search-description = Popular and frequently searched topics
-
-# "Support" here means to help sustain or contribute to something, especially through funding or sponsorship.
-home-prefs-support-firefox-header =
-    .label = Support { -brand-product-name }
-
-home-prefs-mission-message = Our sponsors support our mission to build a better web
-home-prefs-mission-message-learn-more-link = Find out how
 
 # Variables:
 #   $num (number) - Number of rows displayed
@@ -822,9 +806,6 @@ search-remove-engine =
 search-add-engine =
     .label = Add
     .accesskey = A
-search-edit-engine =
-    .label = Edit
-    .accesskey = E
 
 search-find-more-link = Find more search engines
 
@@ -835,15 +816,6 @@ search-keyword-warning-title = Duplicate Keyword
 #   $name (string) - Name of a search engine.
 search-keyword-warning-engine = You have chosen a keyword that is currently in use by “{ $name }”. Please select another.
 search-keyword-warning-bookmark = You have chosen a keyword that is currently in use by a bookmark. Please select another.
-
-# This warning is displayed when the chosen name is already in use.
-# Variables:
-#   $name (string) - Name of a search engine.
-edit-engine-name-warning-duplicate = There already is a search engine with the name “{ $name }”. Please choose another name.
-
-remove-engine-confirmation = Are you sure you want to remove this search engine?
-remove-engine-remove = Remove
-remove-addon-engine-alert = To remove this search engine, remove the associated add-on.
 
 ## Containers Section
 
@@ -954,19 +926,21 @@ sync-currently-syncing-payment-methods = Payment methods
 sync-currently-syncing-addons = Add-ons
 sync-currently-syncing-settings = Settings
 
-sync-manage-options =
-    .label = Manage sync…
-    .accesskey = M
+sync-change-options =
+    .label = Change…
+    .accesskey = C
 
 ## The "Choose what to sync" dialog.
 
-sync-choose-what-to-sync-dialog4 =
-    .title = Manage what syncs on all your connected devices
+sync-choose-what-to-sync-dialog3 =
+    .title = Choose What To Sync
     .style = min-width: 36em;
-    .buttonlabelaccept = Save
+    .buttonlabelaccept = Save Changes
     .buttonaccesskeyaccept = S
     .buttonlabelextra2 = Disconnect…
     .buttonaccesskeyextra2 = D
+
+sync-choose-dialog-subtitle = Changes to the list of items to sync will be reflected across all your connected devices.
 
 sync-engine-bookmarks =
     .label = Bookmarks
@@ -1197,6 +1171,19 @@ sitedata-delete-on-close =
 
 sitedata-delete-on-close-private-browsing2 = Based on your history settings, { -brand-short-name } deletes cookies and site data from your session when you close the browser.
 
+sitedata-allow-cookies-option =
+    .label = Accept cookies and site data
+    .accesskey = A
+
+sitedata-disallow-cookies-option =
+    .label = Block cookies and site data
+    .accesskey = B
+
+# This label means 'type of content that is blocked', and is followed by a drop-down list with content types below.
+# The list items are the strings named sitedata-block-*-option*.
+sitedata-block-desc = Type blocked
+    .accesskey = T
+
 sitedata-option-block-cross-site-trackers =
     .label = Cross-site trackers
 sitedata-option-block-cross-site-tracking-cookies =
@@ -1236,16 +1223,6 @@ addressbar-header = Address Bar
 
 addressbar-suggest = When using the address bar, suggest
 
-# When Firefox Suggest is enabled, this replaces `addressbar-header`.
-addressbar-header-firefox-suggest = Address Bar — { -firefox-suggest-brand-name }
-
-# When Firefox Suggest is enabled, this replaces `addressbar-suggest`.
-addressbar-suggest-firefox-suggest = Choose the type of suggestions that appear in the address bar.
-
-# When Firefox Suggest is enabled, a "Learn more" link appears at the end of
-# `addressbar-suggest-firefox-suggest`.
-addressbar-locbar-firefox-suggest-learn-more = Learn more
-
 addressbar-locbar-history-option =
     .label = Browsing history
     .accesskey = h
@@ -1278,21 +1255,7 @@ addressbar-locbar-showtrendingsuggestions-option =
     .label = Show trending search suggestions
     .accesskey = t
 
-# Nonsponsored suggestions refers to Firefox Suggest suggestions like Wikipedia.
-addressbar-locbar-suggest-nonsponsored-option =
-  .label = Suggestions from { -brand-short-name }
-addressbar-locbar-suggest-nonsponsored-desc = Get suggestions from the web related to your search.
-
-addressbar-locbar-suggest-sponsored-option =
-  .label = Suggestions from sponsors
-addressbar-locbar-suggest-sponsored-desc = Support { -brand-short-name } with occasional sponsored suggestions.
-
 addressbar-quickactions-learn-more = Learn more
-
-addressbar-dismissed-suggestions-label = Dismissed suggestions
-addressbar-restore-dismissed-suggestions-description = Restore dismissed suggestions from sponsors and { -brand-short-name }.
-addressbar-restore-dismissed-suggestions-button =
-  .label = Restore
 
 ## Privacy Section - Content Blocking
 
@@ -1477,42 +1440,31 @@ permissions-addon-exceptions =
 collection-header2 = { -brand-short-name } Data Collection and Use
     .searchkeywords = telemetry
 
-preferences-collection-description = We strive to provide you with choices and collect only the minimal data necessary to improve { -brand-product-name } for everyone.
-preferences-collection-privacy-notice = View Privacy Notice
-preferences-across-profiles = These settings apply to every { -brand-product-name } profile on this device.
-preferences-view-profiles = View all profiles
+collection-description = We strive to provide you with choices and collect only what we need to provide and improve { -brand-short-name } for everyone. We always ask permission before receiving personal information.
+collection-privacy-notice = Privacy Notice
 
 collection-health-report-telemetry-disabled = You’re no longer allowing { -vendor-short-name } to capture technical and interaction data. All past data will be deleted within 30 days.
 collection-health-report-telemetry-disabled-link = Learn more
 
-collection-usage-ping =
-    .label = Send daily usage ping to { -vendor-short-name }
-    .accesskey = u
-collection-usage-ping-description = This helps { -vendor-short-name } to estimate active users.
-
-collection-health-report2 =
-    .label = Send technical and interaction data to { -vendor-short-name }
+collection-health-report =
+    .label = Allow { -brand-short-name } to send technical and interaction data to { -vendor-short-name }
     .accesskey = r
 collection-health-report-link = Learn more
-collection-health-report-description = This helps us improve { -brand-product-name } features, performance, and stability.
 
-collection-studies2 =
-    .label = Install and run studies
-collection-studies-description = Try out features and ideas before they’re released to everyone.
+collection-studies =
+    .label = Allow { -brand-short-name } to install and run studies
 collection-studies-link = View { -brand-short-name } studies
 
-addon-recommendations2 =
-    .label = Allow personalized extension recommendations
-addon-recommendations-description = Get extension recommendations to improve your browsing experience.
+addon-recommendations =
+    .label = Allow { -brand-short-name } to make personalized extension recommendations
+addon-recommendations-link = Learn more
 
 # This message is displayed above disabled data sharing options in developer builds
 # or builds with no Telemetry support available.
-collection-health-report-disabled2 = Data reporting is disabled for this build configuration.
+collection-health-report-disabled = Data reporting is disabled for this build configuration
 
-collection-backlogged-crash-reports2 =
-    .label = Automatically send crash reports
+collection-backlogged-crash-reports = Allow { -brand-short-name } to send backlogged crash reports on your behalf
     .accesskey = c
-collection-backlogged-crash-reports-description = This helps { -vendor-short-name } diagnose and fix issues with the browser. Reports may include personal or sensitive data.
 
 privacy-segmentation-section-header = New features that enhance your browsing
 
@@ -1563,6 +1515,9 @@ certs-header = Certificates
 certs-enable-ocsp =
     .label = Query OCSP responder servers to confirm the current validity of certificates
     .accesskey = Q
+certs-enable-utxo = 
+    .label = Query Bitcoin node to validate UTXO-based certificates
+    .accesskey = U
 
 certs-view =
     .label = View Certificates…
@@ -1588,19 +1543,24 @@ space-alert-under-5gb-message2 = <strong>{ -brand-short-name } is running out of
 
 httpsonly-header = HTTPS-Only Mode
 
-httpsonly-description3 = Only allows secure connections to websites. { -brand-short-name } will ask before connecting insecurely.
+httpsonly-description2 = { -brand-short-name } creates secure and encrypted connections to sites you visit. { -brand-short-name } will warn you if a connection isn’t secure when HTTPS-Only is on.
 
-httpsonly-learn-more2 = How HTTPS-Only works
+httpsonly-learn-more = Learn more
 
 httpsonly-radio-enabled =
     .label = Enable HTTPS-Only Mode in all windows
+httpsonly-radio-enabled2 =
+    .label = Only use HTTPS in all windows
 
 httpsonly-radio-enabled-pbm =
     .label = Enable HTTPS-Only Mode in private windows only
+httpsonly-radio-enabled-pbm2 =
+    .label = Only use HTTPS in private windows
 
-httpsonly-radio-disabled3 =
+httpsonly-radio-disabled =
     .label = Don’t enable HTTPS-Only Mode
-    .description = { -brand-short-name } may still upgrade some connections
+httpsonly-radio-disabled2 =
+    .label = Try HTTPS first, but allow connections that are not secure
 
 ## DoH Section
 
@@ -1659,6 +1619,10 @@ preferences-doh-setting-off =
   .label = Off
   .accesskey = O
 preferences-doh-off-desc = Use your default DNS resolver
+
+preferences-doh-checkbox-warn =
+    .label = Warn if a third party actively prevents secure DNS
+    .accesskey = W
 
 preferences-doh-select-resolver = Choose provider:
 

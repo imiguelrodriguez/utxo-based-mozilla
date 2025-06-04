@@ -102,7 +102,7 @@ static bool HasUserNamespaceSupport() {
       "/proc/self/ns/net",
       "/proc/self/ns/ipc",
   };
-  for (size_t i = 0; i < std::size(paths); ++i) {
+  for (size_t i = 0; i < ArrayLength(paths); ++i) {
     if (access(paths[i], F_OK) == -1) {
       MOZ_ASSERT(errno == ENOENT);
       return false;
@@ -147,15 +147,10 @@ static bool CanCreateUserNamespace() {
     // needs to be some operation that attempts to use capabilities,
     // to check if it's blocked by an LSM.
     int rv = unshare(CLONE_NEWPID);
-    if (rv < 0) {
-      SANDBOX_LOG_ERRNO("CanCreateUserNamespace() unshare(CLONE_NEWPID)");
-    }
-
     // Exit with status 0 on success, 1 on failure.
     _exit(rv == 0 ? 0 : 1);
   }
   if (pid == -1) {
-    SANDBOX_LOG_ERRNO("CanCreateUserNamespace() clone() failure");
     // Failure.
     MOZ_ASSERT(errno == EINVAL ||  // unsupported
                errno == EPERM ||   // root-only, or we're already chrooted
@@ -168,16 +163,10 @@ static bool CanCreateUserNamespace() {
   bool waitpid_ok = HANDLE_EINTR(waitpid(pid, &wstatus, 0)) == pid;
   MOZ_ASSERT(waitpid_ok);
   if (!waitpid_ok) {
-    SANDBOX_LOG_ERRNO("CanCreateUserNamespace() waitpid(%d) failure", pid);
     return false;
   }
   // Check for failures reported by the child process.
   if (!WIFEXITED(wstatus) || WEXITSTATUS(wstatus) != 0) {
-    if (!(WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == 1)) {
-      SANDBOX_LOG(
-          "CanCreateUserNamespace() waitpid(%d) child process failure %08x",
-          pid, wstatus);
-    }
     setenv(kCacheEnvName, "0", 1);
     return false;
   }
@@ -186,7 +175,7 @@ static bool CanCreateUserNamespace() {
 }
 
 /* static */
-MOZ_RUNINIT const SandboxInfo SandboxInfo::sSingleton = SandboxInfo();
+const SandboxInfo SandboxInfo::sSingleton = SandboxInfo();
 
 SandboxInfo::SandboxInfo() {
   int flags = 0;

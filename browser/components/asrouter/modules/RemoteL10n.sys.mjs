@@ -164,24 +164,6 @@ export class _RemoteL10n {
     }
   }
 
-  get cfrFluentFileDir() {
-    return PathUtils.join(
-      Services.dirsvc.get("ProfLD", Ci.nsIFile).path,
-      "settings",
-      "main",
-      "ms-language-packs"
-    );
-  }
-
-  get cfrFluentFilePath() {
-    return PathUtils.join(
-      this.cfrFluentFileDir,
-      "browser",
-      "newtab",
-      "asrouter.ftl"
-    );
-  }
-
   /**
    * Creates a new DOMLocalization instance with the Fluent file from Remote Settings.
    *
@@ -194,17 +176,23 @@ export class _RemoteL10n {
     let useRemoteL10n = Services.prefs.getBoolPref(USE_REMOTE_L10N_PREF, true);
     if (useRemoteL10n && !L10nRegistry.getInstance().hasSource("cfr")) {
       const appLocale = Services.locale.appLocaleAsBCP47;
+      const l10nFluentDir = PathUtils.join(
+        Services.dirsvc.get("ProfLD", Ci.nsIFile).path,
+        "settings",
+        "main",
+        "ms-language-packs"
+      );
       let cfrIndexedFileSource = new L10nFileSource(
         "cfr",
         "app",
         [appLocale],
-        `${PathUtils.toFileURI(this.cfrFluentFileDir)}/`,
+        `file://${l10nFluentDir}/`,
         {
           addResourceOptions: {
             allowOverrides: true,
           },
         },
-        [PathUtils.toFileURI(this.cfrFluentFilePath)]
+        [`file://${l10nFluentDir}/browser/newtab/asrouter.ftl`]
       );
       L10nRegistry.getInstance().registerSources([cfrIndexedFileSource]);
     } else if (!useRemoteL10n && L10nRegistry.getInstance().hasSource("cfr")) {
@@ -217,7 +205,6 @@ export class _RemoteL10n {
         "browser/defaultBrowserNotification.ftl",
         "browser/newtab/asrouter.ftl",
         "toolkit/branding/brandings.ftl",
-        "preview/termsOfUse.ftl",
       ],
       false
     );

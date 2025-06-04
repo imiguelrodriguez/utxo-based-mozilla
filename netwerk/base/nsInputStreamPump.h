@@ -22,8 +22,12 @@ class nsIInputStream;
 class nsILoadGroup;
 class nsIStreamListener;
 
-#define NS_INPUT_STREAM_PUMP_IID \
-  {0x42f1cc9b, 0xdf5f, 0x4c9b, {0xbd, 0x71, 0x8d, 0x4a, 0xe2, 0x27, 0xc1, 0x8a}}
+#define NS_INPUT_STREAM_PUMP_IID                     \
+  {                                                  \
+    0x42f1cc9b, 0xdf5f, 0x4c9b, {                    \
+      0xbd, 0x71, 0x8d, 0x4a, 0xe2, 0x27, 0xc1, 0x8a \
+    }                                                \
+  }
 
 class nsInputStreamPump final : public nsIInputStreamPump,
                                 public nsIInputStreamCallback,
@@ -38,7 +42,7 @@ class nsInputStreamPump final : public nsIInputStreamPump,
   NS_DECL_NSIINPUTSTREAMPUMP
   NS_DECL_NSIINPUTSTREAMCALLBACK
   NS_DECL_NSITHREADRETARGETABLEREQUEST
-  NS_INLINE_DECL_STATIC_IID(NS_INPUT_STREAM_PUMP_IID)
+  NS_DECLARE_STATIC_IID_ACCESSOR(NS_INPUT_STREAM_PUMP_IID)
 
   nsInputStreamPump();
 
@@ -119,5 +123,7 @@ class nsInputStreamPump final : public nsIInputStreamPump,
   // Protects state/member var accesses across multiple threads.
   mozilla::RecursiveMutex mMutex{"nsInputStreamPump"};
 };
+
+NS_DEFINE_STATIC_IID_ACCESSOR(nsInputStreamPump, NS_INPUT_STREAM_PUMP_IID)
 
 #endif  // !nsInputStreamChannel_h__

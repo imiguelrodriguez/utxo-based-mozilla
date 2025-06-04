@@ -11,14 +11,16 @@
          control="editBMPanel_namePicker"/>
   <html:input id="editBMPanel_namePicker"
               class="editBMPanel_nameRow hideable"
-              type="text"/>
+              type="text"
+              onchange="gEditItemOverlay.onNamePickerChange().catch(Cu.reportError);"/>
 
   <label data-l10n-id="bookmark-overlay-url"
          class="editBMPanel_locationRow hideable"
          control="editBMPanel_locationField"/>
   <html:input id="editBMPanel_locationField"
               class="editBMPanel_locationRow uri-element hideable"
-              type="text"/>
+              type="text"
+              onchange="gEditItemOverlay.onLocationFieldChange();"/>
 
   <label data-l10n-id="bookmark-overlay-location-2"
          class="editBMPanel_folderRow hideable"
@@ -27,7 +29,8 @@
     <menulist id="editBMPanel_folderMenuList"
               class="folder-icon"
               flex="1"
-              size="large">
+              size="large"
+              oncommand="gEditItemOverlay.onFolderMenuListCommand(event).catch(Cu.reportError);">
       <menupopup>
         <!-- Static item for special folders -->
         <menuitem id="editBMPanel_toolbarFolderItem"
@@ -45,7 +48,8 @@
     </menulist>
     <button id="editBMPanel_foldersExpander"
             class="expander-down panel-button"
-            data-l10n-id="bookmark-overlay-folders-expander2"/>
+            data-l10n-id="bookmark-overlay-folders-expander2"
+            oncommand="gEditItemOverlay.toggleFolderTreeVisibility();"/>
   </hbox>
 
   <vbox id="editBMPanel_folderTreeRow"
@@ -54,7 +58,8 @@
     <!-- editBMPanel_folderTree will go here when this is shown -->
     <hbox id="editBMPanel_newFolderBox">
       <button data-l10n-id="bookmark-overlay-new-folder-button"
-              id="editBMPanel_newFolderButton"/>
+              id="editBMPanel_newFolderButton"
+              oncommand="gEditItemOverlay.newFolder().catch(Cu.reportError);"/>
     </hbox>
   </vbox>
 
@@ -73,7 +78,8 @@
                 tabscrolling="true"
                 data-l10n-id="bookmark-overlay-tags-empty-description"
                 data-l10n-attrs="placeholder"
-                aria-describedby="tags-field-info"/>
+                aria-describedby="tags-field-info"
+                onchange="gEditItemOverlay.onTagsFieldChange();"/>
     <popupset>
       <panel is="autocomplete-richlistbox-popup"
              type="autocomplete-richlistbox"
@@ -87,7 +93,8 @@
     </popupset>
     <button id="editBMPanel_tagsSelectorExpander"
             class="expander-down panel-button"
-            data-l10n-id="bookmark-overlay-tags-expander2"/>
+            data-l10n-id="bookmark-overlay-tags-expander2"
+            oncommand="gEditItemOverlay.toggleTagsSelector().catch(Cu.reportError);"/>
   </hbox>
 
   <div id="tags-field-info"
@@ -106,7 +113,8 @@
   <html:input id="editBMPanel_keywordField"
               class="editBMPanel_keywordRow hideable"
               type="text"
-              aria-describedby="keyword-field-info"/>
+              aria-describedby="keyword-field-info"
+              onchange="gEditItemOverlay.onKeywordFieldChange();"/>
 
   <div id="keyword-field-info"
        class="editBMPanel_keywordRow caption-label hideable"

@@ -24,7 +24,7 @@ class SyncedTabsInSidebar extends SidebarPage {
 
   static queries = {
     cards: { all: "moz-card" },
-    searchTextbox: "moz-input-search",
+    searchTextbox: "fxview-search-textbox",
   };
 
   constructor() {
@@ -40,7 +40,6 @@ class SyncedTabsInSidebar extends SidebarPage {
       Glean.syncedTabs.sidebarToggle.record({
         opened: true,
         synced_tabs_loaded: this.controller.isSyncedTabsLoaded,
-        version: "new",
       })
     );
     this.addContextMenuListeners();
@@ -53,7 +52,6 @@ class SyncedTabsInSidebar extends SidebarPage {
     Glean.syncedTabs.sidebarToggle.record({
       opened: false,
       synced_tabs_loaded: this.controller.isSyncedTabsLoaded,
-      version: "new",
     });
     this.removeContextMenuListeners();
     this.removeSidebarFocusedListeners();
@@ -79,6 +77,12 @@ class SyncedTabsInSidebar extends SidebarPage {
 
   handleCommandEvent(e) {
     switch (e.target.id) {
+      case "sidebar-synced-tabs-context-bookmark-tab":
+        this.topWindow.PlacesCommandHook.bookmarkLink(
+          this.triggerNode.url,
+          this.triggerNode.title
+        );
+        break;
       case "sidebar-context-menu-close-remote-tab":
         this.requestOrRemoveTabToClose(
           this.triggerNode.url,
@@ -121,7 +125,9 @@ class SyncedTabsInSidebar extends SidebarPage {
    * @param {string} options.buttonLabel
    * @param {string[]} options.descriptionArray
    * @param {string} options.descriptionLink
+   * @param {boolean} options.error
    * @param {string} options.header
+   * @param {string} options.headerIconUrl
    * @param {string} options.mainImageUrl
    * @returns {TemplateResult}
    */
@@ -130,7 +136,9 @@ class SyncedTabsInSidebar extends SidebarPage {
     buttonLabel,
     descriptionArray,
     descriptionLink,
+    error,
     header,
+    headerIconUrl,
     mainImageUrl,
   }) {
     return html`
@@ -140,17 +148,19 @@ class SyncedTabsInSidebar extends SidebarPage {
         .descriptionLink=${ifDefined(descriptionLink)}
         class="empty-state synced-tabs error"
         isSelectedTab
-        mainImageUrl=${ifDefined(mainImageUrl)}
+        mainImageUrl="${ifDefined(mainImageUrl)}"
+        ?errorGrayscale=${error}
+        headerIconUrl="${ifDefined(headerIconUrl)}"
         id="empty-container"
       >
-        <moz-button
-          type="primary"
+        <button
+          class="primary"
           slot="primary-action"
           ?hidden=${!buttonLabel}
-          data-l10n-id=${ifDefined(buttonLabel)}
-          data-action=${action}
+          data-l10n-id="${ifDefined(buttonLabel)}"
+          data-action="${action}"
           @click=${e => this.controller.handleEvent(e)}
-        ></moz-button>
+        ></button>
       </fxview-empty-state>
     `;
   }
@@ -173,13 +183,12 @@ class SyncedTabsInSidebar extends SidebarPage {
     >
       <sidebar-tab-list
         compactRows
-        maxTabsLength="-1"
         .tabItems=${tabItems}
         .updatesPaused=${false}
         .searchQuery=${this.controller.searchQuery}
         @fxview-tab-list-primary-action=${navigateToLink}
         @fxview-tab-list-secondary-action=${this.onSecondaryAction}
-      ></sidebar-tab-list>
+      />
     </moz-card>`;
   }
 
@@ -298,11 +307,12 @@ class SyncedTabsInSidebar extends SidebarPage {
           view="viewTabsSidebar"
         >
         </sidebar-panel-header>
-        <moz-input-search
-          data-l10n-id="firefoxview-search-text-box-tabs"
+        <fxview-search-textbox
+          data-l10n-id="firefoxview-search-text-box-syncedtabs"
           data-l10n-attrs="placeholder"
-          @MozInputSearch:search=${this.onSearchQuery}
-        ></moz-input-search>
+          @fxview-search-textbox-query=${this.onSearchQuery}
+          size="15"
+        ></fxview-search-textbox>
         ${when(
           messageCard,
           () => this.messageCardTemplate(messageCard),

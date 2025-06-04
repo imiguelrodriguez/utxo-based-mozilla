@@ -69,11 +69,6 @@ export const MenuMessage = {
       return;
     }
 
-    win.PanelUI.mainView.setAttribute(
-      MenuMessage.SHOWING_FXA_MENU_MESSAGE_ATTR,
-      message.id
-    );
-
     let msgElement = await this.constructFxAMessage(
       win,
       message,
@@ -86,11 +81,12 @@ export const MenuMessage = {
       );
     });
 
-    msgElement.addEventListener("FxAMenuMessage:SignUp", () => {
-      win.PanelUI.hide();
-    });
-
     msgContainer.appendChild(msgElement);
+
+    win.PanelUI.mainView.setAttribute(
+      MenuMessage.SHOWING_FXA_MENU_MESSAGE_ATTR,
+      message.id
+    );
 
     if (force) {
       win.PanelUI.show();
@@ -129,31 +125,23 @@ export const MenuMessage = {
       return;
     }
 
-    let fxaPanelView = lazy.PanelMultiView.getViewNode(document, "PanelUI-fxa");
-    fxaPanelView.setAttribute(
-      MenuMessage.SHOWING_FXA_MENU_MESSAGE_ATTR,
-      message.id
-    );
-
     let msgElement = await this.constructFxAMessage(
       win,
       message,
       MenuMessage.SOURCES.PXI_MENU
     );
+    let fxaPanelView = lazy.PanelMultiView.getViewNode(document, "PanelUI-fxa");
 
     msgElement.addEventListener("FxAMenuMessage:Close", () => {
       fxaPanelView.removeAttribute(MenuMessage.SHOWING_FXA_MENU_MESSAGE_ATTR);
     });
 
-    msgElement.addEventListener("FxAMenuMessage:SignUp", () => {
-      let panelNode = fxaPanelView.closest("panel");
-
-      if (panelNode) {
-        lazy.PanelMultiView.hidePopup(panelNode);
-      }
-    });
-
     msgContainer.appendChild(msgElement);
+
+    fxaPanelView.setAttribute(
+      MenuMessage.SHOWING_FXA_MENU_MESSAGE_ATTR,
+      message.id
+    );
 
     if (force) {
       await win.gSync.toggleAccountPanel(
@@ -181,7 +169,6 @@ export const MenuMessage = {
     win.MozXULElement.insertFTLIfNeeded("browser/newtab/asrouter.ftl");
 
     const msgElement = document.createElement("fxa-menu-message");
-    msgElement.layout = message.content.layout ?? "column";
     msgElement.imageURL = message.content.imageURL;
     msgElement.buttonText = await lazy.RemoteL10n.formatLocalizableText(
       message.content.primaryActionText
@@ -193,23 +180,9 @@ export const MenuMessage = {
       message.content.secondaryText
     );
     msgElement.dataset.navigableWithTabOnly = "true";
-    if (message.content.imageWidth !== undefined) {
-      msgElement.style.setProperty(
-        "--image-width",
-        `${message.content.imageWidth}px`
-      );
-    }
     msgElement.style.setProperty(
-      "--illustration-margin-block-start-offset",
-      `${message.content.imageVerticalTopOffset}px`
-    );
-    msgElement.style.setProperty(
-      "--illustration-margin-block-end-offset",
-      `${message.content.imageVerticalBottomOffset}px`
-    );
-    msgElement.style.setProperty(
-      "--container-margin-block-end-offset",
-      `${message.content.containerVerticalBottomOffset}px`
+      "--illustration-margin-block-offset",
+      `${message.content.imageVerticalOffset}px`
     );
 
     msgElement.addEventListener("FxAMenuMessage:Close", () => {
@@ -232,10 +205,8 @@ export const MenuMessage = {
       let clonedPrimaryAction = structuredClone(message.content.primaryAction);
       if (source === MenuMessage.SOURCES.APP_MENU) {
         clonedPrimaryAction.data.entrypoint = "fxa_app_menu";
-        clonedPrimaryAction.data.extraParams.utm_content += "-app_menu";
       } else if (source === MenuMessage.SOURCES.PXI_MENU) {
         clonedPrimaryAction.data.entrypoint = "fxa_avatar_menu";
-        clonedPrimaryAction.data.extraParams.utm_content += "-avatar";
       }
 
       lazy.SpecialMessageActions.handleAction(

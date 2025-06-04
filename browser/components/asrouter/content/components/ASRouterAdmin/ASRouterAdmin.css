@@ -36,7 +36,7 @@
   background-color: var(--in-content-button-background-active);
 }
 .asrouter-admin .sidebar .category[data-selected] {
-  color: var(--color-accent-primary);
+  color: var(--in-content-accent-color);
 }
 .asrouter-admin .main-panel {
   margin-block: 12px;
@@ -312,6 +312,7 @@
 .asrouter-admin textarea[readonly] {
   color: var(--text-color-deemphasized);
   border-color: var(--in-content-border-color);
+  -moz-user-modify: read-write;
 }
 .asrouter-admin .monospace {
   font-family: "SF Mono", "Monaco", "Inconsolata", "Fira Code", "Fira Mono", "Droid Sans Mono", "Source Code Pro", monospace;

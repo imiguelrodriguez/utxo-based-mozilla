@@ -24,12 +24,12 @@ add_task(async function testSendButton() {
   ensureReasonOptional();
 
   const win = await BrowserTestUtils.openNewBrowserWindow({ private: true });
-  const blockedPromise = waitForContentBlockingEvent(3, win);
+  const blockedPromise = waitForContentBlockingEvent(4, win);
   const tab = await openTab(REPORTABLE_PAGE_URL3, win);
   await blockedPromise;
 
   await testSend(tab, AppMenu(win), {
-    breakageCategory: "adblocker",
+    breakageCategory: "adblockers",
     description: "another test description",
     antitracking: {
       blockList: "strict",
@@ -37,8 +37,6 @@ add_task(async function testSendButton() {
       hasTrackingContentBlocked: true,
       hasMixedActiveContentBlocked: true,
       hasMixedDisplayContentBlocked: true,
-      btpHasPurgedSite: false,
-      etpCategory: "strict",
     },
     frameworks: {
       fastclick: true,
@@ -55,7 +53,7 @@ add_task(async function testSendingMoreInfo() {
   ensureSendMoreInfoEnabled();
 
   const win = await BrowserTestUtils.openNewBrowserWindow({ private: true });
-  const blockedPromise = waitForContentBlockingEvent(3, win);
+  const blockedPromise = waitForContentBlockingEvent(4, win);
   const tab = await openTab(REPORTABLE_PAGE_URL3, win);
   await blockedPromise;
 
@@ -66,8 +64,6 @@ add_task(async function testSendingMoreInfo() {
       hasTrackingContentBlocked: true,
       hasMixedActiveContentBlocked: true,
       hasMixedDisplayContentBlocked: true,
-      btpHasPurgedSite: false,
-      etpCategory: "strict",
     },
     frameworks: { fastclick: true, mobify: true, marfeel: true },
     consoleLog: [

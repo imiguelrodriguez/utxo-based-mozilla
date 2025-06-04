@@ -91,7 +91,10 @@ const kGenericContentTypes = [
 ];
 
 var PrefObserver = {
-  QueryInterface: ChromeUtils.generateQI(["nsIObserver"]),
+  QueryInterface: ChromeUtils.generateQI([
+    "nsIObserver",
+    "nsISupportsWeakReference",
+  ]),
   getPref(name) {
     try {
       switch (typeof this.prefs[name]) {
@@ -109,7 +112,7 @@ var PrefObserver = {
   },
   register(prefs) {
     this.prefs = prefs;
-    kPrefBranch.addObserver("", this);
+    kPrefBranch.addObserver("", this, true);
     for (let key in prefs) {
       let name = key;
       ChromeUtils.defineLazyGetter(this, name, function () {
@@ -316,9 +319,9 @@ export var DownloadsCommon = {
       download.error?.becauseBlockedByReputationCheck &&
       download.hasBlockedData
     ) {
-      Glean.downloads.userActionOnBlockedDownload[
-        download.error.reputationCheckVerdict
-      ].accumulateSingleSample(1); // confirm block
+      Services.telemetry
+        .getKeyedHistogramById("DOWNLOADS_USER_ACTION_ON_BLOCKED_DOWNLOAD")
+        .add(download.error.reputationCheckVerdict, 1); // confirm block
     }
 
     // Remove the associated history element first, if any, so that the views
@@ -1426,10 +1429,7 @@ DownloadsIndicatorDataCtor.prototype = {
       ? lazy.PrivateDownloadsData._downloads
       : lazy.DownloadsData._downloads;
     for (let download of downloads) {
-      if (
-        download.isInCurrentBatch ||
-        (download.canceled && download.hasPartialData)
-      ) {
+      if (!download.stopped || (download.canceled && download.hasPartialData)) {
         yield download;
       }
     }

@@ -18,11 +18,9 @@ const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   AppMenuNotifications: "resource://gre/modules/AppMenuNotifications.sys.mjs",
-  DefaultBrowserCheck:
-    "moz-src:///browser/components/DefaultBrowserCheck.sys.mjs",
+  DefaultBrowserCheck: "resource:///modules/BrowserGlue.sys.mjs",
   LaterRun: "resource:///modules/LaterRun.sys.mjs",
-  SearchStaticData:
-    "moz-src:///toolkit/components/search/SearchStaticData.sys.mjs",
+  SearchStaticData: "resource://gre/modules/SearchStaticData.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
   UrlbarProviderTopSites: "resource:///modules/UrlbarProviderTopSites.sys.mjs",
   UrlbarResult: "resource:///modules/UrlbarResult.sys.mjs",
@@ -36,7 +34,11 @@ XPCOMUtils.defineLazyPreferenceGetter(
   true
 );
 
-// The possible tips to show.
+// The possible tips to show.  These names (except NONE) are used in the names
+// of keys in the `urlbar.tips` keyed scalar telemetry (see telemetry.rst).
+// Don't modify them unless you've considered that.  If you do modify them or
+// add new tips, then you are also adding new `urlbar.tips` keys and therefore
+// need an expanded data collection review.
 const TIPS = {
   NONE: "",
   ONBOARD: "searchTip_onboard",
@@ -134,7 +136,9 @@ class ProviderSearchTips extends UrlbarProvider {
   }
 
   /**
-   * @returns {Values<typeof UrlbarUtils.PROVIDER_TYPE>}
+   * The type of the provider.
+   *
+   * @returns {UrlbarUtils.PROVIDER_TYPE}
    */
   get type() {
     return UrlbarUtils.PROVIDER_TYPE.PROFILE;
@@ -144,9 +148,11 @@ class ProviderSearchTips extends UrlbarProvider {
    * Whether this provider should be invoked for the given context.
    * If this method returns false, the providers manager won't start a query
    * with this provider, to save on resources.
+   *
+   * @returns {boolean} Whether this provider should be invoked for the search.
    */
-  async isActive() {
-    return !!this.currentTip && lazy.cfrFeaturesUserPref;
+  isActive() {
+    return this.currentTip && lazy.cfrFeaturesUserPref;
   }
 
   /**
@@ -210,6 +216,8 @@ class ProviderSearchTips extends UrlbarProvider {
         };
         break;
     }
+
+    Services.telemetry.keyedScalarAdd("urlbar.tips", `${tip}-shown`, 1);
 
     addCallback(this, result);
   }
@@ -470,7 +478,7 @@ async function isBrowserShowingNotification(window) {
  * @param {string} urlStr
  *   The URL to check, in string form.
  *
- * @returns {Promise<boolean>}
+ * @returns {boolean}
  */
 async function isDefaultEngineHomepage(urlStr) {
   let defaultEngine = await Services.search.getDefault();
@@ -483,8 +491,11 @@ async function isDefaultEngineHomepage(urlStr) {
     return false;
   }
 
-  let url = URL.parse(urlStr);
-  if (!url) {
+  // The URL object throws if the string isn't a valid URL.
+  let url;
+  try {
+    url = new URL(urlStr);
+  } catch (e) {
     return false;
   }
 

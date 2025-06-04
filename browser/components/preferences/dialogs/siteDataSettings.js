@@ -133,12 +133,11 @@ let gSiteDataSettings = {
     setEventListener("usageCol", "click", this.onClickTreeCol);
     setEventListener("lastAccessedCol", "click", this.onClickTreeCol);
     setEventListener("cookiesCol", "click", this.onClickTreeCol);
-    setEventListener("searchBox", "MozInputSearch:search", this.onInputSearch);
+    setEventListener("searchBox", "command", this.onCommandSearch);
     setEventListener("removeAll", "command", this.onClickRemoveAll);
     setEventListener("removeSelected", "command", this.removeSelected);
 
     document.addEventListener("dialogaccept", e => this.saveChanges(e));
-    window.addEventListener("keypress", e => this.onKeyPress(e));
   },
 
   _updateButtonsState() {
@@ -299,7 +298,7 @@ let gSiteDataSettings = {
     this._list.clearSelection();
   },
 
-  onInputSearch() {
+  onCommandSearch() {
     this._buildSitesList(this._sites);
     this._list.clearSelection();
   },
@@ -330,5 +329,3 @@ let gSiteDataSettings = {
     this._updateButtonsState();
   },
 };
-
-window.addEventListener("load", () => gSiteDataSettings.init());

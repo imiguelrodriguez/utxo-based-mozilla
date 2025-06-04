@@ -10,20 +10,6 @@ this.appConstants = class extends ExtensionAPI {
   getAPI() {
     return {
       appConstants: {
-        getAndroidPackageName: () => {
-          return Services.env.get("MOZ_ANDROID_PACKAGE_NAME");
-        },
-        getEffectiveUpdateChannel: () => {
-          const ver = AppConstants.MOZ_APP_VERSION_DISPLAY;
-          if (ver.includes("a")) {
-            return "nightly";
-          } else if (ver.includes("b")) {
-            return "beta";
-          } else if (ver.includes("esr")) {
-            return "esr";
-          }
-          return "stable";
-        },
         getReleaseBranch: () => {
           if (AppConstants.NIGHTLY_BUILD) {
             return "nightly";

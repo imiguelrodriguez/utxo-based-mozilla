@@ -122,18 +122,10 @@ async function assertMessageInMenuSource(source, message, win = window) {
     "The element should be configured for tab navigation."
   );
 
-  Assert.equal(
-    messageEl.layout,
-    "column",
-    "The default layout should be 'column'."
-  );
-
   let messageElStyles = window.getComputedStyle(messageEl);
   Assert.equal(
-    messageElStyles.getPropertyValue(
-      "--illustration-margin-block-start-offset"
-    ),
-    `${message.content.imageVerticalTopOffset}px`
+    messageElStyles.getPropertyValue("--illustration-margin-block-offset"),
+    `${message.content.imageVerticalOffset}px`
   );
 
   if (source === MenuMessage.SOURCES.APP_MENU) {
@@ -227,15 +219,13 @@ function assertNoMessageInMenuSource(source, win = window) {
  *   The browser window to open the AppMenu for.
  * @param {Function} taskFn
  *   An optional async function to call after the panel is opened and before
- *   it is closed again. The taskFn is passed the msgElement as its first
- *   argument, and the containing <panel> as the second.
+ *   it is closed again.
  * @returns {Promise<undefined>}
  */
 async function reopenMenuSource(source, expectedMessage, win = window, taskFn) {
   await hideAllPopups(win);
 
   let promiseViewShown;
-  let panel;
 
   if (source === MenuMessage.SOURCES.APP_MENU) {
     promiseViewShown = BrowserTestUtils.waitForEvent(
@@ -243,7 +233,6 @@ async function reopenMenuSource(source, expectedMessage, win = window, taskFn) {
       "ViewShown"
     );
     win.PanelUI.show();
-    panel = win.PanelUI.panel;
   } else if (source === MenuMessage.SOURCES.PXI_MENU) {
     promiseViewShown = BrowserTestUtils.waitForEvent(
       PanelMultiView.getViewNode(win.document, "PanelUI-fxa"),
@@ -253,7 +242,6 @@ async function reopenMenuSource(source, expectedMessage, win = window, taskFn) {
       win.document.getElementById("fxa-toolbar-menu-button"),
       new MouseEvent("mousedown")
     );
-    panel = win.document.getElementById("customizationui-widget-panel");
   }
 
   info(`Waiting for menu source ${source} to open`);
@@ -268,7 +256,7 @@ async function reopenMenuSource(source, expectedMessage, win = window, taskFn) {
   }
 
   if (taskFn) {
-    await taskFn(messageEl, panel);
+    await taskFn(messageEl);
   }
 
   await hideAllPopups(win);
@@ -408,8 +396,7 @@ add_task(async function test_trigger() {
  * Tests that a registered MenuMessage of type fxa_cta will cause an
  * fxa-menu-message element to appear in either menu source panel with the right
  * attributes. This also tests that upon becoming visible, an impression is
- * recorded. This also tests that clicking upon a non-button part of the message
- * doesn't cause the panel to be closed.
+ * recorded.
  */
 add_task(async function test_show_fxa_cta_message() {
   let sandbox = sinon.createSandbox();
@@ -419,25 +406,7 @@ add_task(async function test_show_fxa_cta_message() {
   await withTestMessage(sandbox, gTestFxAMessage, async () => {
     await withEachSource(async source => {
       info(`Testing source ${source}`);
-      await reopenMenuSource(
-        source,
-        gTestFxAMessage,
-        window,
-        async (msgElement, panel) => {
-          // Let's make sure that the panel stays open if we dispatch a
-          // generic click event on the message. This isn't an interactive
-          // element, so we intentionally turn off the a11y check.
-          AccessibilityUtils.setEnv({ mustHaveAccessibleRule: false });
-          msgElement.click();
-          AccessibilityUtils.resetEnv();
-
-          Assert.equal(
-            panel.state,
-            "open",
-            "Panel should still be in the open state."
-          );
-        }
-      );
+      await reopenMenuSource(source, gTestFxAMessage);
 
       Assert.ok(
         ASRouter.addImpression.calledWith(gTestFxAMessage),
@@ -551,13 +520,8 @@ add_task(async function test_fxa_cta_actions() {
         source,
         gTestFxAMessage,
         window,
-        async (messageEl, panel) => {
+        async messageEl => {
           messageEl.signUpButton.click();
-          Assert.notEqual(
-            panel.state,
-            "open",
-            "Panel should have started to close."
-          );
         }
       );
 
@@ -568,10 +532,8 @@ add_task(async function test_fxa_cta_actions() {
       );
       if (source === MenuMessage.SOURCES.APP_MENU) {
         clonedPrimaryAction.data.entrypoint = "fxa_app_menu";
-        clonedPrimaryAction.data.extraParams.utm_content += "-app_menu";
       } else if (source === MenuMessage.SOURCES.PXI_MENU) {
         clonedPrimaryAction.data.entrypoint = "fxa_avatar_menu";
-        clonedPrimaryAction.data.extraParams.utm_content += "-avatar";
       }
 
       Assert.ok(

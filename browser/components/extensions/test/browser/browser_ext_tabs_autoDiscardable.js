@@ -19,9 +19,8 @@ add_task(async function test_autoDiscardable() {
     ]),
     "parent.js": () => {
       const { TabUnloader } = ChromeUtils.importESModule(
-        "moz-src:///browser/components/tabbrowser/TabUnloader.sys.mjs"
+        "resource:///modules/TabUnloader.sys.mjs"
       );
-      /* globals ExtensionAPI, ExtensionUtils */
       const { ExtensionError } = ExtensionUtils;
       this.experiments = class extends ExtensionAPI {
         getAPI() {

@@ -15,14 +15,19 @@ let ignoreList = [
   // UA-only media features.
   {
     sourceName:
-      /\b(contenteditable|EditorOverride|svg|forms|html|mathml|ua|scrollbars|xul)\.css$/i,
+      /\b(contenteditable|EditorOverride|svg|forms|html|mathml|ua)\.css$/i,
     errorMessage: /Unknown pseudo-class.*-moz-/i,
     isFromDevTools: false,
   },
   {
     sourceName:
-      /\b(scrollbars|xul|html|mathml|ua|EditorOverride|contenteditable|forms|svg|manageDialog|formautofill)\.css$/i,
+      /\b(scrollbars|xul|html|mathml|ua|forms|svg|manageDialog|formautofill)\.css$/i,
     errorMessage: /Unknown property.*-moz-/i,
+    isFromDevTools: false,
+  },
+  {
+    sourceName: /(scrollbars|xul)\.css$/i,
+    errorMessage: /Unknown pseudo-class.*-moz-/i,
     isFromDevTools: false,
   },
   // content: -moz-alt-content is UA-only.
@@ -68,20 +73,6 @@ if (!Services.prefs.getBoolPref("layout.css.scroll-anchoring.enabled")) {
     sourceName: /webconsole\.css$/i,
     errorMessage: /Unknown property .*\boverflow-anchor\b/i,
     isFromDevTools: true,
-  });
-}
-
-if (!Services.prefs.getBoolPref("dom.viewTransitions.enabled")) {
-  // view-transition selectors
-  ignoreList.push({
-    sourceName: /\b(ua)\.css$/i,
-    errorMessage: /Unknown pseudo-class.*view-transition/i,
-    isFromDevTools: false,
-  });
-  ignoreList.push({
-    sourceName: /\b(ua)\.css$/i,
-    errorMessage: /Unknown property.*view-transition/i,
-    isFromDevTools: false,
   });
 }
 
@@ -171,16 +162,6 @@ let propNameAllowlist = [
   { propName: "--tab-group-color-gray", isFromDevTools: false },
   { propName: "--tab-group-color-gray-invert", isFromDevTools: false },
   { propName: "--tab-group-color-gray-pale", isFromDevTools: false },
-
-  /* Allow design tokens in devtools without all variables being used there */
-  { sourceName: /\/design-system\/tokens-.*\.css$/, isFromDevTools: true },
-
-  // Bug 1908535 to refactor form components to use this token
-  { propName: "--input-space-block", isFromDevTools: false },
-
-  // Ignore token properties that follow the pattern --color-[name]-[number]
-  // This enables us to provide our full color palette for developers.
-  { propName: /--color-[a-z]+-\d+/, isFromDevTools: false },
 ];
 
 // Add suffix to stylesheets' URI so that we always load them here and
@@ -316,7 +297,6 @@ function messageIsCSSError(msg) {
 
 let imageURIsToReferencesMap = new Map();
 let customPropsToReferencesMap = new Map();
-let customPropsDefinitionFileMap = new Map();
 
 function neverMatches(mediaList) {
   const perPlatformMediaQueryMap = {
@@ -401,12 +381,6 @@ function processCSSRules(container) {
         }
         if (!customPropsToReferencesMap.has(prop)) {
           customPropsToReferencesMap.set(prop, undefined);
-          if (!customPropsDefinitionFileMap.has(prop)) {
-            customPropsDefinitionFileMap.set(prop, new Set());
-          }
-          customPropsDefinitionFileMap
-            .get(prop)
-            .add(container.href || container.parentStyleSheet.href);
         }
       }
     }
@@ -434,23 +408,6 @@ function chromeFileExists(aURI) {
     }
   }
   return available > 0;
-}
-
-function shouldIgnorePropSource(item, prop) {
-  if (!item.sourceName || !customPropsDefinitionFileMap.has(prop)) {
-    return false;
-  }
-  return customPropsDefinitionFileMap
-    .get(prop)
-    .values()
-    .some(f => item.sourceName.test(f));
-}
-
-function shouldIgnorePropPattern(item, prop) {
-  if (!item.propName || !(item.propName instanceof RegExp)) {
-    return false;
-  }
-  return item.propName.test(prop);
 }
 
 add_task(async function checkAllTheCSS() {
@@ -561,7 +518,7 @@ add_task(async function checkAllTheCSS() {
     if (imageHost == "browser") {
       for (let ref of references) {
         let refHost = ref.split("/")[2];
-        if (!["builtin-addons", "newtab", "browser"].includes(refHost)) {
+        if (!["activity-stream", "browser"].includes(refHost)) {
           ok(
             false,
             "browser file " + image + " referenced outside browser in " + ref
@@ -576,12 +533,7 @@ add_task(async function checkAllTheCSS() {
     if (!refCount) {
       let ignored = false;
       for (let item of propNameAllowlist) {
-        if (
-          isDevtools == item.isFromDevTools &&
-          (item.propName == prop ||
-            shouldIgnorePropPattern(item, prop) ||
-            shouldIgnorePropSource(item, prop))
-        ) {
+        if (item.propName == prop && isDevtools == item.isFromDevTools) {
           item.used = true;
           if (
             !item.platforms ||

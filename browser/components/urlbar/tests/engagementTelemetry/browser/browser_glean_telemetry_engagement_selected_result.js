@@ -13,7 +13,7 @@
 ChromeUtils.defineESModuleGetters(this, {
   UrlbarProviderClipboard:
     "resource:///modules/UrlbarProviderClipboard.sys.mjs",
-  SearchUtils: "moz-src:///toolkit/components/search/SearchUtils.sys.mjs",
+  SearchUtils: "resource://gre/modules/SearchUtils.sys.mjs",
 });
 
 // This test has many subtests and can time out in verify mode.
@@ -101,9 +101,6 @@ add_task(async function selected_result_autofill_url() {
 
 add_task(async function selected_result_bookmark() {
   await doTest(async () => {
-    await SpecialPowers.pushPrefEnv({
-      set: [["browser.urlbar.secondaryActions.featureGate", false]],
-    });
     await PlacesUtils.bookmarks.insert({
       parentGuid: PlacesUtils.bookmarks.unfiledGuid,
       url: "https://example.com/bookmark",
@@ -457,6 +454,52 @@ add_task(async function selected_result_unit() {
   await SpecialPowers.popPrefEnv();
 });
 
+add_task(async function selected_result_rs_adm_sponsored() {
+  const cleanupQuickSuggest = await ensureQuickSuggestInit({
+    prefs: [["quicksuggest.rustEnabled", false]],
+  });
+
+  await doTest(async () => {
+    await openPopup("amp");
+    await selectRowByURL("https://example.com/amp");
+    await doEnter();
+
+    assertEngagementTelemetry([
+      {
+        selected_result: "rs_adm_sponsored",
+        selected_position: 2,
+        provider: "UrlbarProviderQuickSuggest",
+        results: "search_engine,rs_adm_sponsored",
+      },
+    ]);
+  });
+
+  await cleanupQuickSuggest();
+});
+
+add_task(async function selected_result_rs_adm_nonsponsored() {
+  const cleanupQuickSuggest = await ensureQuickSuggestInit({
+    prefs: [["quicksuggest.rustEnabled", false]],
+  });
+
+  await doTest(async () => {
+    await openPopup("wikipedia");
+    await selectRowByURL("https://example.com/wikipedia");
+    await doEnter();
+
+    assertEngagementTelemetry([
+      {
+        selected_result: "rs_adm_nonsponsored",
+        selected_position: 2,
+        provider: "UrlbarProviderQuickSuggest",
+        results: "search_engine,rs_adm_nonsponsored",
+      },
+    ]);
+  });
+
+  await cleanupQuickSuggest();
+});
+
 add_task(async function selected_result_input_field() {
   const expected = [
     {
@@ -488,9 +531,11 @@ add_task(async function selected_result_weather() {
   const cleanupQuickSuggest = await ensureQuickSuggestInit();
   await MerinoTestUtils.initWeather();
 
-  let provider = "UrlbarProviderQuickSuggest";
+  let provider = UrlbarPrefs.get("quickSuggestRustEnabled")
+    ? "UrlbarProviderQuickSuggest"
+    : "Weather";
   await doTest(async () => {
-    await openPopup("weather");
+    await openPopup(MerinoTestUtils.WEATHER_KEYWORD);
     await selectRowByProvider(provider);
     await doEnter();
 
@@ -832,7 +877,9 @@ add_task(async function selected_result_addons() {
 });
 
 add_task(async function selected_result_rust_adm_sponsored() {
-  const cleanupQuickSuggest = await ensureQuickSuggestInit();
+  const cleanupQuickSuggest = await ensureQuickSuggestInit({
+    prefs: [["quicksuggest.rustEnabled", true]],
+  });
 
   await doTest(async () => {
     await openPopup("amp");
@@ -853,7 +900,9 @@ add_task(async function selected_result_rust_adm_sponsored() {
 });
 
 add_task(async function selected_result_rust_adm_nonsponsored() {
-  const cleanupQuickSuggest = await ensureQuickSuggestInit();
+  const cleanupQuickSuggest = await ensureQuickSuggestInit({
+    prefs: [["quicksuggest.rustEnabled", true]],
+  });
 
   await doTest(async () => {
     await openPopup("wikipedia");
@@ -889,11 +938,11 @@ add_task(async function selected_result_action() {
 
     assertEngagementTelemetry([
       {
-        selected_result: "action",
-        selected_position: 2,
-        provider: "UrlbarProviderGlobalActions",
-        results: "search_engine,action",
-        actions: "none,settings",
+        selected_result: "action_settings",
+        selected_position: 1,
+        provider: "HeuristicFallback",
+        results: "search_engine",
+        actions: "settings",
       },
     ]);
   });

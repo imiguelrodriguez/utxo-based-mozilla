@@ -3,7 +3,7 @@
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-
+/* import-globals-from pippki.js */
 "use strict";
 
 const { parse, pemToDER } = ChromeUtils.importESModule(
@@ -29,12 +29,9 @@ const { parse, pemToDER } = ChromeUtils.importESModule(
  * @type {object}
  * @property {nsIX509Cert} cert
  *           The certificate, if chosen. null otherwise.
- * @property {number} rememberDuration
- *           Set to Ci.nsIClientAuthRememberService.Once if the decision should
- *           be remembered once, Ci.nsIClientAuthRememberService.Session if the
- *           decision should be remembered for this session, or
- *           Ci.nsIClientAuthRememberService.Permanent if the decision should
- *           be remembered permanently.
+ * @property {boolean} rememberDecision
+ *           Set to true if the user wanted their cert selection to be
+ *           remembered, false otherwise.
  */
 
 /**
@@ -49,14 +46,14 @@ var certArray;
  *
  * @type {HTMLInputElement} Element checkbox, has to have |checked| property.
  */
-var args;
+var rememberBox, args;
 
 async function onLoad() {
-  let rememberSetting = Services.prefs.getIntPref(
-    "security.client_auth_certificate_default_remember_setting"
+  let rememberSetting = Services.prefs.getBoolPref(
+    "security.remember_cert_checkbox_default_setting"
   );
-  document.getElementById("rememberSetting").value =
-    rememberSetting >= 0 && rememberSetting <= 2 ? rememberSetting : 2;
+  rememberBox = document.getElementById("rememberBox");
+  rememberBox.checked = rememberSetting;
 
   let propBag = window.arguments[0]
     .QueryInterface(Ci.nsIWritablePropertyBag2)
@@ -90,9 +87,6 @@ async function onLoad() {
   await setDetails();
   document.addEventListener("dialogaccept", doOK);
   document.addEventListener("dialogcancel", doCancel);
-  document
-    .getElementById("nicknames")
-    .addEventListener("command", () => onCertSelected());
 
   Services.obs.notifyObservers(
     document.getElementById("certAuthAsk"),
@@ -162,22 +156,16 @@ async function onCertSelected() {
   await setDetails();
 }
 
-function getRememberSetting() {
-  return parseInt(document.getElementById("rememberSetting").value);
-}
-
 function doOK() {
   let { retVals } = args;
   let index = parseInt(document.getElementById("nicknames").value);
   let cert = certArray[index];
   retVals.cert = cert;
-  retVals.rememberDuration = getRememberSetting();
+  retVals.rememberDecision = rememberBox.checked;
 }
 
 function doCancel() {
   let { retVals } = args;
   retVals.cert = null;
-  retVals.rememberDuration = getRememberSetting();
+  retVals.rememberDecision = rememberBox.checked;
 }
-
-window.addEventListener("load", () => onLoad());

@@ -25,11 +25,13 @@ ChromeUtils.registerWindowActor("Screenshot", {
 });
 
 function loadContentWindow(browser, url) {
-  let uri = URL.parse(url)?.URI;
-  if (!uri) {
-    let err = new Error(`Invalid URL passed to loadContentWindow(): ${url}`);
-    console.error(err);
-    return Promise.reject(err);
+  let uri;
+  try {
+    uri = Services.io.newURI(url);
+  } catch (e) {
+    let msg = `Invalid URL passed to loadContentWindow(): ${url}`;
+    console.error(msg);
+    return Promise.reject(new Error(msg));
   }
 
   const principal = Services.scriptSecurityManager.getSystemPrincipal();
@@ -100,10 +102,10 @@ async function takeScreenshot(
     let browser = doc.createXULElement("browser");
     browser.setAttribute("remote", "true");
     browser.setAttribute("type", "content");
-    browser.style.width = `${contentWidth}px`;
-    browser.style.minWidth = `${contentWidth}px`;
-    browser.style.height = `${contentHeight}px`;
-    browser.style.minHeight = `${contentHeight}px`;
+    browser.setAttribute(
+      "style",
+      `width: ${contentWidth}px; min-width: ${contentWidth}px; height: ${contentHeight}px; min-height: ${contentHeight}px;`
+    );
     browser.setAttribute("maychangeremoteness", "true");
     doc.documentElement.appendChild(browser);
 

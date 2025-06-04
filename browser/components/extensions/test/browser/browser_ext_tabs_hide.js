@@ -118,7 +118,7 @@ add_task(function test_doorhanger_keep() {
 });
 
 add_task(function test_doorhanger_alltabs_button_in_menubar() {
-  if (Services.appinfo.nativeMenubar) {
+  if (!AppConstants.MENUBAR_CAN_AUTOHIDE) {
     info("skipping test because the menubar is not customizable");
     return;
   }
@@ -289,7 +289,9 @@ const doorHangerDisable = (
     ok(
       images.some(img =>
         getComputedStyle(img).backgroundImage.includes(
-          gBrowser.tabContainer.verticalMode ? "/tabs.svg" : "/arrow-down.svg"
+          gBrowser.tabContainer.verticalMode
+            ? "view-opentabs.svg"
+            : "arrow-down.svg"
         )
       ),
       "There's an icon for the all tabs menu"

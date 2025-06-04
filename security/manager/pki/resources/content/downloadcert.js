@@ -1,12 +1,8 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-
+/* import-globals-from pippki.js */
 "use strict";
-
-const { setText, viewCertHelper } = ChromeUtils.importESModule(
-  "resource://gre/modules/psm/pippki.sys.mjs"
-);
 
 /**
  * @file Implements the functionality of downloadcert.xhtml: a dialog that allows
@@ -55,15 +51,14 @@ function onLoad() {
     caName = bundle.getString("unnamedCA");
   }
 
-  setText(
-    document,
-    "trustHeader",
-    bundle.getFormattedString("newCAMessage1", [caName])
-  );
+  setText("trustHeader", bundle.getFormattedString("newCAMessage1", [caName]));
+}
 
-  document.getElementById("viewC-button").addEventListener("command", () => {
-    viewCertHelper(window, gCert, "window");
-  });
+/**
+ * Handler for the "View Cert" button.
+ */
+function viewCert() {
+  viewCertHelper(window, gCert, "window");
 }
 
 /**
@@ -86,5 +81,3 @@ function onDialogCancel() {
   let retVals = window.arguments[1].QueryInterface(Ci.nsIWritablePropertyBag2);
   retVals.setPropertyAsBool("importConfirmed", false);
 }
-
-window.addEventListener("load", () => onLoad());

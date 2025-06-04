@@ -1,22 +1,15 @@
 /* Any copyright is dedicated to the Public Domain.
 http://creativecommons.org/publicdomain/zero/1.0/ */
 
-/* import-globals-from ../../../../../toolkit/profile/test/xpcshell/head.js */
-/* import-globals-from ../../../../../browser/components/profiles/tests/unit/head.js */
-
 "use strict";
 
 const { XPCOMUtils } = ChromeUtils.importESModule(
   "resource://gre/modules/XPCOMUtils.sys.mjs"
 );
-const { sinon } = ChromeUtils.importESModule(
-  "resource://testing-common/Sinon.sys.mjs"
-);
 
-ChromeUtils.defineESModuleGetters(this, {
+const lazy = {};
+ChromeUtils.defineESModuleGetters(lazy, {
   JsonSchema: "resource://gre/modules/JsonSchema.sys.mjs",
-  SelectableProfileService:
-    "resource:///modules/profiles/SelectableProfileService.sys.mjs",
 });
 
 function assertValidates(validator, obj, msg) {
@@ -38,7 +31,7 @@ async function fetchSchema(uri) {
 
 async function schemaValidatorFor(uri, { common = false } = {}) {
   const schema = await fetchSchema(uri);
-  const validator = new JsonSchema.Validator(schema);
+  const validator = new lazy.JsonSchema.Validator(schema);
 
   if (common) {
     const commonSchema = await fetchSchema(
@@ -74,10 +67,6 @@ async function makeValidators() {
     ),
     menu_message: await schemaValidatorFor(
       "resource://testing-common/MenuMessage.schema.json",
-      { common: true }
-    ),
-    newtab_message: await schemaValidatorFor(
-      "resource://testing-common/NewtabMessage.schema.json",
       { common: true }
     ),
     pb_newtab: await schemaValidatorFor(

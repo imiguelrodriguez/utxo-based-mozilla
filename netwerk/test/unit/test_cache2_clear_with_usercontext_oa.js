@@ -23,59 +23,32 @@ function serverHandler(_metadata, response) {
 add_setup(async function setup() {
   httpserver.registerPathHandler("/test", serverHandler);
   httpserver.start(-1);
-
-  registerCleanupFunction(async function () {
-    await httpserver.stop();
-  });
 });
 
-async function test(oaLoad, oaClear, shouldExist) {
+add_task(async function test_clear_cache_with_usercontext_oa() {
   let port = httpserver.identity.primaryPort;
   info("Starting test with port " + port);
 
   let url = `http://localhost:${port}/test`;
   let chan = makeHTTPChannel(url);
-  chan.loadInfo.originAttributes = oaLoad;
+  chan.loadInfo.originAttributes = { userContextId: 0 };
   await new Promise(resolve => {
     chan.asyncOpen(new ChannelListener(resolve, null, CL_ALLOW_UNKNOWN_CL));
   });
 
-  let cache_storage = getCacheStorage(
-    "disk",
-    Services.loadContextInfo.custom(false, oaLoad)
-  );
+  let cache_storage = getCacheStorage("disk");
   let exists = cache_storage.exists(make_uri(url), null);
   Assert.ok(exists, "Entry should be in cache");
 
-  Services.cache2.clearOriginsByOriginAttributes(JSON.stringify(oaClear));
+  Services.cache2.clearOriginAttributes(JSON.stringify({ userContextId: 0 }));
 
-  // clearOriginsByOriginAttributes is async, so we block on cacheIOThread
+  // clearOriginAttributes is async, so we block on cacheIOThread
   await new Promise(resolve => {
     syncWithCacheIOThread(resolve, true);
   });
 
   let existsAgain = cache_storage.exists(make_uri(url), null);
-  Assert.equal(
-    existsAgain,
-    shouldExist,
-    shouldExist ? "Entry should be in cache" : "Entry should not be in cache"
-  );
-}
+  Assert.ok(!existsAgain, "Entry should not be in cache");
 
-add_task(async function test_clear_cache_with_usercontext_oa() {
-  await test({ userContextId: 0 }, { userContextId: 0 }, false);
+  await httpserver.stop();
 });
-
-add_task(async function test_clear_cache_with_usercontext_oa() {
-  await test({ userContextId: 0 }, { userContextId: 1 }, true);
-});
-
-add_task(
-  async function test_clear_cache_with_usercontext_oa_across_partition() {
-    await test(
-      { userContextId: 0, partitionKey: "(https,example.com)" },
-      { userContextId: 0 },
-      true
-    );
-  }
-);

@@ -10,6 +10,8 @@
 #include "EarlyHintPreloader.h"
 #include "mozilla/dom/LinkStyle.h"
 #include "mozilla/PreloadHashKey.h"
+#include "mozilla/Telemetry.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/StoragePrincipalHelper.h"
 #include "nsContentUtils.h"
 #include "nsIChannel.h"

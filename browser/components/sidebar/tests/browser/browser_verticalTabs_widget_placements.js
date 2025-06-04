@@ -7,7 +7,6 @@ registerCleanupFunction(async function resetToolbar() {
   await CustomizableUI.reset();
   Services.prefs.clearUserPref(kPrefCustomizationState);
   Services.prefs.clearUserPref(kPrefCustomizationHorizontalTabstrip);
-  Services.prefs.clearUserPref(kPrefCustomizationNavBarWhenVerticalTabs);
 });
 
 /**
@@ -41,7 +40,7 @@ add_task(async function moveAndRestoreTabsToolbarWidgets() {
     defaultHorizontalTabStripPlacements.length + 3,
     "tabstrip has 3 new widget placements"
   );
-  await SpecialPowers.pushPrefEnv({ set: [[VERTICAL_TABS_PREF, true]] });
+  await SpecialPowers.pushPrefEnv({ set: [["sidebar.verticalTabs", true]] });
 
   Assert.ok(
     CustomizableUI.verticalTabsEnabled,
@@ -86,7 +85,7 @@ add_task(async function moveAndRestoreTabsToolbarWidgets() {
     "The previous tab strip placements were stored in the pref"
   );
 
-  await SpecialPowers.pushPrefEnv({ set: [[VERTICAL_TABS_PREF, false]] });
+  await SpecialPowers.pushPrefEnv({ set: [["sidebar.verticalTabs", false]] });
 
   Assert.ok(
     !CustomizableUI.verticalTabsEnabled,
@@ -112,18 +111,5 @@ add_task(async function moveAndRestoreTabsToolbarWidgets() {
     CustomizableUI.getWidgetIdsInArea(CustomizableUI.AREA_NAVBAR),
     defaultNavbarPlacements,
     "The nav-bar widgets are back in their original state"
-  );
-});
-
-add_task(async function checkNewTabButtonAbsenceWithVerticalTabs() {
-  await SpecialPowers.pushPrefEnv({ set: [[VERTICAL_TABS_PREF, true]] });
-
-  const verticalNavBarPlacements = CustomizableUI.getWidgetIdsInArea(
-    CustomizableUI.AREA_NAVBAR
-  );
-
-  Assert.ok(
-    !verticalNavBarPlacements.includes("new-tab-button"),
-    "The nav-bar does not include the new-tab-button when vertical tabs is enabled."
   );
 });

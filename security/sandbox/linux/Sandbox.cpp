@@ -103,6 +103,7 @@ static SandboxReporterClient* gSandboxReporterClient;
 static void (*gChromiumSigSysHandler)(int, siginfo_t*, void*);
 
 static int TakeSandboxReporterFd() {
+  MOZ_RELEASE_ASSERT(PR_GetEnv("MOZ_SANDBOXED") != nullptr);
   MOZ_RELEASE_ASSERT(gSandboxReporterFd != -1);
   return std::exchange(gSandboxReporterFd, -1);
 }
@@ -516,13 +517,17 @@ static const Array<const char*, 1> kLibsThatWillCrash{
 
 void SandboxEarlyInit(Maybe<UniqueFileHandle>&& aSandboxReporter,
                       Maybe<UniqueFileHandle>&& aChrootClient) {
-  if (!aSandboxReporter) {
+  if (PR_GetEnv("MOZ_SANDBOXED") == nullptr) {
     return;
   }
 
   // Initialize the global sandbox reporter and chroot client FDs.
-  gSandboxReporterFd = aSandboxReporter->release();
-
+  if (aSandboxReporter) {
+    gSandboxReporterFd = aSandboxReporter->release();
+  } else {
+    SANDBOX_LOG("Missing -sandboxReporter argument");
+    MOZ_CRASH("Missing -sandboxReporter argument");
+  }
   if (aChrootClient) {
     gSandboxChrootClientFd = aChrootClient->release();
   }
@@ -804,24 +809,24 @@ void SetRemoteDataDecoderSandbox(int aBroker) {
   SetCurrentProcessSandbox(GetDecoderSandboxPolicy(sBroker));
 }
 
-void SetSocketProcessSandbox(SocketProcessSandboxParams&& aParams) {
+void SetSocketProcessSandbox(int aBroker) {
   if (!SandboxInfo::Get().Test(SandboxInfo::kHasSeccompBPF) ||
       PR_GetEnv("MOZ_DISABLE_SOCKET_PROCESS_SANDBOX")) {
+    if (aBroker >= 0) {
+      close(aBroker);
+    }
     return;
   }
 
   gSandboxReporterClient = new SandboxReporterClient(
       SandboxReport::ProcType::SOCKET_PROCESS, TakeSandboxReporterFd());
 
-  // FIXME(bug 1513773): merge this with the ones for content and RDD?
   static SandboxBrokerClient* sBroker;
-  MOZ_ASSERT(!sBroker); // This should only ever be called once.
-  if (aParams.mBroker) {
-    sBroker = new SandboxBrokerClient(aParams.mBroker.release());
+  if (aBroker >= 0) {
+    sBroker = new SandboxBrokerClient(aBroker);
   }
 
-  SetCurrentProcessSandbox(
-      GetSocketProcessSandboxPolicy(sBroker, std::move(aParams)));
+  SetCurrentProcessSandbox(GetSocketProcessSandboxPolicy(sBroker));
 }
 
 void SetUtilitySandbox(int aBroker, ipc::SandboxingKind aKind) {

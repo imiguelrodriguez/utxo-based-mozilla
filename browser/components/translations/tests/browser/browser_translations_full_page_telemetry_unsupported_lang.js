@@ -14,6 +14,7 @@ add_task(async function test_translations_telemetry_unsupported_lang() {
       { fromLang: "fr", toLang: "en" },
       { fromLang: "en", toLang: "fr" },
     ],
+    prefs: [["browser.translations.panelShown", false]],
   });
 
   await FullPageTranslationsTestUtils.openPanel({
@@ -34,7 +35,7 @@ add_task(async function test_translations_telemetry_unsupported_lang() {
   });
 
   await FullPageTranslationsTestUtils.clickChangeSourceLanguageButton({
-    intro: true,
+    firstShow: true,
   });
 
   await TestTranslationsTelemetry.assertEvent(
@@ -123,7 +124,7 @@ add_task(async function test_translations_telemetry_unsupported_lang() {
   });
 
   await FullPageTranslationsTestUtils.clickChangeSourceLanguageButton({
-    intro: true,
+    firstShow: true,
   });
 
   await TestTranslationsTelemetry.assertEvent(
@@ -155,7 +156,7 @@ add_task(async function test_translations_telemetry_unsupported_lang() {
   await FullPageTranslationsTestUtils.clickTranslateButton({
     downloadHandler: resolveDownloads,
   });
-  await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated({
+  await FullPageTranslationsTestUtils.assertPageIsTranslated({
     fromLanguage: "fr",
     toLanguage: "en",
     runInPage,
@@ -191,7 +192,7 @@ add_task(async function test_translations_telemetry_unsupported_lang() {
         to_language: "en",
         auto_translate: false,
         document_language: "es",
-        top_preferred_language: "en-US",
+        top_preferred_language: "en",
         request_target: "full_page",
       },
     }
@@ -203,10 +204,6 @@ add_task(async function test_translations_telemetry_unsupported_lang() {
       ["select", 0],
     ]
   );
-
-  await TestTranslationsTelemetry.assertTranslationsEnginePerformance({
-    expectedEventCount: 1,
-  });
 
   await cleanup();
 });

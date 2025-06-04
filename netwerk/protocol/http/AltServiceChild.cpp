@@ -85,8 +85,7 @@ void AltServiceChild::ProcessHeader(
     const nsCString& aOriginHost, int32_t aOriginPort,
     const nsCString& aUsername, bool aPrivateBrowsing,
     nsIInterfaceRequestor* aCallbacks, nsProxyInfo* aProxyInfo, uint32_t aCaps,
-    const OriginAttributes& aOriginAttributes,
-    nsHttpConnectionInfo* aConnInfo) {
+    const OriginAttributes& aOriginAttributes) {
   LOG(("AltServiceChild::ProcessHeader"));
   MOZ_ASSERT(NS_IsMainThread());
 
@@ -103,12 +102,9 @@ void AltServiceChild::ProcessHeader(
     nsProxyInfo::SerializeProxyInfo(aProxyInfo, proxyInfoArray);
   }
 
-  HttpConnectionInfoCloneArgs infoArgs;
-  nsHttpConnectionInfo::SerializeHttpConnectionInfo(aConnInfo, infoArgs);
-
   Unused << sAltServiceChild->SendProcessHeader(
       aBuf, aOriginScheme, aOriginHost, aOriginPort, aUsername,
-      aPrivateBrowsing, proxyInfoArray, aCaps, aOriginAttributes, infoArgs);
+      aPrivateBrowsing, proxyInfoArray, aCaps, aOriginAttributes);
 }
 
 }  // namespace net

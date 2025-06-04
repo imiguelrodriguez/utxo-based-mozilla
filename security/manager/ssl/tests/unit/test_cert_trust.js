@@ -35,31 +35,31 @@ async function test_ca_distrust(ee_cert, cert_to_modify_trust, isRootCA) {
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageTLSClient
+    certificateUsageSSLClient
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     SEC_ERROR_CA_CERT_INVALID,
-    Ci.nsIX509CertDB.verifyUsageTLSServerCA
+    certificateUsageSSLCA
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageEmailSigner
+    certificateUsageEmailSigner
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageEmailRecipient
+    certificateUsageEmailRecipient
   );
 
   // Test of active distrust. No usage should pass.
@@ -68,31 +68,31 @@ async function test_ca_distrust(ee_cert, cert_to_modify_trust, isRootCA) {
     certdb,
     ee_cert,
     SEC_ERROR_UNTRUSTED_ISSUER,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     SEC_ERROR_UNTRUSTED_ISSUER,
-    Ci.nsIX509CertDB.verifyUsageTLSClient
+    certificateUsageSSLClient
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     SEC_ERROR_CA_CERT_INVALID,
-    Ci.nsIX509CertDB.verifyUsageTLSServerCA
+    certificateUsageSSLCA
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     SEC_ERROR_UNTRUSTED_ISSUER,
-    Ci.nsIX509CertDB.verifyUsageEmailSigner
+    certificateUsageEmailSigner
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     SEC_ERROR_UNTRUSTED_ISSUER,
-    Ci.nsIX509CertDB.verifyUsageEmailRecipient
+    certificateUsageEmailRecipient
   );
 
   // Trust set to T  -  trusted CA to issue client certs, where client cert is
@@ -102,7 +102,7 @@ async function test_ca_distrust(ee_cert, cert_to_modify_trust, isRootCA) {
     certdb,
     ee_cert,
     isRootCA ? SEC_ERROR_UNKNOWN_ISSUER : PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
 
   // XXX(Bug 982340)
@@ -110,27 +110,27 @@ async function test_ca_distrust(ee_cert, cert_to_modify_trust, isRootCA) {
     certdb,
     ee_cert,
     isRootCA ? SEC_ERROR_UNKNOWN_ISSUER : PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageTLSClient
+    certificateUsageSSLClient
   );
 
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     SEC_ERROR_CA_CERT_INVALID,
-    Ci.nsIX509CertDB.verifyUsageTLSServerCA
+    certificateUsageSSLCA
   );
 
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     isRootCA ? SEC_ERROR_UNKNOWN_ISSUER : PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageEmailSigner
+    certificateUsageEmailSigner
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     isRootCA ? SEC_ERROR_UNKNOWN_ISSUER : PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageEmailRecipient
+    certificateUsageEmailRecipient
   );
 
   // Now tests on the SSL trust bit
@@ -139,7 +139,7 @@ async function test_ca_distrust(ee_cert, cert_to_modify_trust, isRootCA) {
     certdb,
     ee_cert,
     SEC_ERROR_UNTRUSTED_ISSUER,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
 
   // XXX(Bug 982340)
@@ -147,25 +147,25 @@ async function test_ca_distrust(ee_cert, cert_to_modify_trust, isRootCA) {
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageTLSClient
+    certificateUsageSSLClient
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     SEC_ERROR_CA_CERT_INVALID,
-    Ci.nsIX509CertDB.verifyUsageTLSServerCA
+    certificateUsageSSLCA
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageEmailSigner
+    certificateUsageEmailSigner
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageEmailRecipient
+    certificateUsageEmailRecipient
   );
 
   // Inherited trust SSL
@@ -174,32 +174,32 @@ async function test_ca_distrust(ee_cert, cert_to_modify_trust, isRootCA) {
     certdb,
     ee_cert,
     isRootCA ? SEC_ERROR_UNKNOWN_ISSUER : PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
   // XXX(Bug 982340)
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageTLSClient
+    certificateUsageSSLClient
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     SEC_ERROR_CA_CERT_INVALID,
-    Ci.nsIX509CertDB.verifyUsageTLSServerCA
+    certificateUsageSSLCA
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageEmailSigner
+    certificateUsageEmailSigner
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageEmailRecipient
+    certificateUsageEmailRecipient
   );
 
   // Now tests on the EMAIL trust bit
@@ -208,31 +208,31 @@ async function test_ca_distrust(ee_cert, cert_to_modify_trust, isRootCA) {
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     SEC_ERROR_UNTRUSTED_ISSUER,
-    Ci.nsIX509CertDB.verifyUsageTLSClient
+    certificateUsageSSLClient
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     SEC_ERROR_CA_CERT_INVALID,
-    Ci.nsIX509CertDB.verifyUsageTLSServerCA
+    certificateUsageSSLCA
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     SEC_ERROR_UNTRUSTED_ISSUER,
-    Ci.nsIX509CertDB.verifyUsageEmailSigner
+    certificateUsageEmailSigner
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     SEC_ERROR_UNTRUSTED_ISSUER,
-    Ci.nsIX509CertDB.verifyUsageEmailRecipient
+    certificateUsageEmailRecipient
   );
 
   // inherited EMAIL Trust
@@ -241,31 +241,31 @@ async function test_ca_distrust(ee_cert, cert_to_modify_trust, isRootCA) {
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     isRootCA ? SEC_ERROR_UNKNOWN_ISSUER : PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageTLSClient
+    certificateUsageSSLClient
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     SEC_ERROR_CA_CERT_INVALID,
-    Ci.nsIX509CertDB.verifyUsageTLSServerCA
+    certificateUsageSSLCA
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     isRootCA ? SEC_ERROR_UNKNOWN_ISSUER : PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageEmailSigner
+    certificateUsageEmailSigner
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     isRootCA ? SEC_ERROR_UNKNOWN_ISSUER : PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageEmailRecipient
+    certificateUsageEmailRecipient
   );
 }
 
@@ -310,24 +310,24 @@ add_task(async function () {
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageTLSClient
+    certificateUsageSSLClient
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageEmailSigner
+    certificateUsageEmailSigner
   );
   await checkCertErrorGeneric(
     certdb,
     ee_cert,
     PRErrorCodeSuccess,
-    Ci.nsIX509CertDB.verifyUsageEmailRecipient
+    certificateUsageEmailRecipient
   );
 });

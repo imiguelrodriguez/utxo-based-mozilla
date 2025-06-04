@@ -79,15 +79,13 @@ struct nsHostKey {
   const nsCString host;
   const nsCString mTrrServer;
   uint16_t type = 0;
-  mozilla::Atomic<nsIDNSService::DNSFlags> flags{
-      nsIDNSService::RESOLVE_DEFAULT_FLAGS};
+  nsIDNSService::DNSFlags flags = nsIDNSService::RESOLVE_DEFAULT_FLAGS;
   uint16_t af = 0;
   bool pb = false;
   const nsCString originSuffix;
   explicit nsHostKey(const nsACString& host, const nsACString& aTrrServer,
                      uint16_t type, nsIDNSService::DNSFlags flags, uint16_t af,
                      bool pb, const nsACString& originSuffix);
-  explicit nsHostKey(const nsHostKey& other);
   bool operator==(const nsHostKey& other) const;
   size_t SizeOfExcludingThis(mozilla::MallocSizeOf mallocSizeOf) const;
   PLDHashNumber Hash() const;
@@ -259,14 +257,18 @@ class nsHostRecord : public mozilla::LinkedListElement<RefPtr<nsHostRecord>>,
 };
 
 // b020e996-f6ab-45e5-9bf5-1da71dd0053a
-#define ADDRHOSTRECORD_IID \
-  {0xb020e996, 0xf6ab, 0x45e5, {0x9b, 0xf5, 0x1d, 0xa7, 0x1d, 0xd0, 0x05, 0x3a}}
+#define ADDRHOSTRECORD_IID                           \
+  {                                                  \
+    0xb020e996, 0xf6ab, 0x45e5, {                    \
+      0x9b, 0xf5, 0x1d, 0xa7, 0x1d, 0xd0, 0x05, 0x3a \
+    }                                                \
+  }
 
 class AddrHostRecord final : public nsHostRecord {
   using Mutex = mozilla::Mutex;
 
  public:
-  NS_INLINE_DECL_STATIC_IID(ADDRHOSTRECORD_IID)
+  NS_DECLARE_STATIC_IID_ACCESSOR(ADDRHOSTRECORD_IID)
   NS_DECL_ISUPPORTS_INHERITED
 
   /* a fully resolved host record has either a non-null |addr_info| or |addr|
@@ -350,16 +352,22 @@ class AddrHostRecord final : public nsHostRecord {
   nsTArray<nsCString> mUnusableItems;
 };
 
+NS_DEFINE_STATIC_IID_ACCESSOR(AddrHostRecord, ADDRHOSTRECORD_IID)
+
 // 77b786a7-04be-44f2-987c-ab8aa96676e0
-#define TYPEHOSTRECORD_IID \
-  {0x77b786a7, 0x04be, 0x44f2, {0x98, 0x7c, 0xab, 0x8a, 0xa9, 0x66, 0x76, 0xe0}}
+#define TYPEHOSTRECORD_IID                           \
+  {                                                  \
+    0x77b786a7, 0x04be, 0x44f2, {                    \
+      0x98, 0x7c, 0xab, 0x8a, 0xa9, 0x66, 0x76, 0xe0 \
+    }                                                \
+  }
 
 class TypeHostRecord final : public nsHostRecord,
                              public nsIDNSTXTRecord,
                              public nsIDNSHTTPSSVCRecord,
                              public mozilla::net::DNSHTTPSSVCRecordBase {
  public:
-  NS_INLINE_DECL_STATIC_IID(TYPEHOSTRECORD_IID)
+  NS_DECLARE_STATIC_IID_ACCESSOR(TYPEHOSTRECORD_IID)
   NS_DECL_ISUPPORTS_INHERITED
   NS_DECL_NSIDNSTXTRECORD
   NS_DECL_NSIDNSHTTPSSVCRECORD
@@ -384,13 +392,14 @@ class TypeHostRecord final : public nsHostRecord,
 
   void ResolveComplete() override;
 
-  mozilla::net::TypeRecordResultType mResults MOZ_GUARDED_BY(mResultsLock) =
-      AsVariant(mozilla::Nothing());
-  mozilla::Mutex mResultsLock{"TypeHostRecord.mResultsLock"};
+  mozilla::net::TypeRecordResultType mResults = AsVariant(mozilla::Nothing());
+  mozilla::Mutex mResultsLock MOZ_UNANNOTATED{"TypeHostRecord.mResultsLock"};
 
-  mozilla::Maybe<nsCString> mOriginHost MOZ_GUARDED_BY(mResultsLock);
+  mozilla::Maybe<nsCString> mOriginHost;
   bool mAllRecordsExcluded = false;
 };
+
+NS_DEFINE_STATIC_IID_ACCESSOR(TypeHostRecord, TYPEHOSTRECORD_IID)
 
 static inline bool IsHighPriority(nsIDNSService::DNSFlags flags) {
   return !(flags & (nsHostRecord::DNS_PRIORITY_LOW |

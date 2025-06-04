@@ -71,23 +71,9 @@ NetworkConnectivityService::GetDNSv4(ConnectivityState* aState) {
 }
 
 NS_IMETHODIMP
-NetworkConnectivityService::SetDNSv4(
-    nsINetworkConnectivityService::ConnectivityState aDNSv4) {
-  mDNSv4 = aDNSv4;
-  return NS_OK;
-}
-
-NS_IMETHODIMP
 NetworkConnectivityService::GetDNSv6(ConnectivityState* aState) {
   NS_ENSURE_ARG(aState);
   *aState = mDNSv6;
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-NetworkConnectivityService::SetDNSv6(
-    nsINetworkConnectivityService::ConnectivityState aDNSv6) {
-  mDNSv6 = aDNSv6;
   return NS_OK;
 }
 
@@ -99,23 +85,9 @@ NetworkConnectivityService::GetDNS_HTTPS(ConnectivityState* aState) {
 }
 
 NS_IMETHODIMP
-NetworkConnectivityService::SetDNS_HTTPS(
-    nsINetworkConnectivityService::ConnectivityState aDNSHTTPS) {
-  mDNS_HTTPS = aDNSHTTPS;
-  return NS_OK;
-}
-
-NS_IMETHODIMP
 NetworkConnectivityService::GetIPv4(ConnectivityState* aState) {
   NS_ENSURE_ARG(aState);
   *aState = mIPv4;
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-NetworkConnectivityService::SetIPv4(
-    nsINetworkConnectivityService::ConnectivityState aIPv4) {
-  mIPv4 = aIPv4;
   return NS_OK;
 }
 
@@ -127,23 +99,9 @@ NetworkConnectivityService::GetIPv6(ConnectivityState* aState) {
 }
 
 NS_IMETHODIMP
-NetworkConnectivityService::SetIPv6(
-    nsINetworkConnectivityService::ConnectivityState aIPv6) {
-  mIPv6 = aIPv6;
-  return NS_OK;
-}
-
-NS_IMETHODIMP
 NetworkConnectivityService::GetNAT64(ConnectivityState* aState) {
   NS_ENSURE_ARG(aState);
   *aState = mNAT64;
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-NetworkConnectivityService::SetNAT64(
-    nsINetworkConnectivityService::ConnectivityState aNAT64) {
-  mNAT64 = aNAT64;
   return NS_OK;
 }
 
@@ -223,11 +181,6 @@ void NetworkConnectivityService::PerformChecks() {
       mNAT64Prefixes.AppendElement(priorityPrefix);
       mNAT64 = OK;
     }
-  }
-
-  if (StaticPrefs::network_connectivity_service_wait_for_idle_startup() &&
-      !mIdleStartupDone) {
-    return;
   }
 
   RecheckDNS();
@@ -443,7 +396,6 @@ NetworkConnectivityService::Observe(nsISupports* aSubject, const char* aTopic,
                   .Equals(aData)) {
     PerformChecks();
   } else if (!strcmp(aTopic, "browser-idle-startup-tasks-finished")) {
-    mIdleStartupDone = true;
     PerformChecks();
   }
 
@@ -509,13 +461,13 @@ already_AddRefed<nsIChannel> NetworkConnectivityService::SetupIPCheckChannel(
   rv = channel->SetTRRMode(nsIRequest::TRR_DISABLED_MODE);
   NS_ENSURE_SUCCESS(rv, nullptr);
 
-  if (nsCOMPtr<nsIHttpChannelInternal> internalChan =
-          do_QueryInterface(channel)) {
-    if (ipv4) {
-      internalChan->SetIPv6Disabled();
-    } else {
-      internalChan->SetIPv4Disabled();
-    }
+  nsCOMPtr<nsIHttpChannelInternal> internalChan = do_QueryInterface(channel);
+  NS_ENSURE_TRUE(internalChan, nullptr);
+
+  if (ipv4) {
+    internalChan->SetIPv6Disabled();
+  } else {
+    internalChan->SetIPv4Disabled();
   }
 
   return channel.forget();
@@ -587,10 +539,9 @@ NetworkConnectivityService::OnStopRequest(nsIRequest* aRequest,
     mIPv4Channel = nullptr;
 
     if (mIPv4 == nsINetworkConnectivityService::OK) {
-      glean::network::id_online
-          .EnumGet(mHasNetworkId ? glean::network::IdOnlineLabel::ePresent
-                                 : glean::network::IdOnlineLabel::eAbsent)
-          .Add();
+      Telemetry::AccumulateCategorical(
+          mHasNetworkId ? Telemetry::LABELS_NETWORK_ID_ONLINE::present
+                        : Telemetry::LABELS_NETWORK_ID_ONLINE::absent);
       LOG(("mHasNetworkId : %d\n", mHasNetworkId));
     }
   } else if (aRequest == mIPv6Channel) {

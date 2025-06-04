@@ -17,9 +17,9 @@
 #include "NSSErrorsService.h"
 #include "TLSTransportLayer.h"
 #include "mozilla/ChaosMode.h"
-#include "mozilla/glean/NetwerkMetrics.h"
-#include "mozilla/glean/NetwerkProtocolHttpMetrics.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/StaticPrefs_network.h"
+#include "mozilla/Telemetry.h"
 #include "mozpkix/pkixnss.h"
 #include "nsCRT.h"
 #include "nsHttpConnection.h"
@@ -42,10 +42,13 @@
 #include "sslt.h"
 
 namespace mozilla::net {
-extern const nsCString& TRRProviderKey();
-}
 
-namespace mozilla::net {
+enum TlsHandshakeResult : uint32_t {
+  EchConfigSuccessful = 0,
+  EchConfigFailed,
+  NoEchConfigSuccessful,
+  NoEchConfigFailed,
+};
 
 //-----------------------------------------------------------------------------
 // nsHttpConnection <public>
@@ -68,8 +71,8 @@ nsHttpConnection::~nsHttpConnection() {
   if (!mEverUsedSpdy) {
     LOG(("nsHttpConnection %p performed %d HTTP/1.x transactions\n", this,
          mHttp1xTransactionCount));
-    glean::http::request_per_conn.AccumulateSingleSample(
-        mHttp1xTransactionCount);
+    Telemetry::Accumulate(Telemetry::HTTP_REQUEST_PER_CONN,
+                          mHttp1xTransactionCount);
     nsHttpConnectionInfo* ci = nullptr;
     if (mTransaction) {
       ci = mTransaction->ConnectionInfo();
@@ -89,11 +92,9 @@ nsHttpConnection::~nsHttpConnection() {
     uint32_t totalKBRead = static_cast<uint32_t>(mTotalBytesRead >> 10);
     LOG(("nsHttpConnection %p read %dkb on connection spdy=%d\n", this,
          totalKBRead, mEverUsedSpdy));
-    if (mEverUsedSpdy) {
-      glean::spdy::kbread_per_conn.Accumulate(totalKBRead);
-    } else {
-      glean::http::kbread_per_conn2.Accumulate(totalKBRead);
-    }
+    Telemetry::Accumulate(mEverUsedSpdy ? Telemetry::SPDY_KBREAD_PER_CONN2
+                                        : Telemetry::HTTP_KBREAD_PER_CONN2,
+                          totalKBRead);
   }
 
   if (mForceSendTimer) {
@@ -190,16 +191,11 @@ nsresult nsHttpConnection::TryTakeSubTransactions(
   return rv;
 }
 
-void nsHttpConnection::ResetTransaction(RefPtr<nsAHttpTransaction>&& trans,
-                                        bool aForH2Proxy) {
+void nsHttpConnection::ResetTransaction(RefPtr<nsAHttpTransaction>&& trans) {
   MOZ_ASSERT(trans);
   mSpdySession->SetConnection(trans->Connection());
   trans->SetConnection(nullptr);
   trans->DoNotRemoveAltSvc();
-  if (!aForH2Proxy) {
-    // Only do this when this is for websocket or webtransport over HTTP/2.
-    trans->SetResettingForTunnelConn(true);
-  }
   trans->Close(NS_ERROR_NET_RESET);
 }
 
@@ -208,14 +204,12 @@ nsresult nsHttpConnection::MoveTransactionsToSpdy(
   if (NS_FAILED(status)) {  // includes NS_ERROR_NOT_IMPLEMENTED
     MOZ_ASSERT(list.IsEmpty(), "sub transaction list not empty");
 
-    // If this transaction is used to drive websocket or webtransport, we reset
-    // it to put it in the pending queue. Once we know if the server supports
-    // websocket or not, the pending queue will be processed.
+    // If this transaction is used to drive websocket, we reset it to put it in
+    // the pending queue. Once we know if the server supports websocket or not,
+    // the pending queue will be processed.
     nsHttpTransaction* trans = mTransaction->QueryHttpTransaction();
-    if (trans && (trans->IsWebsocketUpgrade() || trans->IsForWebTransport())) {
-      LOG(
-          ("nsHttpConnection resetting transaction for websocket or "
-           "webtransport upgrade"));
+    if (trans && trans->IsWebsocketUpgrade()) {
+      LOG(("nsHttpConnection resetting transaction for websocket upgrade"));
       // websocket upgrade needs NonSticky for transaction reset
       mTransaction->MakeNonSticky();
       ResetTransaction(std::move(mTransaction));
@@ -251,11 +245,8 @@ nsresult nsHttpConnection::MoveTransactionsToSpdy(
     for (int32_t index = 0; index < count; ++index) {
       RefPtr<nsAHttpTransaction> transaction = list[index];
       nsHttpTransaction* trans = transaction->QueryHttpTransaction();
-      if (trans &&
-          (trans->IsWebsocketUpgrade() || trans->IsForWebTransport())) {
-        LOG(
-            ("nsHttpConnection resetting a transaction for websocket or "
-             "webtransport upgrade"));
+      if (trans && trans->IsWebsocketUpgrade()) {
+        LOG(("nsHttpConnection resetting a transaction for websocket upgrade"));
         // websocket upgrade needs NonSticky for transaction reset
         transaction->MakeNonSticky();
         ResetTransaction(std::move(transaction));
@@ -385,7 +376,7 @@ void nsHttpConnection::StartSpdy(nsITLSSocketControl* sslControl,
         // note that using NonSticky here won't work because it breaks
         // netwerk/test/unit/test_websocket_server.js - h1 ws with h2 proxy
         mTransaction->MakeRestartable();
-        ResetTransaction(std::move(mTransaction), true);
+        ResetTransaction(std::move(mTransaction));
         mTransaction = nullptr;
       } else {
         for (auto trans : list) {
@@ -462,16 +453,13 @@ void nsHttpConnection::PostProcessNPNSetup(bool handshakeSucceeded,
     // Telemetry for tls failure rate with and without esni;
     bool echConfigUsed = false;
     mSocketTransport->GetEchConfigUsed(&echConfigUsed);
-    glean::http::EchconfigSuccessRateLabel label =
+    TlsHandshakeResult result =
         echConfigUsed
-            ? (handshakeSucceeded
-                   ? glean::http::EchconfigSuccessRateLabel::eEchconfigsucceeded
-                   : glean::http::EchconfigSuccessRateLabel::eEchconfigfailed)
-            : (handshakeSucceeded ? glean::http::EchconfigSuccessRateLabel::
-                                        eNoechconfigsucceeded
-                                  : glean::http::EchconfigSuccessRateLabel::
-                                        eNoechconfigfailed);
-    glean::http::echconfig_success_rate.EnumGet(label).Add();
+            ? (handshakeSucceeded ? TlsHandshakeResult::EchConfigSuccessful
+                                  : TlsHandshakeResult::EchConfigFailed)
+            : (handshakeSucceeded ? TlsHandshakeResult::NoEchConfigSuccessful
+                                  : TlsHandshakeResult::NoEchConfigFailed);
+    Telemetry::Accumulate(Telemetry::ECHCONFIG_SUCCESS_RATE, result);
   }
 }
 
@@ -668,27 +656,22 @@ nsresult nsHttpConnection::AddTransaction(nsAHttpTransaction* httpTransaction,
 
 nsresult nsHttpConnection::CreateTunnelStream(
     nsAHttpTransaction* httpTransaction, nsHttpConnection** aHttpConnection,
-    bool aIsExtendedCONNECT) {
+    bool aIsWebSocket) {
   if (!mSpdySession) {
     return NS_ERROR_UNEXPECTED;
   }
 
-  auto result = mSpdySession->CreateTunnelStream(httpTransaction, mCallbacks,
-                                                 mRtt, aIsExtendedCONNECT);
-  if (result.isErr()) {
-    return result.unwrapErr();
-  }
-  RefPtr<nsHttpConnection> conn = result.unwrap();
-
+  RefPtr<nsHttpConnection> conn = mSpdySession->CreateTunnelStream(
+      httpTransaction, mCallbacks, mRtt, aIsWebSocket);
   // We need to store the refrence of the Http2Session in the tunneled
   // connection, so when nsHttpConnection::DontReuse is called the Http2Session
   // can't be reused.
-  if (aIsExtendedCONNECT) {
+  if (aIsWebSocket) {
     LOG(
         ("nsHttpConnection::CreateTunnelStream %p Set h2 session %p to "
          "tunneled conn %p",
          this, mSpdySession.get(), conn.get()));
-    conn->mExtendedCONNECTHttp2Session = mSpdySession;
+    conn->mWebSocketHttp2Session = mSpdySession;
   }
   conn.forget(aHttpConnection);
   return NS_OK;
@@ -708,7 +691,7 @@ void nsHttpConnection::Close(nsresult reason, bool aIsShutdown) {
   MOZ_ASSERT(OnSocketThread(), "not on socket thread");
   mTlsHandshaker->NotifyClose();
   mContinueHandshakeDone = nullptr;
-  mExtendedCONNECTHttp2Session = nullptr;
+  mWebSocketHttp2Session = nullptr;
   // Ensure TCP keepalive timer is stopped.
   if (mTCPKeepaliveTransitionTimer) {
     mTCPKeepaliveTransitionTimer->Cancel();
@@ -774,13 +757,6 @@ void nsHttpConnection::Close(nsresult reason, bool aIsShutdown) {
     }
     mKeepAlive = false;
   }
-
-  if (mConnInfo->GetIsTrrServiceChannel() && !mLastTRRResponseTime.IsNull() &&
-      NS_SUCCEEDED(reason) && !aIsShutdown) {
-    // Record telemetry keyed by TRR provider.
-    glean::network::trr_idle_close_time_h1.Get(TRRProviderKey())
-        .AccumulateRawDuration(TimeStamp::Now() - mLastTRRResponseTime);
-  }
 }
 
 void nsHttpConnection::MarkAsDontReuse() {
@@ -797,10 +773,10 @@ void nsHttpConnection::DontReuse() {
   MarkAsDontReuse();
   if (mSpdySession) {
     mSpdySession->DontReuse();
-  } else if (mExtendedCONNECTHttp2Session) {
-    LOG(("nsHttpConnection::DontReuse %p mExtendedCONNECTHttp2Session=%p\n",
-         this, mExtendedCONNECTHttp2Session.get()));
-    mExtendedCONNECTHttp2Session->DontReuse();
+  } else if (mWebSocketHttp2Session) {
+    LOG(("nsHttpConnection::DontReuse %p mWebSocketHttp2Session=%p\n", this,
+         mWebSocketHttp2Session.get()));
+    mWebSocketHttp2Session->DontReuse();
   }
 }
 
@@ -1507,13 +1483,6 @@ void nsHttpConnection::CloseTransaction(nsAHttpTransaction* trans,
     mSpdySession = nullptr;
   }
 
-  if ((NS_SUCCEEDED(reason) || NS_BASE_STREAM_CLOSED == reason) &&
-      trans->ConnectionInfo() &&
-      trans->ConnectionInfo()->GetIsTrrServiceChannel()) {
-    // save time of last successful response
-    mLastTRRResponseTime = TimeStamp::Now();
-  }
-
   if (mTransaction) {
     LOG(("  closing associated mTransaction"));
     mHttp1xTransactionCount += mTransaction->Http1xTransactionCount();
@@ -1749,8 +1718,7 @@ nsresult nsHttpConnection::OnSocketWritable() {
       if ((mState != HttpConnectionState::SETTING_UP_TUNNEL) && !mSpdySession) {
         nsHttpTransaction* trans = mTransaction->QueryHttpTransaction();
         // needed for websocket over h2 (direct)
-        if (!trans ||
-            (!trans->IsWebsocketUpgrade() && !trans->IsForWebTransport())) {
+        if (!trans || !trans->IsWebsocketUpgrade()) {
           mRequestDone = true;
         }
       }
@@ -2346,17 +2314,17 @@ bool nsHttpConnection::NoClientCertAuth() const {
   return !tlsSocketControl->GetClientCertSent();
 }
 
-ExtendedCONNECTSupport nsHttpConnection::GetExtendedCONNECTSupport() {
-  LOG3(("nsHttpConnection::GetExtendedCONNECTSupport"));
+WebSocketSupport nsHttpConnection::GetWebSocketSupport() {
+  LOG3(("nsHttpConnection::GetWebSocketSupport"));
   if (!UsingSpdy()) {
-    return ExtendedCONNECTSupport::SUPPORTED;
+    return WebSocketSupport::SUPPORTED;
   }
-  LOG3(("nsHttpConnection::ExtendedCONNECTSupport checking spdy session"));
+  LOG3(("nsHttpConnection::GetWebSocketSupport checking spdy session"));
   if (mSpdySession) {
-    return mSpdySession->GetExtendedCONNECTSupport();
+    return mSpdySession->GetWebSocketSupport();
   }
 
-  return ExtendedCONNECTSupport::NO_SUPPORT;
+  return WebSocketSupport::NO_SUPPORT;
 }
 
 bool nsHttpConnection::IsProxyConnectInProgress() {
@@ -2450,20 +2418,6 @@ void nsHttpConnection::HandshakeDoneInternal() {
   nsAutoCString negotiatedNPN;
   DebugOnly<nsresult> rvDebug = securityInfo->GetNegotiatedNPN(negotiatedNPN);
   MOZ_ASSERT(NS_SUCCEEDED(rvDebug));
-
-  nsAutoCString transactionNPN;
-  transactionNPN = mConnInfo->GetNPNToken();
-  LOG(("negotiatedNPN: %s - transactionNPN: %s", negotiatedNPN.get(),
-       transactionNPN.get()));
-  if (!transactionNPN.IsEmpty() && negotiatedNPN != transactionNPN) {
-    LOG(("Resetting connection due to mismatched NPN token"));
-    mozilla::glean::network::alpn_mismatch_count.Get(negotiatedNPN).Add();
-    DontReuse();
-    if (mTransaction) {
-      mTransaction->Close(NS_ERROR_NET_RESET);
-    }
-    return;
-  }
 
   bool earlyDataAccepted = false;
   if (mTlsHandshaker->EarlyDataUsed()) {
@@ -2633,19 +2587,6 @@ nsresult nsHttpConnection::SendConnectRequest(void* closure,
   return mProxyConnectStream->ReadSegments(ReadFromStream, closure,
                                            nsIOService::gDefaultSegmentSize,
                                            transactionBytes);
-}
-
-WebTransportSessionBase* nsHttpConnection::GetWebTransportSession(
-    nsAHttpTransaction* aTransaction) {
-  LOG(
-      ("nsHttpConnection::GetWebTransportSession %p mSpdySession=%p "
-       "mExtendedCONNECTHttp2Session=%p",
-       this, mSpdySession.get(), mExtendedCONNECTHttp2Session.get()));
-  if (!mExtendedCONNECTHttp2Session) {
-    return nullptr;
-  }
-
-  return mExtendedCONNECTHttp2Session->GetWebTransportSession(aTransaction);
 }
 
 }  // namespace mozilla::net

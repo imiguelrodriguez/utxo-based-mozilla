@@ -132,70 +132,68 @@ class CardContainer extends MozLitElement {
       />
       ${when(
         this.toggleDisabled,
-        () =>
-          html`<div
-            class=${classMap({
-              "card-container": true,
-              inner: this.isInnerCard,
-              "empty-state": this.isEmptyState && !this.isInnerCard,
-            })}
+        () => html`<div
+          class=${classMap({
+            "card-container": true,
+            inner: this.isInnerCard,
+            "empty-state": this.isEmptyState && !this.isInnerCard,
+          })}
+        >
+          <span
+            id="header"
+            class="card-container-header"
+            ?hidden=${ifDefined(this.hideHeader)}
+            toggleDisabled
+            ?withViewAll=${this.showViewAll}
+          >
+            <slot name="header"></slot>
+            <slot name="secondary-header"></slot>
+          </span>
+          <a
+            href="about:firefoxview#${this.shortPageName}"
+            @click=${this.viewAllClicked}
+            class="view-all-link"
+            data-l10n-id="firefoxview-view-all-link"
+            ?hidden=${!this.showViewAll}
+          ></a>
+          <slot name="main"></slot>
+          <slot name="footer" class="card-container-footer"></slot>
+        </div>`,
+        () => html`<details
+          class=${classMap({
+            "card-container": true,
+            inner: this.isInnerCard,
+            "empty-state": this.isEmptyState && !this.isInnerCard,
+          })}
+          ?open=${this.isExpanded}
+          ?isOpenTabsView=${this.removeBlockEndMargin}
+          @toggle=${this.onToggleContainer}
+          role=${this.isInnerCard ? "presentation" : "group"}
+        >
+          <summary
+            class="card-container-header"
+            ?hidden=${ifDefined(this.hideHeader)}
+            ?withViewAll=${this.showViewAll}
           >
             <span
-              id="header"
-              class="card-container-header"
-              ?hidden=${ifDefined(this.hideHeader)}
-              toggleDisabled
-              ?withViewAll=${this.showViewAll}
-            >
-              <slot name="header"></slot>
-              <slot name="secondary-header"></slot>
-            </span>
-            <a
-              href="about:firefoxview#${this.shortPageName}"
-              @click=${this.viewAllClicked}
-              class="view-all-link"
-              data-l10n-id="firefoxview-view-all-link"
-              ?hidden=${!this.showViewAll}
-            ></a>
-            <slot name="main"></slot>
-            <slot name="footer" class="card-container-footer"></slot>
-          </div>`,
-        () =>
-          html`<details
-            class=${classMap({
-              "card-container": true,
-              inner: this.isInnerCard,
-              "empty-state": this.isEmptyState && !this.isInnerCard,
-            })}
-            ?open=${this.isExpanded}
-            ?isOpenTabsView=${this.removeBlockEndMargin}
-            @toggle=${this.onToggleContainer}
-            role=${this.isInnerCard ? "presentation" : "group"}
-          >
-            <summary
-              class="card-container-header"
-              ?hidden=${ifDefined(this.hideHeader)}
-              ?withViewAll=${this.showViewAll}
-            >
-              <span
-                class="icon chevron-icon"
-                role="presentation"
-                data-l10n-id=${this.isExpanded
-                  ? "firefoxview-collapse-button-hide"
-                  : "firefoxview-collapse-button-show"}
-              ></span>
-              <slot name="header"></slot>
-            </summary>
-            <a
-              href="about:firefoxview#${this.shortPageName}"
-              @click=${this.viewAllClicked}
-              class="view-all-link"
-              data-l10n-id="firefoxview-view-all-link"
-              ?hidden=${!this.showViewAll}
-            ></a>
-            <slot name="main"></slot>
-            <slot name="footer" class="card-container-footer"></slot>
-          </details>`
+              class="icon chevron-icon"
+              role="presentation"
+              data-l10n-id="firefoxview-collapse-button-${this.isExpanded
+                ? "hide"
+                : "show"}"
+            ></span>
+            <slot name="header"></slot>
+          </summary>
+          <a
+            href="about:firefoxview#${this.shortPageName}"
+            @click=${this.viewAllClicked}
+            class="view-all-link"
+            data-l10n-id="firefoxview-view-all-link"
+            ?hidden=${!this.showViewAll}
+          ></a>
+          <slot name="main"></slot>
+          <slot name="footer" class="card-container-footer"></slot>
+        </details>`
       )}
     `;
   }

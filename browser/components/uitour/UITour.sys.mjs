@@ -16,6 +16,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   PanelMultiView: "resource:///modules/PanelMultiView.sys.mjs",
   ProfileAge: "resource://gre/modules/ProfileAge.sys.mjs",
   ResetProfile: "resource://gre/modules/ResetProfile.sys.mjs",
+  TelemetryController: "resource://gre/modules/TelemetryController.sys.mjs",
   UIState: "resource://services-sync/UIState.sys.mjs",
   UpdateUtils: "resource://gre/modules/UpdateUtils.sys.mjs",
 });
@@ -540,6 +541,10 @@ export var UITour = {
         let name = data.name;
         let value = data.value;
         Services.prefs.setStringPref("browser.uitour.treatment." + name, value);
+        // The notification is only meant to be used in tests.
+        UITourHealthReport.recordTreatmentTag(name, value).then(() =>
+          this.notify("TreatmentTag:TelemetrySent")
+        );
         break;
       }
 
@@ -869,6 +874,10 @@ export var UITour = {
   // This function is copied to UITourListener.
   isSafeScheme(aURI) {
     let allowedSchemes = new Set(["https", "about"]);
+    if (!Services.prefs.getBoolPref("browser.uitour.requireSecure")) {
+      allowedSchemes.add("http");
+    }
+
     if (!allowedSchemes.has(aURI.scheme)) {
       lazy.log.error("Unsafe scheme:", aURI.scheme);
       return false;
@@ -2009,3 +2018,26 @@ export var UITour = {
 };
 
 UITour.init();
+
+/**
+ * UITour Health Report
+ */
+/**
+ * Public API to be called by the UITour code
+ */
+const UITourHealthReport = {
+  recordTreatmentTag(tag, value) {
+    return lazy.TelemetryController.submitExternalPing(
+      "uitour-tag",
+      {
+        version: 1,
+        tagName: tag,
+        tagValue: value,
+      },
+      {
+        addClientId: true,
+        addEnvironment: true,
+      }
+    );
+  },
+};

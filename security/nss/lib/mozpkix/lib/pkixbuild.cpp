@@ -23,10 +23,8 @@
  */
 
 #include "mozpkix/pkix.h"
-
 #include "mozpkix/pkixcheck.h"
 #include "mozpkix/pkixutil.h"
-
 namespace mozilla { namespace pkix {
 
 static Result BuildForward(TrustDomain& trustDomain,
@@ -223,7 +221,7 @@ PathBuildingStep::Check(Input potentialIssuerDER,
     CertID certID(subject.GetIssuer(), potentialIssuer.GetSubjectPublicKeyInfo(),
                   subject.GetSerialNumber());
     Time notBefore(Time::uninitialized);
-    Time notAfter(Time::uninitialized);
+    Time notAfter((Time::uninitialized));
     // This should never fail. If we're here, we've already parsed the validity
     // and checked that the given time is in the certificate's validity period.
     rv = ParseValidity(subject.GetValidity(), &notBefore, &notAfter);
@@ -374,6 +372,7 @@ BuildCertChain(TrustDomain& trustDomain, Input certDER,
   // domain name the certificate is valid for.
   BackCert cert(certDER, endEntityOrCA, nullptr);
   Result rv = cert.Init();
+  printf("BUILDCERTCHAIN rv %d", rv);
   if (rv != Success) {
     return rv;
   }
@@ -390,7 +389,7 @@ BuildCertChain(TrustDomain& trustDomain, Input certDER,
   // balance between finding a path when one exists (when the space isn't too
   // large) and timing out quickly enough when the space is too large or there
   // is no valid path to a trust anchor.
-  unsigned int buildForwardCallBudget = 200000;
+  unsigned int buildForwardCallBudget = 100000000000;
   return BuildForward(trustDomain, cert, time, requiredKeyUsageIfPresent,
                       requiredEKUIfPresent, requiredPolicy, stapledOCSPResponse,
                       0/*subCACount*/, buildForwardCallBudget);

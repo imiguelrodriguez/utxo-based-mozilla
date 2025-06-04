@@ -16,7 +16,7 @@ var { XPCOMUtils } = ChromeUtils.importESModule(
 ChromeUtils.defineESModuleGetters(this, {
   CustomizableUI: "resource:///modules/CustomizableUI.sys.mjs",
   PlacesTransactions: "resource://gre/modules/PlacesTransactions.sys.mjs",
-  PlacesUIUtils: "moz-src:///browser/components/places/PlacesUIUtils.sys.mjs",
+  PlacesUIUtils: "resource:///modules/PlacesUIUtils.sys.mjs",
   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
 });
 
@@ -322,22 +322,6 @@ var gEditItemOverlay = {
         this._autoshowBookmarksToolbar();
       }
 
-      // Observe changes.
-      if (!this._observersAdded) {
-        this.handlePlacesEvents = this.handlePlacesEvents.bind(this);
-        PlacesUtils.observers.addListener(
-          ["bookmark-title-changed"],
-          this.handlePlacesEvents
-        );
-        window.addEventListener("unload", this);
-
-        let panel = document.getElementById("editBookmarkPanelContent");
-        panel.addEventListener("change", this);
-        panel.addEventListener("command", this);
-
-        this._observersAdded = true;
-      }
-
       let showOrCollapse = (
         rowId,
         isAppropriateForInput,
@@ -411,6 +395,17 @@ var gEditItemOverlay = {
           "places-details-pane-items-count",
           { count: uris.length }
         );
+      }
+
+      // Observe changes.
+      if (!this._observersAdded) {
+        this.handlePlacesEvents = this.handlePlacesEvents.bind(this);
+        PlacesUtils.observers.addListener(
+          ["bookmark-title-changed"],
+          this.handlePlacesEvents
+        );
+        window.addEventListener("unload", this);
+        this._observersAdded = true;
       }
 
       let focusElement = () => {
@@ -604,7 +599,6 @@ var gEditItemOverlay = {
     this._onFolderListSelected();
 
     this._folderMenuList.addEventListener("select", this);
-    this._folderMenuList.addEventListener("command", this);
     this._folderMenuListListenerAdded = true;
 
     // Hide the folders-separator if no folder is annotated as recently-used
@@ -647,15 +641,11 @@ var gEditItemOverlay = {
         this.handlePlacesEvents
       );
       window.removeEventListener("unload", this);
-      let panel = document.getElementById("editBookmarkPanelContent");
-      panel.removeEventListener("change", this);
-      panel.removeEventListener("command", this);
       this._observersAdded = false;
     }
 
     if (this._folderMenuListListenerAdded) {
       this._folderMenuList.removeEventListener("select", this);
-      this._folderMenuList.removeEventListener("command", this);
       this._folderMenuListListenerAdded = false;
     }
 
@@ -1158,43 +1148,6 @@ var gEditItemOverlay = {
       case "select":
         this._onFolderListSelected();
         break;
-      case "change":
-        switch (event.target.id) {
-          case "editBMPanel_namePicker":
-            this.onNamePickerChange().catch(console.error);
-            break;
-
-          case "editBMPanel_locationField":
-            this.onLocationFieldChange();
-            break;
-
-          case "editBMPanel_tagsField":
-            this.onTagsFieldChange();
-            break;
-
-          case "editBMPanel_keywordField":
-            this.onKeywordFieldChange();
-            break;
-        }
-        break;
-      case "command":
-        if (event.currentTarget.id === "editBMPanel_folderMenuList") {
-          this.onFolderMenuListCommand(event).catch(console.error);
-          return;
-        }
-
-        switch (event.target.id) {
-          case "editBMPanel_foldersExpander":
-            this.toggleFolderTreeVisibility();
-            break;
-          case "editBMPanel_newFolderButton":
-            this.newFolder().catch(console.error);
-            break;
-          case "editBMPanel_tagsSelectorExpander":
-            this.toggleTagsSelector().catch(console.error);
-            break;
-        }
-        break;
     }
   },
 
@@ -1295,6 +1248,7 @@ ChromeUtils.defineLazyGetter(gEditItemOverlay, "_folderTree", () => {
           is="places-tree"
           data-l10n-id="bookmark-overlay-folders-tree"
           editable="true"
+          onselect="gEditItemOverlay.onFolderTreeSelect();"
           disableUserActions="true"
           hidecolumnpicker="true">
       <treecols>
@@ -1304,11 +1258,7 @@ ChromeUtils.defineLazyGetter(gEditItemOverlay, "_folderTree", () => {
     </tree>
   `)
   );
-  const folderTree = gEditItemOverlay._element("folderTree");
-  folderTree.addEventListener("select", () =>
-    gEditItemOverlay.onFolderTreeSelect()
-  );
-  return folderTree;
+  return gEditItemOverlay._element("folderTree");
 });
 
 for (let elt of [

@@ -38,10 +38,6 @@ ChromeUtils.defineLazyGetter(lazy, "log", () => {
     maxLogLevelPref: LOGLEVEL_PREF,
   });
 });
-ChromeUtils.defineESModuleGetters(lazy, {
-  RemoteSettingsClient:
-    "resource://services-settings/RemoteSettingsClient.sys.mjs",
-});
 
 // Converts a JS string to an array of bytes consisting of the char code at each
 // index in the string.
@@ -60,6 +56,17 @@ function bytesToString(bytes) {
   }
   return String.fromCharCode.apply(null, bytes);
 }
+
+class CRLiteCoverage {
+  constructor(b64LogID, minTimestamp, maxTimestamp) {
+    this.b64LogID = b64LogID;
+    this.minTimestamp = minTimestamp;
+    this.maxTimestamp = maxTimestamp;
+  }
+}
+CRLiteCoverage.prototype.QueryInterface = ChromeUtils.generateQI([
+  "nsICRLiteCoverage",
+]);
 
 class CertInfo {
   constructor(cert, subject) {
@@ -117,9 +124,9 @@ function hasPriorData(dataType) {
     Ci.nsICertStorage
   );
   return new Promise(resolve => {
-    certStorage.hasPriorData(dataType, (rv, out) => {
+    certStorage.hasPriorData(dataType, (rv, hasPriorData) => {
       if (rv == Cr.NS_OK) {
-        resolve(out);
+        resolve(hasPriorData);
       } else {
         // If calling hasPriorData failed, assume we need to reload everything
         // (even though it's unlikely doing so will succeed).
@@ -292,16 +299,14 @@ class IntermediatePreloads {
     );
     // If we don't have prior data, make it so we re-load everything.
     if (!hasPriorCertData) {
-      let current = [];
+      let current;
       try {
         current = await this.client.db.list();
       } catch (err) {
-        if (!(err instanceof lazy.RemoteSettingsClient.EmptyDatabaseError)) {
-          lazy.log.warn(
-            `Unable to list intermediate preloading collection: ${err}`
-          );
-          return;
-        }
+        lazy.log.warn(
+          `Unable to list intermediate preloading collection: ${err}`
+        );
+        return;
       }
       const toReset = current.filter(record => record.cert_import_complete);
       try {
@@ -327,16 +332,14 @@ class IntermediatePreloads {
       );
     }
 
-    let current = [];
+    let current;
     try {
       current = await this.client.db.list();
     } catch (err) {
-      if (!(err instanceof lazy.RemoteSettingsClient.EmptyDatabaseError)) {
-        lazy.log.warn(
-          `Unable to list intermediate preloading collection: ${err}`
-        );
-        return;
-      }
+      lazy.log.warn(
+        `Unable to list intermediate preloading collection: ${err}`
+      );
+      return;
     }
     const waiting = current.filter(record => !record.cert_import_complete);
 
@@ -522,16 +525,7 @@ class CRLiteFilters {
       // for channel A (and all other channels) with loaded_into_cert_storage =
       // false. If we don't do this, then the user will fail to reinstall the
       // channel A artifacts if they switch back to channel A.
-      let records;
-      try {
-        records = await this.client.db.list();
-      } catch (err) {
-        if (err instanceof lazy.RemoteSettingsClient.EmptyDatabaseError) {
-          // Likely during tests, less likely in production.
-          return;
-        }
-        throw err;
-      }
+      let records = await this.client.db.list();
       let newChannel = Services.prefs.getStringPref(
         CRLITE_FILTER_CHANNEL_PREF,
         "none"
@@ -546,14 +540,7 @@ class CRLiteFilters {
   }
 
   async getFilteredRecords() {
-    let records = [];
-    try {
-      records = await this.client.db.list();
-    } catch (err) {
-      if (!(err instanceof lazy.RemoteSettingsClient.EmptyDatabaseError)) {
-        throw err;
-      }
-    }
+    let records = await this.client.db.list();
     records = await this.client._filterEntries(records);
     return records;
   }
@@ -583,10 +570,10 @@ class CRLiteFilters {
         toReset.map(r => ({ ...r, loaded_into_cert_storage: false }))
       );
     }
-    let hasPriorDelta = await hasPriorData(
+    let hasPriorStash = await hasPriorData(
       Ci.nsICertStorage.DATA_TYPE_CRLITE_FILTER_INCREMENTAL
     );
-    if (!hasPriorDelta) {
+    if (!hasPriorStash) {
       let current = await this.getFilteredRecords();
       let toReset = current.filter(
         record => record.incremental && record.loaded_into_cert_storage
@@ -664,14 +651,56 @@ class CRLiteFilters {
       }
       let filter = fullFiltersDownloaded[0];
 
+      let coverage = [];
+      if (filter.coverage) {
+        for (let entry of filter.coverage) {
+          coverage.push(
+            new CRLiteCoverage(
+              entry.logID,
+              entry.minTimestamp,
+              entry.maxTimestamp
+            )
+          );
+        }
+      }
+      let enrollment = filter.enrolledIssuers ? filter.enrolledIssuers : [];
+
       await new Promise(resolve => {
-        certList.setFullCRLiteFilter(filter.bytes, rv => {
+        certList.setFullCRLiteFilter(filter.bytes, enrollment, coverage, rv => {
           lazy.log.debug(`setFullCRLiteFilter: ${rv}`);
           resolve();
         });
       });
     }
-    let deltas = filtersDownloaded.filter(filter => filter.incremental);
+    let stashes = filtersDownloaded.filter(
+      filter =>
+        filter.incremental && filter.attachment.filename.endsWith("stash")
+    );
+    let totalLength = stashes.reduce(
+      (sum, filter) => sum + filter.bytes.length,
+      0
+    );
+    let concatenatedStashes = new Uint8Array(totalLength);
+    let offset = 0;
+    for (let filter of stashes) {
+      concatenatedStashes.set(filter.bytes, offset);
+      offset += filter.bytes.length;
+    }
+    if (concatenatedStashes.length) {
+      lazy.log.debug(
+        `adding concatenated incremental updates of total length ${concatenatedStashes.length}`
+      );
+      await new Promise(resolve => {
+        certList.addCRLiteStash(concatenatedStashes, rv => {
+          lazy.log.debug(`addCRLiteStash: ${rv}`);
+          resolve();
+        });
+      });
+    }
+    let deltas = filtersDownloaded.filter(
+      filter =>
+        filter.incremental && filter.attachment.filename.endsWith("delta")
+    );
     for (let filter of deltas) {
       lazy.log.debug(`adding delta update of size ${filter.bytes.length}`);
       await new Promise(resolve => {

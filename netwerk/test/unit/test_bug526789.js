@@ -3,13 +3,6 @@
 
 "use strict";
 
-// We don't normally allow localhost channels to be proxied, but this
-// is easier than updating all the certs and/or domains.
-Services.prefs.setBoolPref("network.proxy.allow_hijacking_localhost", true);
-registerCleanupFunction(() => {
-  Services.prefs.clearUserPref("network.proxy.allow_hijacking_localhost");
-});
-
 add_task(async () => {
   var cm = Services.cookies;
   var expiry = (Date.now() + 1000) * 1000;
@@ -22,7 +15,7 @@ add_task(async () => {
 
   // test that variants of 'baz.com' get normalized appropriately, but that
   // malformed hosts are rejected
-  let cv = cm.add(
+  cm.add(
     "baz.com",
     "/",
     "foo",
@@ -32,10 +25,9 @@ add_task(async () => {
     true,
     expiry,
     {},
-    Ci.nsICookie.SAMESITE_UNSET,
+    Ci.nsICookie.SAMESITE_NONE,
     Ci.nsICookie.SCHEME_HTTPS
   );
-  Assert.equal(cv.result, Ci.nsICookieValidation.eOK);
   Assert.equal(cm.countCookiesFromHost("baz.com"), 1);
   Assert.equal(cm.countCookiesFromHost("BAZ.com"), 1);
   Assert.equal(cm.countCookiesFromHost(".baz.com"), 1);
@@ -56,7 +48,7 @@ add_task(async () => {
   Assert.equal(cm.countCookiesFromHost("baz.com"), 0);
 
   // Test that 'baz.com' and 'baz.com.' are treated differently
-  cv = cm.add(
+  cm.add(
     "baz.com.",
     "/",
     "foo",
@@ -66,10 +58,9 @@ add_task(async () => {
     true,
     expiry,
     {},
-    Ci.nsICookie.SAMESITE_UNSET,
+    Ci.nsICookie.SAMESITE_NONE,
     Ci.nsICookie.SCHEME_HTTPS
   );
-  Assert.equal(cv.result, Ci.nsICookieValidation.eOK);
   Assert.equal(cm.countCookiesFromHost("baz.com"), 0);
   Assert.equal(cm.countCookiesFromHost("BAZ.com"), 0);
   Assert.equal(cm.countCookiesFromHost(".baz.com"), 0);
@@ -82,7 +73,7 @@ add_task(async () => {
 
   // test that domain cookies are illegal for IP addresses, aliases such as
   // 'localhost', and eTLD's such as 'co.uk'
-  cv = cm.add(
+  cm.add(
     "192.168.0.1",
     "/",
     "foo",
@@ -92,10 +83,9 @@ add_task(async () => {
     true,
     expiry,
     {},
-    Ci.nsICookie.SAMESITE_UNSET,
+    Ci.nsICookie.SAMESITE_NONE,
     Ci.nsICookie.SCHEME_HTTPS
   );
-  Assert.equal(cv.result, Ci.nsICookieValidation.eOK);
   Assert.equal(cm.countCookiesFromHost("192.168.0.1"), 1);
   Assert.equal(cm.countCookiesFromHost("192.168.0.1."), 0);
   do_check_throws(function () {
@@ -105,7 +95,7 @@ add_task(async () => {
     cm.countCookiesFromHost(".192.168.0.1.");
   }, Cr.NS_ERROR_ILLEGAL_VALUE);
 
-  cv = cm.add(
+  cm.add(
     "localhost",
     "/",
     "foo",
@@ -115,10 +105,9 @@ add_task(async () => {
     true,
     expiry,
     {},
-    Ci.nsICookie.SAMESITE_UNSET,
+    Ci.nsICookie.SAMESITE_NONE,
     Ci.nsICookie.SCHEME_HTTPS
   );
-  Assert.equal(cv.result, Ci.nsICookieValidation.eOK);
   Assert.equal(cm.countCookiesFromHost("localhost"), 1);
   Assert.equal(cm.countCookiesFromHost("localhost."), 0);
   do_check_throws(function () {
@@ -128,7 +117,7 @@ add_task(async () => {
     cm.countCookiesFromHost(".localhost.");
   }, Cr.NS_ERROR_ILLEGAL_VALUE);
 
-  cv = cm.add(
+  cm.add(
     "co.uk",
     "/",
     "foo",
@@ -138,10 +127,9 @@ add_task(async () => {
     true,
     expiry,
     {},
-    Ci.nsICookie.SAMESITE_UNSET,
+    Ci.nsICookie.SAMESITE_NONE,
     Ci.nsICookie.SCHEME_HTTPS
   );
-  Assert.equal(cv.result, Ci.nsICookieValidation.eOK);
   Assert.equal(cm.countCookiesFromHost("co.uk"), 1);
   Assert.equal(cm.countCookiesFromHost("co.uk."), 0);
   do_check_throws(function () {
@@ -201,7 +189,7 @@ add_task(async () => {
 
   // test that an empty host to add() or remove() works,
   // but a host of '.' doesn't
-  cv = cm.add(
+  cm.add(
     "",
     "/",
     "foo2",
@@ -211,13 +199,12 @@ add_task(async () => {
     true,
     expiry,
     {},
-    Ci.nsICookie.SAMESITE_UNSET,
+    Ci.nsICookie.SAMESITE_NONE,
     Ci.nsICookie.SCHEME_HTTPS
   );
-  Assert.equal(cv.result, Ci.nsICookieValidation.eOK);
   Assert.equal(getCookieCount(), 1);
   do_check_throws(function () {
-    const cv = cm.add(
+    cm.add(
       ".",
       "/",
       "foo3",
@@ -227,10 +214,9 @@ add_task(async () => {
       true,
       expiry,
       {},
-      Ci.nsICookie.SAMESITE_UNSET,
+      Ci.nsICookie.SAMESITE_NONE,
       Ci.nsICookie.SCHEME_HTTPS
     );
-    Assert.equal(cv.result, Ci.nsICookieValidation.eOK);
   }, Cr.NS_ERROR_ILLEGAL_VALUE);
   Assert.equal(getCookieCount(), 1);
 

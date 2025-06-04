@@ -11,7 +11,7 @@ add_task(async () => {
 
   // Test our handling of host names with a single character at the beginning
   // followed by a dot.
-  const cv = Services.cookies.add(
+  Services.cookies.add(
     "e.com",
     "/",
     "foo",
@@ -21,15 +21,15 @@ add_task(async () => {
     true,
     expiry,
     {},
-    Ci.nsICookie.SAMESITE_UNSET,
+    Ci.nsICookie.SAMESITE_NONE,
     Ci.nsICookie.SCHEME_HTTP
   );
-  Assert.equal(cv.result, Ci.nsICookieValidation.eOK, "Valid cookie");
   Assert.equal(Services.cookies.countCookiesFromHost("e.com"), 1);
 
   CookieXPCShellUtils.createServer({ hosts: ["e.com"] });
-  const cookies =
-    await CookieXPCShellUtils.getCookieStringFromDocument("http://e.com/");
+  const cookies = await CookieXPCShellUtils.getCookieStringFromDocument(
+    "http://e.com/"
+  );
   Assert.equal(cookies, "foo=bar");
   Services.prefs.clearUserPref("dom.security.https_first");
 });

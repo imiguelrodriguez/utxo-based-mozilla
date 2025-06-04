@@ -273,7 +273,7 @@ function generateErrors() {
   }
   if (!flag) {
     let errors_tab = document.getElementById("category-errors");
-    errors_tab.hidden = true;
+    errors_tab.style.display = "none";
   }
 }
 
@@ -286,22 +286,18 @@ function generateDocumentation() {
   let string_mapping = {
     BackgroundAppUpdate: "BackgroundAppUpdate2",
     Certificates: "CertificatesDescription",
-    DisableFirefoxAccounts: "DisableFirefoxAccounts1",
     DisableMasterPasswordCreation: "DisablePrimaryPasswordCreation",
+    DisablePocket: "DisablePocket2",
     DisableSetDesktopBackground: "DisableSetAsDesktopBackground",
     FirefoxHome: "FirefoxHome2",
     Permissions: "Permissions2",
     SanitizeOnShutdown: "SanitizeOnShutdown2",
-    SecurityDevices: "SecurityDevices2",
-    SkipTermsOfUse: "SkipTermsOfUse2",
     WindowsSSO: "Windows10SSO",
+    SecurityDevices: "SecurityDevices2",
+    DisableFirefoxAccounts: "DisableFirefoxAccounts1",
   };
-  let deprecated_policies = ["DisablePocket"];
 
   for (let policyName in schema.properties) {
-    if (deprecated_policies.includes(policyName)) {
-      continue;
-    }
     let main_tbody = document.createElement("tbody");
     main_tbody.classList.add("collapsible");
     main_tbody.addEventListener("click", function () {
@@ -369,9 +365,16 @@ window.onload = function () {
   generateErrors();
   generateDocumentation();
 
-  // Event delegation on #categories-nav element
-  let menu = document.getElementById("categories-nav");
-  menu.addEventListener("change-view", e => show(e.target));
+  // Event delegation on #categories element
+  let menu = document.getElementById("categories");
+  for (let category of menu.children) {
+    category.addEventListener("click", () => show(category));
+    category.addEventListener("keypress", function (event) {
+      if (event.keyCode == KeyEvent.DOM_VK_RETURN) {
+        show(category);
+      }
+    });
+  }
 
   if (location.hash) {
     let sectionButton = document.getElementById(
@@ -404,6 +407,10 @@ function show(button) {
   current_tab.hidden = true;
   content.classList.add("active");
   content.hidden = false;
+
+  let current_button = document.querySelector("[selected=true]");
+  current_button.removeAttribute("selected");
+  button.setAttribute("selected", "true");
 
   let title = document.getElementById("sectionTitle");
   title.textContent = button.textContent;

@@ -15,11 +15,9 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   AMBrowserExtensionsImport: "resource://gre/modules/AddonManager.sys.mjs",
   AbuseReporter: "resource://gre/modules/AbuseReporter.sys.mjs",
-  ExtensionCommon: "resource://gre/modules/ExtensionCommon.sys.mjs",
   ExtensionParent: "resource://gre/modules/ExtensionParent.sys.mjs",
   ExtensionPermissions: "resource://gre/modules/ExtensionPermissions.sys.mjs",
   OriginControls: "resource://gre/modules/ExtensionPermissions.sys.mjs",
-  PERMISSION_L10N: "resource://gre/modules/ExtensionPermissionMessages.sys.mjs",
   SITEPERMS_ADDON_TYPE:
     "resource://gre/modules/addons/siteperms-addon-utils.sys.mjs",
 });
@@ -141,38 +139,26 @@ customElements.define(
 
       this.textEl = this.querySelector("#addon-webext-perm-text");
       this.introEl = this.querySelector("#addon-webext-perm-intro");
-      this.permsTitleEl = this.querySelector(
-        "#addon-webext-perm-title-required"
+      this.permsSingleEl = this.querySelector(
+        "#addon-webext-perm-single-entry"
       );
-      this.permsListEl = this.querySelector("#addon-webext-perm-list-required");
-      this.permsTitleDataCollectionEl = this.querySelector(
-        "#addon-webext-perm-title-data-collection"
-      );
-      this.permsListDataCollectionEl = this.querySelector(
-        "#addon-webext-perm-list-data-collection"
-      );
-      this.permsTitleOptionalEl = this.querySelector(
-        "#addon-webext-perm-title-optional"
-      );
-      this.permsListOptionalEl = this.querySelector(
-        "#addon-webext-perm-list-optional"
-      );
+      this.permsListEl = this.querySelector("#addon-webext-perm-list");
 
       this.render();
     }
 
     get hasNoPermissions() {
-      const {
-        strings,
-        showIncognitoCheckbox,
-        showTechnicalAndInteractionCheckbox,
-      } = this.notification.options.customElementOptions;
+      const { strings, showIncognitoCheckbox } =
+        this.notification.options.customElementOptions;
+      return !(showIncognitoCheckbox || strings.msgs.length);
+    }
 
-      return !(
-        strings.msgs.length ||
-        this.#dataCollectionPermissions?.msg ||
-        showIncognitoCheckbox ||
-        showTechnicalAndInteractionCheckbox
+    get hasMultiplePermissionsEntries() {
+      const { strings, showIncognitoCheckbox } =
+        this.notification.options.customElementOptions;
+      return (
+        strings.msgs.length > 1 ||
+        (strings.msgs.length === 1 && showIncognitoCheckbox)
       );
     }
 
@@ -196,44 +182,16 @@ customElements.define(
       return strings.fullDomainsList.msgIdIndex === idx;
     }
 
-    /**
-     * @returns {{idx: number, collectsTechnicalAndInteractionData: boolean}}
-     * An object with information about data collection permissions for the UI.
-     */
-    get #dataCollectionPermissions() {
-      if (!this.notification?.options?.customElementOptions) {
-        return undefined;
-      }
-      const { strings } = this.notification.options.customElementOptions;
-      return strings.dataCollectionPermissions;
-    }
-
     render() {
-      const {
-        strings,
-        showIncognitoCheckbox,
-        showTechnicalAndInteractionCheckbox,
-        isUserScriptsRequest,
-      } = this.notification.options.customElementOptions;
+      const { strings, showIncognitoCheckbox } =
+        this.notification.options.customElementOptions;
 
-      const {
-        textEl,
-        introEl,
-        permsTitleEl,
-        permsListEl,
-        permsTitleDataCollectionEl,
-        permsListDataCollectionEl,
-        permsTitleOptionalEl,
-        permsListOptionalEl,
-      } = this;
+      const { textEl, introEl, permsSingleEl, permsListEl } = this;
 
       const HTML_NS = "http://www.w3.org/1999/xhtml";
       const doc = this.ownerDocument;
 
       this.#clearChildElements();
-      // Re-enable "Allow" button if it was disabled by a previous request with
-      // isUserScriptsRequest=true.
-      this.#setAllowButtonEnabled(true);
 
       if (strings.text) {
         textEl.textContent = strings.text;
@@ -251,88 +209,29 @@ customElements.define(
         introEl.hidden = false;
       }
 
-      // "sitepermission" add-ons don't have section headers.
-      if (strings.sectionHeaders) {
-        const { required, dataCollection, optional } = strings.sectionHeaders;
-
-        permsTitleEl.textContent = required;
-        permsTitleDataCollectionEl.textContent = dataCollection;
-        permsTitleOptionalEl.textContent = optional;
-      }
-
       // Return earlier if there are no permissions to list.
       if (this.hasNoPermissions) {
         return;
       }
 
-      // We only expect a single permission for a userScripts request per
-      // https://searchfox.org/mozilla-central/rev/5fb48bf50516ed2529d533e5dfe49b4752efb8b8/browser/modules/ExtensionsUI.sys.mjs#308-313.
-      if (isUserScriptsRequest) {
-        // The "userScripts" permission cannot be granted until the user has
-        // confirmed again in the notification's content, as described at
-        // https://bugzilla.mozilla.org/show_bug.cgi?id=1917000#c1
-
-        let { checkboxEl, warningEl } = this.#createUserScriptsPermissionItems(
-          // "userScripts" can only be requested with "permissions.request()",
-          // which enforces that it is the only permission in the request.
-          strings.msgs[0]
-        );
-
-        this.#setAllowButtonEnabled(false);
-
-        let item = doc.createElementNS(HTML_NS, "li");
-        item.append(checkboxEl, warningEl);
-        item.classList.add("webext-perm-optional");
-        permsListEl.append(item);
-
-        permsTitleEl.hidden = false;
-        permsListEl.hidden = false;
-      } else {
-        if (strings.msgs.length) {
-          for (let [idx, msg] of strings.msgs.entries()) {
-            let item = doc.createElementNS(HTML_NS, "li");
-            item.classList.add("webext-perm-granted");
-            if (
-              this.hasFullDomainsList &&
-              this.#isFullDomainsListEntryIndex(idx)
-            ) {
-              item.append(this.#createFullDomainsListFragment(msg));
-            } else {
-              item.textContent = msg;
-            }
-            permsListEl.appendChild(item);
+      // If there are multiple permissions entries to be shown,
+      // add to the list element one entry for each granted permission
+      // (and one for the private browsing checkbox, if it should
+      // be shown) and return earlier.
+      if (this.hasMultiplePermissionsEntries) {
+        for (let [idx, msg] of strings.msgs.entries()) {
+          let item = doc.createElementNS(HTML_NS, "li");
+          item.classList.add("webext-perm-granted");
+          if (
+            this.hasFullDomainsList &&
+            this.#isFullDomainsListEntryIndex(idx)
+          ) {
+            item.append(this.#createFullDomainsListFragment(msg));
+          } else {
+            item.textContent = msg;
           }
-
-          permsTitleEl.hidden = false;
-          permsListEl.hidden = false;
+          permsListEl.appendChild(item);
         }
-
-        if (this.#dataCollectionPermissions?.msg) {
-          let item = doc.createElementNS(HTML_NS, "li");
-          item.classList.add(
-            "webext-perm-granted",
-            "webext-data-collection-perm-granted"
-          );
-          item.textContent = this.#dataCollectionPermissions.msg;
-          permsListDataCollectionEl.appendChild(item);
-          permsTitleDataCollectionEl.hidden = false;
-          permsListDataCollectionEl.hidden = false;
-        }
-
-        // Add a checkbox for the "technicalAndInteraction" optional data
-        // collection permission.
-        if (showTechnicalAndInteractionCheckbox) {
-          let item = doc.createElementNS(HTML_NS, "li");
-          item.classList.add(
-            "webext-perm-optional",
-            "webext-data-collection-perm-optional"
-          );
-          item.appendChild(this.#createTechnicalAndInteractionDataCheckbox());
-          permsListOptionalEl.appendChild(item);
-          permsTitleOptionalEl.hidden = false;
-          permsListOptionalEl.hidden = false;
-        }
-
         if (showIncognitoCheckbox) {
           let item = doc.createElementNS(HTML_NS, "li");
           item.classList.add(
@@ -340,11 +239,32 @@ customElements.define(
             "webext-perm-privatebrowsing"
           );
           item.appendChild(this.#createPrivateBrowsingCheckbox());
-          permsListOptionalEl.appendChild(item);
-          permsTitleOptionalEl.hidden = false;
-          permsListOptionalEl.hidden = false;
+          permsListEl.appendChild(item);
         }
+        permsListEl.hidden = false;
+        return;
       }
+
+      // Render a single permission entry, which will be either:
+      // - an entry for the private browsing checkbox
+      // - or single granted permission entry.
+      if (showIncognitoCheckbox) {
+        permsSingleEl.appendChild(this.#createPrivateBrowsingCheckbox());
+        permsSingleEl.hidden = false;
+        permsSingleEl.classList.add(
+          "webext-perm-optional",
+          "webext-perm-privatebrowsing"
+        );
+        return;
+      }
+
+      const msg = strings.msgs[0];
+      if (this.hasFullDomainsList && this.#isFullDomainsListEntryIndex(0)) {
+        permsSingleEl.append(this.#createFullDomainsListFragment(msg));
+      } else {
+        permsSingleEl.textContent = msg;
+      }
+      permsSingleEl.hidden = false;
     }
 
     #createFullDomainsListFragment(msg) {
@@ -374,16 +294,7 @@ customElements.define(
     }
 
     #clearChildElements() {
-      const {
-        textEl,
-        introEl,
-        permsTitleEl,
-        permsListEl,
-        permsTitleDataCollectionEl,
-        permsListDataCollectionEl,
-        permsTitleOptionalEl,
-        permsListOptionalEl,
-      } = this;
+      const { textEl, introEl, permsSingleEl, permsListEl } = this;
 
       // Clear all changes to the child elements that may have been changed
       // by a previous call of the render method.
@@ -394,116 +305,35 @@ customElements.define(
       introEl.textContent = "";
       introEl.hidden = true;
 
-      for (const title of [
-        permsTitleEl,
-        permsTitleOptionalEl,
-        permsTitleDataCollectionEl,
-      ]) {
-        title.hidden = true;
-      }
-
-      for (const list of [
-        permsListEl,
-        permsListDataCollectionEl,
-        permsListOptionalEl,
-      ]) {
-        list.textContent = "";
-        list.hidden = true;
-      }
-    }
-
-    #createUserScriptsPermissionItems(userScriptsPermissionMessage) {
-      let checkboxEl = this.ownerDocument.createElement("moz-checkbox");
-      checkboxEl.label = userScriptsPermissionMessage;
-      checkboxEl.checked = false;
-      checkboxEl.addEventListener("change", () => {
-        // The main "Allow" button is disabled until the checkbox is checked.
-        this.#setAllowButtonEnabled(checkboxEl.checked);
-      });
-
-      let warningEl = this.ownerDocument.createElement("moz-message-bar");
-      warningEl.setAttribute("type", "warning");
-      warningEl.setAttribute(
-        "message",
-        lazy.PERMISSION_L10N.formatValueSync(
-          "webext-perms-extra-warning-userScripts-short"
-        )
+      permsSingleEl.textContent = "";
+      permsSingleEl.hidden = true;
+      permsSingleEl.classList.remove(
+        "webext-perm-optional",
+        "webext-perm-privatebrowsing"
       );
 
-      return { checkboxEl, warningEl };
-    }
-
-    #setAllowButtonEnabled(allowed) {
-      let disabled = !allowed;
-      // "mainactiondisabled" mirrors the "disabled" boolean attribute of the
-      // "Allow" button. toggleAttribute("mainactiondisabled", disabled) cannot
-      // be used due to bug 1938481.
-      if (disabled) {
-        this.setAttribute("mainactiondisabled", "true");
-      } else {
-        this.removeAttribute("mainactiondisabled");
-      }
-
-      // The "mainactiondisabled" attribute may also be toggled by the
-      // PopupNotifications._setNotificationUIState() method, which can be
-      // called as a side effect of toggling a checkbox within the notification
-      // (via PopupNotifications._onCommand).
-      //
-      // To prevent PopupNotifications._setNotificationUIState() from setting
-      // the "mainactiondisabled" attribute to a different state, also set the
-      // "invalidselection" attribute, since _setNotificationUIState() mirrors
-      // its value to "mainactiondisabled".
-      //
-      // TODO bug 1938623: Remove this when a better alternative exists.
-      this.toggleAttribute("invalidselection", disabled);
+      permsListEl.textContent = "";
+      permsListEl.hidden = true;
     }
 
     #createPrivateBrowsingCheckbox() {
-      const { grantPrivateBrowsingAllowed } =
+      const { onPrivateBrowsingAllowedChanged, grantPrivateBrowsingAllowed } =
         this.notification.options.customElementOptions;
 
-      let checkboxEl = this.ownerDocument.createElement("moz-checkbox");
+      const doc = this.ownerDocument;
+
+      let checkboxEl = doc.createXULElement("checkbox");
       checkboxEl.checked = grantPrivateBrowsingAllowed;
-      checkboxEl.addEventListener("change", () => {
-        // NOTE: the popupnotification instances will be reused
-        // and so the callback function is destructured here to
-        // avoid this custom element to prevent it from being
-        // garbage collected.
-        const { onPrivateBrowsingAllowedChanged } =
-          this.notification.options.customElementOptions;
+      checkboxEl.addEventListener("CheckboxStateChange", () => {
         onPrivateBrowsingAllowedChanged?.(checkboxEl.checked);
       });
-      this.ownerDocument.l10n.setAttributes(
+      doc.l10n.setAttributes(
         checkboxEl,
-        "popup-notification-addon-privatebrowsing-checkbox2"
+        "popup-notification-addon-privatebrowsing-checkbox"
       );
       return checkboxEl;
     }
-
-    #createTechnicalAndInteractionDataCheckbox() {
-      const { grantTechnicalAndInteractionDataCollection } =
-        this.notification.options.customElementOptions;
-
-      const checkboxEl = this.ownerDocument.createElement("moz-checkbox");
-      this.ownerDocument.l10n.setAttributes(
-        checkboxEl,
-        "popup-notification-addon-technical-and-interaction-checkbox"
-      );
-      checkboxEl.checked = grantTechnicalAndInteractionDataCollection;
-      checkboxEl.addEventListener("change", () => {
-        // NOTE: the popupnotification instances will be reused
-        // and so the callback function is destructured here to
-        // avoid this custom element to prevent it from being
-        // garbage collected.
-        const { onTechnicalAndInteractionDataChanged } =
-          this.notification.options.customElementOptions;
-        onTechnicalAndInteractionDataChanged?.(checkboxEl.checked);
-      });
-
-      return checkboxEl;
-    }
-  },
-  { extends: "popupnotification" }
+  }
 );
 
 customElements.define(
@@ -665,305 +495,7 @@ customElements.define(
     onDownloadEnded() {
       this.updateProgress();
     }
-  },
-  { extends: "popupnotification" }
-);
-
-// This custom element wraps the messagebar shown in the extensions panel
-// and used in both ext-browserAction.js and browser-unified-extensions.js
-customElements.define(
-  "unified-extensions-item-messagebar-wrapper",
-  class extends HTMLElement {
-    get extensionPolicy() {
-      return WebExtensionPolicy.getByID(this.extensionId);
-    }
-
-    get extensionName() {
-      return this.extensionPolicy?.name;
-    }
-
-    get isSoftBlocked() {
-      return this.extensionPolicy?.extension?.isSoftBlocked;
-    }
-
-    connectedCallback() {
-      this.messagebar = document.createElement("moz-message-bar");
-      this.messagebar.classList.add("unified-extensions-item-messagebar");
-      this.append(this.messagebar);
-      this.refresh();
-    }
-
-    disconnectedCallback() {
-      this.messagebar?.remove();
-    }
-
-    async refresh() {
-      if (!this.messagebar) {
-        // Nothing to refresh, the custom element has not been
-        // connected to the DOM yet.
-        return;
-      }
-      if (!customElements.get("moz-message-bar")) {
-        document.createElement("moz-message-bar");
-        await customElements.whenDefined("moz-message-bar");
-      }
-      const { messagebar } = this;
-      if (this.isSoftBlocked) {
-        const SOFTBLOCK_FLUENTID =
-          "unified-extensions-item-messagebar-softblocked";
-        if (
-          messagebar.messageL10nId === SOFTBLOCK_FLUENTID &&
-          messagebar.messageL10nArgs?.extensionName === this.extensionName
-        ) {
-          // nothing to refresh.
-          return;
-        }
-        messagebar.removeAttribute("hidden");
-        messagebar.setAttribute("type", "warning");
-        messagebar.messageL10nId = SOFTBLOCK_FLUENTID;
-        messagebar.messageL10nArgs = {
-          extensionName: this.extensionName,
-        };
-      } else {
-        if (messagebar.hasAttribute("hidden")) {
-          // nothing to refresh.
-          return;
-        }
-        messagebar.setAttribute("hidden", "true");
-        messagebar.messageL10nId = null;
-        messagebar.messageL10nArgs = null;
-      }
-      messagebar.requestUpdate();
-    }
   }
-);
-
-class BrowserActionWidgetObserver {
-  #connected = false;
-  /**
-   * @param {string} addonId The ID of the extension
-   * @param {function()} onButtonAreaChanged Callback that is called whenever
-   *   the observer detects the presence, absence or relocation of the browser
-   *   action button for the given extension.
-   */
-  constructor(addonId, onButtonAreaChanged) {
-    this.addonId = addonId;
-    // The expected ID of the browserAction widget. Keep in sync with
-    // actionWidgetId logic in ext-browserAction.js.
-    this.widgetId = `${lazy.ExtensionCommon.makeWidgetId(addonId)}-browser-action`;
-    this.onButtonAreaChanged = onButtonAreaChanged;
-  }
-
-  startObserving() {
-    if (this.#connected) {
-      return;
-    }
-    this.#connected = true;
-    CustomizableUI.addListener(this);
-    window.addEventListener("unload", this);
-  }
-
-  stopObserving() {
-    if (!this.#connected) {
-      return;
-    }
-    this.#connected = false;
-    CustomizableUI.removeListener(this);
-    window.removeEventListener("unload", this);
-  }
-
-  hasBrowserActionUI() {
-    const policy = WebExtensionPolicy.getByID(this.addonId);
-    if (!policy?.canAccessWindow(window)) {
-      // Add-on is not an extension, or extension has not started yet. Or it
-      // was uninstalled/disabled. Or disabled in current (private) window.
-      return false;
-    }
-    if (!gUnifiedExtensions.browserActionFor(policy)) {
-      // Does not have a browser action button.
-      return false;
-    }
-    return true;
-  }
-
-  onWidgetCreated(aWidgetId) {
-    // This is triggered as soon as ext-browserAction registers the button,
-    // shortly after hasBrowserActionUI() above can return true for the first
-    // time since add-on installation.
-    if (aWidgetId === this.widgetId) {
-      this.onButtonAreaChanged();
-    }
-  }
-
-  onWidgetAdded(aWidgetId) {
-    if (aWidgetId === this.widgetId) {
-      this.onButtonAreaChanged();
-    }
-  }
-
-  onWidgetMoved(aWidgetId) {
-    if (aWidgetId === this.widgetId) {
-      this.onButtonAreaChanged();
-    }
-  }
-
-  handleEvent(event) {
-    if (event.type === "unload") {
-      this.stopObserving();
-    }
-  }
-}
-
-customElements.define(
-  "addon-installed-notification",
-  class MozAddonInstalledNotification extends customElements.get(
-    "popupnotification"
-  ) {
-    #shouldIgnoreCheckboxStateChangeEvent = false;
-    #browserActionWidgetObserver;
-    connectedCallback() {
-      this.descriptionEl = this.querySelector("#addon-install-description");
-      this.pinExtensionEl = this.querySelector(
-        "#addon-pin-toolbarbutton-checkbox"
-      );
-
-      this.addEventListener("click", this);
-      this.pinExtensionEl.addEventListener("CheckboxStateChange", this);
-      this.#browserActionWidgetObserver?.startObserving();
-    }
-
-    disconnectedCallback() {
-      this.removeEventListener("click", this);
-      this.pinExtensionEl.removeEventListener("CheckboxStateChange", this);
-      this.#browserActionWidgetObserver?.stopObserving();
-    }
-
-    get #settingsLinkId() {
-      return "addon-install-settings-link";
-    }
-
-    handleEvent(event) {
-      const { target } = event;
-
-      switch (event.type) {
-        case "click": {
-          if (target.id === this.#settingsLinkId) {
-            const { addonId } = this.notification.options.customElementOptions;
-            BrowserAddonUI.openAddonsMgr(
-              "addons://detail/" + encodeURIComponent(addonId)
-            );
-          }
-          break;
-        }
-        case "CheckboxStateChange":
-          // CheckboxStateChange fires whenever the checked value changes.
-          // Ignore the event if triggered by us instead of the user.
-          if (!this.#shouldIgnoreCheckboxStateChangeEvent) {
-            this.#handlePinnedCheckboxStateChange();
-          }
-          break;
-      }
-    }
-
-    show() {
-      super.show();
-
-      if (!this.notification) {
-        return;
-      }
-
-      if (!this.notification.options?.customElementOptions) {
-        throw new Error(
-          "Mandatory customElementOptions property missing from notification options"
-        );
-      }
-
-      this.#browserActionWidgetObserver?.stopObserving();
-      this.#browserActionWidgetObserver = new BrowserActionWidgetObserver(
-        this.notification.options.customElementOptions.addonId,
-        () => this.#renderPinToolbarButtonCheckbox()
-      );
-
-      this.render();
-      if (this.isConnected) {
-        this.#browserActionWidgetObserver.startObserving();
-      }
-    }
-
-    render() {
-      let fluentId = "appmenu-addon-post-install-message3";
-
-      this.ownerDocument.l10n.setAttributes(this.descriptionEl, null);
-      this.querySelector(`#${this.#settingsLinkId}`)?.remove();
-
-      if (this.#dataCollectionPermissionsEnabled) {
-        const HTML_NS = "http://www.w3.org/1999/xhtml";
-        const link = document.createElementNS(HTML_NS, "a");
-        link.setAttribute("id", this.#settingsLinkId);
-        link.setAttribute("data-l10n-name", "settings-link");
-        // Make the link both accessible and keyboard-friendly.
-        link.href = "#";
-        this.descriptionEl.append(link);
-
-        fluentId = "appmenu-addon-post-install-message-with-data-collection";
-      }
-
-      this.ownerDocument.l10n.setAttributes(this.descriptionEl, fluentId);
-      this.#renderPinToolbarButtonCheckbox();
-    }
-
-    get #dataCollectionPermissionsEnabled() {
-      return Services.prefs.getBoolPref(
-        "extensions.dataCollectionPermissions.enabled",
-        false
-      );
-    }
-
-    #renderPinToolbarButtonCheckbox() {
-      // If the extension has a browser action, show the checkbox to allow the
-      // user to customize its location. Hide by default until we know for
-      // certain that the conditions have been met.
-      this.pinExtensionEl.hidden = true;
-
-      if (!this.#browserActionWidgetObserver.hasBrowserActionUI()) {
-        return;
-      }
-      const widgetId = this.#browserActionWidgetObserver.widgetId;
-
-      // Extension buttons appear in AREA_ADDONS by default. There are several
-      // ways for the default to differ for a specific add-on, including the
-      // extension specifying default_area in its manifest.json file, an
-      // enterprise policy having been configured, or the user having moved the
-      // button someplace else. We only show the checkbox if it is either in
-      // AREA_ADDONS or in the toolbar. This covers almost all common cases.
-      const area = CustomizableUI.getPlacementOfWidget(widgetId)?.area;
-      let shouldPinToToolbar = area !== CustomizableUI.AREA_ADDONS;
-      if (shouldPinToToolbar && area !== CustomizableUI.AREA_NAVBAR) {
-        // We only support AREA_ADDONS and AREA_NAVBAR for now.
-        return;
-      }
-      this.#shouldIgnoreCheckboxStateChangeEvent = true;
-      this.pinExtensionEl.checked = shouldPinToToolbar;
-      this.#shouldIgnoreCheckboxStateChangeEvent = false;
-      this.pinExtensionEl.hidden = false;
-    }
-
-    #handlePinnedCheckboxStateChange() {
-      if (!this.#browserActionWidgetObserver.hasBrowserActionUI()) {
-        // Unexpected. #renderPinToolbarButtonCheckbox() should have hidden
-        // the checkbox if there is no widget.
-        const { addonId } = this.notification.options.customElementOptions;
-        throw new Error(`No browser action widget found for ${addonId}!`);
-      }
-      const widgetId = this.#browserActionWidgetObserver.widgetId;
-      const shouldPinToToolbar = this.pinExtensionEl.checked;
-      if (shouldPinToToolbar) {
-        gUnifiedExtensions._maybeMoveWidgetNodeBack(widgetId);
-      }
-      gUnifiedExtensions.pinToToolbar(widgetId, shouldPinToToolbar);
-    }
-  },
-  { extends: "popupnotification" }
 );
 
 // Removes a doorhanger notification if all of the installs it was notifying
@@ -1067,9 +599,11 @@ var gXPInstallObserver = {
       }
       installInfo = null;
 
-      Glean.securityUi.events.accumulateSingleSample(
-        Ci.nsISecurityUITelemetry.WARNING_CONFIRM_ADDON_INSTALL_CLICK_THROUGH
-      );
+      Services.telemetry
+        .getHistogramById("SECURITY_UI")
+        .add(
+          Ci.nsISecurityUITelemetry.WARNING_CONFIRM_ADDON_INSTALL_CLICK_THROUGH
+        );
     };
 
     let cancelInstallation = () => {
@@ -1192,16 +726,12 @@ var gXPInstallObserver = {
 
     removeNotificationOnEnd(popup, installInfo.installs);
 
-    Glean.securityUi.events.accumulateSingleSample(
-      Ci.nsISecurityUITelemetry.WARNING_CONFIRM_ADDON_INSTALL
-    );
+    Services.telemetry
+      .getHistogramById("SECURITY_UI")
+      .add(Ci.nsISecurityUITelemetry.WARNING_CONFIRM_ADDON_INSTALL);
   },
 
-  // IDs of addon install related notifications, passed by this file
-  // (browser-addons.js) to PopupNotifications.show(). The only exception is
-  // "addon-webext-permissions" (from browser/modules/ExtensionsUI.sys.mjs),
-  // which can not only be triggered during add-on installation, but also
-  // later, when the extension uses the browser.permissions.request() API.
+  // IDs of addon install related notifications
   NOTIFICATION_IDS: [
     "addon-install-blocked",
     "addon-install-confirmation",
@@ -1325,7 +855,9 @@ var gXPInstallObserver = {
 
         options.removeOnDismissal = true;
         options.persistent = false;
-        Glean.securityUi.events.accumulateSingleSample(
+
+        let secHistogram = Services.telemetry.getHistogramById("SECURITY_UI");
+        secHistogram.add(
           Ci.nsISecurityUITelemetry.WARNING_ADDON_ASKING_PREVENTED
         );
         let popup = PopupNotifications.show(
@@ -1418,7 +950,9 @@ var gXPInstallObserver = {
           let learnMore = doc.getElementById("addon-install-blocked-info");
           learnMore.setAttribute("support-page", article);
         };
-        Glean.securityUi.events.accumulateSingleSample(
+
+        let secHistogram = Services.telemetry.getHistogramById("SECURITY_UI");
+        secHistogram.add(
           Ci.nsISecurityUITelemetry.WARNING_ADDON_ASKING_PREVENTED
         );
 
@@ -1435,7 +969,7 @@ var gXPInstallObserver = {
         ]);
 
         const action = buildNotificationAction(installMsg, () => {
-          Glean.securityUi.events.accumulateSingleSample(
+          secHistogram.add(
             Ci.nsISecurityUITelemetry
               .WARNING_ADDON_ASKING_PREVENTED_CLICK_THROUGH
           );
@@ -1827,17 +1361,11 @@ var BrowserAddonUI = {
       );
     }
 
-    // If the prompt is being used for ML model removal, use a body message
-    let body = null;
-    if (addon.type === "mlmodel") {
-      body = await lazy.l10n.formatValue("addon-mlmodel-removal-body");
-    }
-
     let checkboxState = { value: false };
     let result = confirmEx(
       window,
       title,
-      body,
+      null,
       btnFlags,
       btnTitle,
       /* button1 */ null,
@@ -1974,9 +1502,6 @@ var BrowserAddonUI = {
 // "redeclaration" syntax error.
 var gUnifiedExtensions = {
   _initialized: false,
-  // buttonAlwaysVisible: true, -- based on pref, declared later.
-  _buttonShownBeforeButtonOpen: null,
-  _buttonBarHasMouse: false,
 
   // We use a `<deck>` in the extension items to show/hide messages below each
   // extension name. We have a default message for origin controls, and
@@ -1993,15 +1518,13 @@ var gUnifiedExtensions = {
       return;
     }
 
-    // Button is hidden by default, declared in navigator-toolbox.inc.xhtml.
     this._button = document.getElementById("unified-extensions-button");
-    this._navbar = document.getElementById("nav-bar");
-    this.updateButtonVisibility();
-    this._buttonAttrObs = new MutationObserver(() => this.onButtonOpenChange());
-    this._buttonAttrObs.observe(this._button, { attributeFilter: ["open"] });
-    this._button.addEventListener("PopupNotificationsBeforeAnchor", this);
-    this._navbar.addEventListener("mouseenter", this);
-    this._navbar.addEventListener("mouseleave", this);
+    // TODO: Bug 1778684 - Auto-hide button when there is no active extension.
+    this._button.hidden = false;
+
+    document
+      .getElementById("nav-bar")
+      .setAttribute("unifiedextensionsbuttonshown", true);
 
     gBrowser.addTabsProgressListener(this);
     window.addEventListener("TabSelect", () => this.updateAttention());
@@ -2010,14 +1533,8 @@ var gUnifiedExtensions = {
     this.permListener = () => this.updateAttention();
     lazy.ExtensionPermissions.addListener(this.permListener);
 
-    this.onAppMenuShowing = this.onAppMenuShowing.bind(this);
-    PanelUI.mainView.addEventListener("ViewShowing", this.onAppMenuShowing);
     gNavToolbox.addEventListener("customizationstarting", this);
-    gNavToolbox.addEventListener("aftercustomization", this);
     CustomizableUI.addListener(this);
-    AddonManager.addManagerListener(this);
-
-    Glean.extensionsButton.prefersHiddenButton.set(!this.buttonAlwaysVisible);
 
     this._initialized = true;
   },
@@ -2027,30 +1544,13 @@ var gUnifiedExtensions = {
       return;
     }
 
-    this._buttonAttrObs.disconnect();
-    this._button.removeEventListener("PopupNotificationsBeforeAnchor", this);
-
     window.removeEventListener("toolbarvisibilitychange", this);
 
     lazy.ExtensionPermissions.removeListener(this.permListener);
     this.permListener = null;
 
-    PanelUI.mainView.removeEventListener("ViewShowing", this.onAppMenuShowing);
     gNavToolbox.removeEventListener("customizationstarting", this);
-    gNavToolbox.removeEventListener("aftercustomization", this);
     CustomizableUI.removeListener(this);
-    AddonManager.removeManagerListener(this);
-  },
-
-  onBlocklistAttentionUpdated() {
-    this.updateAttention();
-  },
-
-  onAppMenuShowing() {
-    document.getElementById("appMenu-extensions-themes-button").hidden =
-      !this.buttonAlwaysVisible;
-    document.getElementById("appMenu-unified-extensions-button").hidden =
-      this.buttonAlwaysVisible;
   },
 
   onLocationChange(browser, webProgress, _request, _uri, flags) {
@@ -2064,114 +1564,37 @@ var gUnifiedExtensions = {
     }
   },
 
-  updateButtonVisibility() {
-    // TODO: Bug 1778684 - Auto-hide button when there is no active extension.
-    let shouldShowButton =
-      this.buttonAlwaysVisible ||
-      // If anything is anchored to the button, keep it visible.
-      this._button.open ||
-      // Button will be open soon - see ensureButtonShownBeforeAttachingPanel.
-      this._buttonShownBeforeButtonOpen ||
-      // Items in the toolbar shift when the button hides. To prevent the user
-      // from clicking on something different than they intended, never hide an
-      // already-visible button while the mouse is still in the toolbar.
-      (!this.button.hidden && this._buttonBarHasMouse) ||
-      // Attention dot - see comment at buttonIgnoresAttention.
-      (!this.buttonIgnoresAttention && this.button.hasAttribute("attention")) ||
-      // Always show when customizing, because even if the button should mostly
-      // be hidden, the user should be able to specify the desired location for
-      // cases where the button is forcibly shown.
-      CustomizationHandler.isCustomizing();
-
-    if (shouldShowButton) {
-      this._button.hidden = false;
-      this._navbar.setAttribute("unifiedextensionsbuttonshown", true);
-    } else {
-      this._button.hidden = true;
-      this._navbar.removeAttribute("unifiedextensionsbuttonshown");
-    }
-  },
-
-  ensureButtonShownBeforeAttachingPanel(panel) {
-    if (!this.buttonAlwaysVisible && !this._button.open) {
-      // When the panel is anchored to the button, its "open" attribute will be
-      // set, which visually renders as a "button pressed". Until we get there,
-      // we need to make sure that the button is visible so that it can serve
-      // as anchor.
-      this._buttonShownBeforeButtonOpen = panel;
-      this.updateButtonVisibility();
-    }
-  },
-
-  onButtonOpenChange() {
-    if (this._button.open) {
-      this._buttonShownBeforeButtonOpen = false;
-    }
-    if (!this.buttonAlwaysVisible && !this._button.open) {
-      this.updateButtonVisibility();
-    }
-  },
-
   // Update the attention indicator for the whole unified extensions button.
   updateAttention() {
-    let permissionsAttention = false;
-    let quarantinedAttention = false;
-    let blocklistAttention = AddonManager.shouldShowBlocklistAttention();
+    let attention = false;
+    for (let policy of this.getActivePolicies()) {
+      let widget = this.browserActionFor(policy)?.widget;
 
-    // Computing the OriginControls state for all active extensions is potentially
-    // more expensive, and so we don't compute it if we have already determined that
-    // there is a blocklist attention to be shown.
-    if (!blocklistAttention) {
-      for (let policy of this.getActivePolicies()) {
-        let widget = this.browserActionFor(policy)?.widget;
-
-        // Only show for extensions which are not already visible in the toolbar.
-        if (!widget || widget.areaType !== CustomizableUI.TYPE_TOOLBAR) {
-          if (lazy.OriginControls.getAttentionState(policy, window).attention) {
-            permissionsAttention = true;
-            break;
-          }
+      // Only show for extensions which are not already visible in the toolbar.
+      if (!widget || widget.areaType !== CustomizableUI.TYPE_TOOLBAR) {
+        if (lazy.OriginControls.getAttentionState(policy, window).attention) {
+          attention = true;
+          break;
         }
       }
-
-      // If the domain is quarantined and we have extensions not allowed, we'll
-      // show a notification in the panel so we want to let the user know about
-      // it.
-      quarantinedAttention = this._shouldShowQuarantinedNotification();
     }
 
-    this.button.toggleAttribute(
-      "attention",
-      quarantinedAttention || permissionsAttention || blocklistAttention
-    );
-    let msgId = permissionsAttention
+    // If the domain is quarantined and we have extensions not allowed, we'll
+    // show a notification in the panel so we want to let the user know about
+    // it.
+    const quarantined = this._shouldShowQuarantinedNotification();
+
+    this.button.toggleAttribute("attention", quarantined || attention);
+    let msgId = attention
       ? "unified-extensions-button-permissions-needed"
       : "unified-extensions-button";
     // Quarantined state takes precedence over anything else.
-    if (quarantinedAttention) {
+    if (quarantined) {
       msgId = "unified-extensions-button-quarantined";
     }
-    // blocklistAttention state takes precedence over the other ones
-    // because it is dismissible and, once dismissed, the tooltip will
-    // show one of the other messages if appropriate.
-    if (blocklistAttention) {
-      msgId = "unified-extensions-button-blocklisted";
-    }
     this.button.ownerDocument.l10n.setAttributes(this.button, msgId);
-    if (!this.buttonAlwaysVisible && !this.buttonIgnoresAttention) {
-      if (blocklistAttention) {
-        this.recordButtonTelemetry("attention_blocklist");
-      } else if (permissionsAttention || quarantinedAttention) {
-        this.recordButtonTelemetry("attention_permission_denied");
-      }
-      this.updateButtonVisibility();
-    }
   },
 
-  // Get the anchor to use with PopupNotifications.show(). If you add a new use
-  // of this method, make sure to update gXPInstallObserver.NOTIFICATION_IDS!
-  // If the new ID is not added in NOTIFICATION_IDS, consider handling the case
-  // in the "PopupNotificationsBeforeAnchor" handler elsewhere in this file.
   getPopupAnchorID(aBrowser, aWindow) {
     const anchorID = "unified-extensions-button";
     const attr = anchorID + "popupnotificationanchor";
@@ -2258,40 +1681,8 @@ var gUnifiedExtensions = {
         this.onPanelViewHiding(event.target);
         break;
 
-      case "PopupNotificationsBeforeAnchor":
-        {
-          const popupnotification = PopupNotifications.panel.firstElementChild;
-          const popupid = popupnotification?.getAttribute("popupid");
-          if (popupid === "addon-webext-permissions") {
-            // "addon-webext-permissions" is also in NOTIFICATION_IDS, but to
-            // distinguish it from other cases, give it a separate reason.
-            this.recordButtonTelemetry("extension_permission_prompt");
-          } else if (gXPInstallObserver.NOTIFICATION_IDS.includes(popupid)) {
-            this.recordButtonTelemetry("addon_install_doorhanger");
-          } else {
-            console.error(`Unrecognized notification ID: ${popupid}`);
-          }
-          this.ensureButtonShownBeforeAttachingPanel(PopupNotifications.panel);
-        }
-        break;
-
-      case "mouseenter":
-        this._buttonBarHasMouse = true;
-        break;
-
-      case "mouseleave":
-        this._buttonBarHasMouse = false;
-        this.updateButtonVisibility();
-        break;
-
       case "customizationstarting":
         this.panel.hidePopup();
-        this.recordButtonTelemetry("customize");
-        this.updateButtonVisibility();
-        break;
-
-      case "aftercustomization":
-        this.updateButtonVisibility();
         break;
 
       case "toolbarvisibilitychange":
@@ -2314,23 +1705,16 @@ var gUnifiedExtensions = {
     const container = panelview.querySelector(
       "#unified-extensions-messages-container"
     );
-
-    if (this.blocklistAttentionInfo?.shouldShow) {
-      this._messageBarBlocklist = this._createBlocklistMessageBar(container);
-    } else {
-      this._messageBarBlocklist?.remove();
-      this._messageBarBlocklist = null;
-    }
-
     const shouldShowQuarantinedNotification =
       this._shouldShowQuarantinedNotification();
+
     if (shouldShowQuarantinedNotification) {
       if (!this._messageBarQuarantinedDomain) {
         this._messageBarQuarantinedDomain = this._makeMessageBar({
           messageBarFluentId:
             "unified-extensions-mb-quarantined-domain-message-3",
           supportPage: "quarantined-domains",
-          dismissible: false,
+          dismissable: false,
         });
         this._messageBarQuarantinedDomain
           .querySelector("a")
@@ -2346,7 +1730,6 @@ var gUnifiedExtensions = {
       container.contains(this._messageBarQuarantinedDomain)
     ) {
       container.removeChild(this._messageBarQuarantinedDomain);
-      this._messageBarQuarantinedDomain = null;
     }
   },
 
@@ -2486,12 +1869,6 @@ var gUnifiedExtensions = {
       );
       CustomizableUI.addPanelCloseListeners(this._panel);
 
-      this._panel
-        .querySelector("#unified-extensions-manage-extensions")
-        .addEventListener("command", () => {
-          BrowserAddonUI.openAddonsMgr("addons://list/extension");
-        });
-
       // Lazy-load the l10n strings. Those strings are used for the CUI and
       // non-CUI extensions in the unified extensions panel.
       document
@@ -2505,9 +1882,7 @@ var gUnifiedExtensions = {
     return this._panel;
   },
 
-  // `aEvent` and `reason` are optional. If `reason` is specified, it should be
-  // a valid argument to gUnifiedExtensions.recordButtonTelemetry().
-  async togglePanel(aEvent, reason) {
+  async togglePanel(aEvent) {
     if (!CustomizationHandler.isCustomizing()) {
       if (aEvent) {
         if (
@@ -2529,10 +1904,7 @@ var gUnifiedExtensions = {
         if (!this.hasExtensionsInPanel()) {
           let viewID;
           if (
-            Services.prefs.getBoolPref("extensions.getAddons.showPane", true) &&
-            // Unconditionally show the list of extensions if the blocklist
-            // attention flag has been shown on the extension panel button.
-            !AddonManager.shouldShowBlocklistAttention()
+            Services.prefs.getBoolPref("extensions.getAddons.showPane", true)
           ) {
             viewID = "addons://discover/";
           } else {
@@ -2542,9 +1914,6 @@ var gUnifiedExtensions = {
           return;
         }
       }
-
-      this.blocklistAttentionInfo =
-        await AddonManager.getBlocklistAttentionInfo();
 
       let panel = this.panel;
 
@@ -2568,8 +1937,6 @@ var gUnifiedExtensions = {
         }
 
         panel.hidden = false;
-        this.recordButtonTelemetry(reason || "extensions_panel_showing");
-        this.ensureButtonShownBeforeAttachingPanel(panel);
         PanelMultiView.openPopup(panel, this._button, {
           position: "bottomright topright",
           triggerEvent: aEvent,
@@ -2579,24 +1946,6 @@ var gUnifiedExtensions = {
 
     // We always dispatch an event (useful for testing purposes).
     window.dispatchEvent(new CustomEvent("UnifiedExtensionsTogglePanel"));
-  },
-
-  async openPanel(event, reason) {
-    if (this._button.open) {
-      throw new Error("Tried to open panel whilst a panel was already open!");
-    }
-    if (CustomizationHandler.isCustomizing()) {
-      throw new Error("Cannot open panel while in Customize mode!");
-    }
-
-    if (event?.sourceEvent?.target.id === "appMenu-unified-extensions-button") {
-      Glean.extensionsButton.openViaAppMenu.record({
-        is_extensions_panel_empty: !this.hasExtensionsInPanel(),
-        is_extensions_button_visible: !this._button.hidden,
-      });
-    }
-
-    await this.togglePanel(event, reason);
   },
 
   updateContextMenu(menu, event) {
@@ -2723,9 +2072,7 @@ var gUnifiedExtensions = {
 
   _getExtensionId(menu) {
     const { triggerNode } = menu;
-    return triggerNode
-      .closest(".unified-extensions-item")
-      ?.querySelector("toolbarbutton")?.dataset.extensionid;
+    return triggerNode.dataset.extensionid;
   },
 
   _getWidgetId(menu) {
@@ -2884,107 +2231,16 @@ var gUnifiedExtensions = {
     }
   },
 
-  _createBlocklistMessageBar(container) {
-    if (!this.blocklistAttentionInfo) {
-      return null;
-    }
-
-    const { addons, extensionsCount, hasHardBlocked } =
-      this.blocklistAttentionInfo;
-    const type = hasHardBlocked ? "error" : "warning";
-
-    let messageBarFluentId;
-    let extensionName;
-    if (extensionsCount === 1) {
-      extensionName = addons[0].name;
-      messageBarFluentId = hasHardBlocked
-        ? "unified-extensions-mb-blocklist-error-single"
-        : "unified-extensions-mb-blocklist-warning-single";
-    } else {
-      messageBarFluentId = hasHardBlocked
-        ? "unified-extensions-mb-blocklist-error-multiple"
-        : "unified-extensions-mb-blocklist-warning-multiple";
-    }
-
-    const messageBarBlocklist = this._makeMessageBar({
-      dismissible: true,
-      linkToAboutAddons: true,
-      messageBarFluentId,
-      messageBarFluentArgs: {
-        extensionsCount,
-        extensionName,
-      },
-      type,
-    });
-
-    messageBarBlocklist.addEventListener(
-      "message-bar:user-dismissed",
-      () => {
-        if (messageBarBlocklist === this._messageBarBlocklist) {
-          this._messageBarBlocklist = null;
-        }
-        this.blocklistAttentionInfo?.dismiss();
-      },
-      { once: true }
-    );
-
-    if (
-      this._messageBarBlocklist &&
-      container.contains(this._messageBarBlocklist)
-    ) {
-      container.replaceChild(messageBarBlocklist, this._messageBarBlocklist);
-    } else if (container.contains(this._messageBarQuarantinedDomain)) {
-      container.insertBefore(
-        messageBarBlocklist,
-        this._messageBarQuarantinedDomain
-      );
-    } else {
-      container.appendChild(messageBarBlocklist);
-    }
-
-    return messageBarBlocklist;
-  },
-
   _makeMessageBar({
-    dismissible = false,
     messageBarFluentId,
-    messageBarFluentArgs,
     supportPage = null,
-    linkToAboutAddons = false,
     type = "warning",
   }) {
     const messageBar = document.createElement("moz-message-bar");
     messageBar.setAttribute("type", type);
     messageBar.classList.add("unified-extensions-message-bar");
-
-    if (dismissible) {
-      // NOTE: the moz-message-bar is currently expected to be called `dismissable`.
-      messageBar.setAttribute("dismissable", dismissible);
-    }
-
-    if (linkToAboutAddons) {
-      const linkToAboutAddonsEl = document.createElement("a");
-      linkToAboutAddonsEl.setAttribute(
-        "class",
-        "unified-extensions-link-to-aboutaddons"
-      );
-      linkToAboutAddonsEl.setAttribute("slot", "support-link");
-      linkToAboutAddonsEl.addEventListener("click", () => {
-        BrowserAddonUI.openAddonsMgr("addons://list/extension");
-        this.togglePanel();
-      });
-      document.l10n.setAttributes(
-        linkToAboutAddonsEl,
-        "unified-extensions-mb-about-addons-link"
-      );
-      messageBar.append(linkToAboutAddonsEl);
-    }
-
-    document.l10n.setAttributes(
-      messageBar,
-      messageBarFluentId,
-      messageBarFluentArgs
-    );
+    document.l10n.setAttributes(messageBar, messageBarFluentId);
+    messageBar.setAttribute("data-l10n-attrs", "heading, message");
 
     if (supportPage) {
       const supportUrl = document.createElement("a", {
@@ -3018,86 +2274,4 @@ var gUnifiedExtensions = {
       )
     );
   },
-
-  // Records telemetry when the button is about to temporarily be shown,
-  // provided that the button is hidden at the time of invocation.
-  //
-  // `reason` is one of the labels in extensions_button.temporarily_unhidden
-  // in browser/components/extensions/metrics.yaml.
-  //
-  // This is usually immediately before a updateButtonVisibility() call,
-  // sometimes a bit earlier (if the updateButtonVisibility() call is indirect).
-  recordButtonTelemetry(reason) {
-    if (!this.buttonAlwaysVisible && this._button.hidden) {
-      Glean.extensionsButton.temporarilyUnhidden[reason].add();
-    }
-  },
-
-  hideExtensionsButtonFromToolbar() {
-    // All browser windows will observe this and call updateButtonVisibility().
-    Services.prefs.setBoolPref(
-      "extensions.unifiedExtensions.button.always_visible",
-      false
-    );
-    ConfirmationHint.show(
-      document.getElementById("PanelUI-menu-button"),
-      "confirmation-hint-extensions-button-hidden"
-    );
-    Glean.extensionsButton.toggleVisibility.record({
-      is_customizing: CustomizationHandler.isCustomizing(),
-      is_extensions_panel_empty: !this.hasExtensionsInPanel(),
-      // After setting the above pref to false, the button should hide
-      // immediately. If this was not the case, then something caused the
-      // button to be shown temporarily.
-      is_temporarily_shown: !this._button.hidden,
-      should_hide: true,
-    });
-  },
-
-  showExtensionsButtonInToolbar() {
-    let wasShownBefore = !this.buttonAlwaysVisible && !this._button.hidden;
-    // All browser windows will observe this and call updateButtonVisibility().
-    Services.prefs.setBoolPref(
-      "extensions.unifiedExtensions.button.always_visible",
-      true
-    );
-    Glean.extensionsButton.toggleVisibility.record({
-      is_customizing: CustomizationHandler.isCustomizing(),
-      is_extensions_panel_empty: !this.hasExtensionsInPanel(),
-      is_temporarily_shown: wasShownBefore,
-      should_hide: false,
-    });
-  },
 };
-XPCOMUtils.defineLazyPreferenceGetter(
-  gUnifiedExtensions,
-  "buttonAlwaysVisible",
-  "extensions.unifiedExtensions.button.always_visible",
-  true,
-  (prefName, oldValue, newValue) => {
-    if (gUnifiedExtensions._initialized) {
-      gUnifiedExtensions.updateButtonVisibility();
-      Glean.extensionsButton.prefersHiddenButton.set(!newValue);
-    }
-  }
-);
-// With button.always_visible is false, we still show the button in specific
-// cases when needed. The user is always empowered to dismiss the specific
-// trigger that causes the button to be shown. The attention dot is the
-// exception, where the button cannot easily be hidden. Users who willingly
-// want to ignore the attention dot can set this preference to keep the button
-// hidden even if attention is requested.
-XPCOMUtils.defineLazyPreferenceGetter(
-  gUnifiedExtensions,
-  "buttonIgnoresAttention",
-  "extensions.unifiedExtensions.button.ignore_attention",
-  false,
-  () => {
-    if (
-      gUnifiedExtensions._initialized &&
-      gUnifiedExtensions.buttonAlwaysVisible
-    ) {
-      gUnifiedExtensions.updateButtonVisibility();
-    }
-  }
-);

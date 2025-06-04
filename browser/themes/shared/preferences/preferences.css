@@ -32,6 +32,8 @@
   vertical-align: top; /* See bug 1606130 */
   display: flex;
   flex-direction: column;
+
+  --main-pane-width: 664px;
 }
 
 /*
@@ -54,7 +56,7 @@
 .pane-container {
   /* A workaround to keep the container always float on the `top: 0` (Bug 1377009) */
   display: block;
-  width: min(100%, var(--page-main-content-width));
+  width: min(100%, var(--main-pane-width));
   min-width: min-content;
 }
 
@@ -121,7 +123,7 @@ label {
 }
 
 .tip-caption {
-  font-size: 0.9em;
+  font-size: .9em;
   color: var(--text-color-deemphasized);
 }
 
@@ -163,8 +165,8 @@ radio {
 }
 
 .spotlight {
-  background-color: color-mix(in srgb, var(--color-accent-primary) 15%, transparent);
-  outline: var(--color-accent-primary) 1px dotted;
+  background-color: color-mix(in srgb, var(--in-content-accent-color) 15%, transparent);
+  outline: var(--in-content-accent-color) 1px dotted;
   animation: fade-out 0.5s ease-out 2s forwards;
   /* Show the border to spotlight the components in high-contrast mode. */
   border: 1px solid transparent;
@@ -256,7 +258,7 @@ radio {
 }
 
 /* stylelint-disable-next-line media-query-no-invalid */
-@media not -moz-pref("browser.migrate.preferences-entrypoint.enabled") {
+@media not (-moz-bool-pref: "browser.migrate.preferences-entrypoint.enabled") {
   #dataMigrationGroup {
     display: none;
   }
@@ -277,10 +279,10 @@ radio {
 }
 
 .extension-controlled-icon {
-  height: var(--icon-size-medium);
+  height: 20px;
   margin: 2px 0 6px;
   vertical-align: middle;
-  width: var(--icon-size-medium);
+  width: 20px;
   -moz-context-properties: fill;
   fill: currentColor;
 }
@@ -378,7 +380,6 @@ radio {
 }
 
 #filter {
-  flex: 1;
   margin: 4px 0 8px;
 }
 
@@ -412,9 +413,6 @@ radio {
 
 .typeIcon {
   margin-inline: 10px 9px !important;
-  &:not([srcset]) {
-    visibility: hidden;
-  }
 }
 
 #handlersView .actionsMenu::part(icon),
@@ -426,7 +424,7 @@ radio {
   padding-inline-start: 10px !important;
 }
 
-.actionsMenu > menupopup > menuitem > .menu-icon {
+.actionsMenu > menupopup > menuitem > .menu-iconic-left {
   margin-inline-end: 8px !important;
 }
 
@@ -498,11 +496,11 @@ richlistitem[selected] .actionsMenu:focus-visible {
   margin-inline-end: var(--space-small);
 }
 
-.addon-with-favicon .menu-icon {
+.addon-with-favicon .menu-iconic-icon {
   margin-inline-start: 0;
 }
 
-a[is="moz-support-link"]:not(.sidebar-footer-link, [hidden]) {
+a[is="moz-support-link"]:not(.sidebar-footer-link) {
   display: inline-block;
   white-space: initial;
 }
@@ -517,7 +515,7 @@ a[is="moz-support-link"]:not(.sidebar-footer-link, [hidden]) {
 #blocklistsTree > treechildren::-moz-tree-image(selectionCol, checked) {
   list-style-image: url("chrome://global/skin/icons/check.svg");
   -moz-context-properties: fill, stroke;
-  fill: var(--color-accent-primary);
+  fill: var(--in-content-accent-color);
 }
 
 #engineList > treechildren::-moz-tree-image(engineShown, checked, selected),
@@ -574,7 +572,8 @@ a[is="moz-support-link"]:not(.sidebar-footer-link, [hidden]) {
 #historyPane:not([selectedIndex="2"]) > #historyCustomPane,
 #weavePrefsDeck:not([selectedIndex="1"]) > #hasFxaAccount,
 #fxaLoginStatus:not([selectedIndex="1"]) > #fxaLoginUnverified,
-#fxaLoginStatus:not([selectedIndex="2"]) > #fxaLoginRejected {
+#fxaLoginStatus:not([selectedIndex="2"]) > #fxaLoginRejected,
+#syncStatus:not([selectedIndex="1"]) > #syncConfigured {
   visibility: collapse;
 }
 
@@ -614,14 +613,14 @@ html|dialog {
 
 html|dialog::backdrop,
 .dialogOverlay[topmost="true"] {
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0,0,0,0.5);
 }
 
 html|dialog,
 .dialogBox {
   border: 1px solid transparent;
   border-radius: 8px;
-  box-shadow: var(--box-shadow-popup);
+  box-shadow: 0 2px 6px 0 rgba(0,0,0,0.3);
 }
 
 .dialogBox {
@@ -653,7 +652,7 @@ html|dialog,
 }
 
 .dialogTitleBar {
-  padding: 0.4em 0.2em;
+  padding: .4em .2em;
   border-bottom: 1px solid var(--in-content-border-color);
 }
 
@@ -682,8 +681,8 @@ html|dialog,
   background-color: transparent; /* override common.css, but keep hover/active states */
   min-width: 0;
   min-height: auto;
-  width: var(--icon-size-medium);
-  height: var(--icon-size-medium);
+  width: 20px;
+  height: 20px;
   padding: 0;
   margin-inline: 0 8px;
 }
@@ -739,7 +738,7 @@ html|dialog,
 }
 
 .fxaProfileImage.actionable:hover {
-  border-color: #0095dd;
+  border-color: #0095DD;
 }
 
 .fxaProfileImage.actionable:hover:active {
@@ -807,16 +806,12 @@ html|dialog,
 .fxaLoginRejectedWarning {
   list-style-image: url(chrome://global/skin/icons/warning.svg);
   -moz-context-properties: fill;
-  fill: #ffbf00;
+  fill: #FFBF00;
   margin-inline: 4px 8px;
 }
 
-#syncStatusContainer {
+#syncStatus {
   margin-top: 32px;
-}
-
-#syncChangeOptions {
-  margin-inline-start: 0;
 }
 
 .sync-group {
@@ -828,15 +823,16 @@ html|dialog,
   display: block;
 }
 
-.sync-info-box {
-  border-radius: var(--border-radius-medium);
-  padding: var(--space-large);
+.sync-choose-dialog-description {
+  margin-block-end: 10px;
 }
 
 .sync-engines-list > div,
 .sync-engines-list + hbox {
   margin-top: 0;
   padding-top: var(--space-large);
+  max-width: 300px;
+  height: auto;
 }
 
 dialog > .sync-engines-list > div,
@@ -865,7 +861,7 @@ dialog > .sync-engines-list + hbox {
 }
 
 .sync-engines-list {
-  column-count: 3;
+  column-count: 2;
   column-fill: balance;
   margin-block-end: 10px;
 }
@@ -922,8 +918,8 @@ dialog > .sync-engines-list + hbox {
 .androidIcon,
 .iOSIcon {
   margin-inline: 2px 4px;
-  width: var(--icon-size-medium);
-  height: var(--icon-size-medium);
+  width: 20px;
+  height: 20px;
   vertical-align: text-bottom;
 }
 
@@ -933,7 +929,7 @@ dialog > .sync-engines-list + hbox {
   margin-inline-end: 8px;
   content: url("chrome://global/skin/icons/loading.svg");
   -moz-context-properties: fill;
-  fill: var(--color-accent-primary);
+  fill: var(--in-content-accent-color);
 }
 
 .navigation {
@@ -1024,23 +1020,23 @@ dialog > .sync-engines-list + hbox {
 
 .sticky-inner-container {
   flex: 1;
-  max-width: var(--page-main-content-width);
+  max-width: var(--main-pane-width);
 }
 
 .search-tooltip {
   max-width: 10em;
   font-size: 1rem;
   position: absolute;
-  padding: 0 0.7em;
+  padding: 0 .7em;
   background-color: #ffe900;
   color: #000;
   border: 1px solid #d7b600;
   margin-top: -18px;
-  opacity: 0.85;
+  opacity: .85;
 }
 
 .search-tooltip:hover {
-  opacity: 0.1;
+  opacity: .1;
 }
 
 .search-tooltip::before {
@@ -1089,24 +1085,28 @@ dialog > .sync-engines-list + hbox {
   display: none !important;
 }
 
-menulist[indicator="true"] > menupopup menuitem:not([image]) > .menu-icon {
+menulist[indicator=true] > menupopup menuitem:not([image]) > .menu-iconic-left {
   display: flex;
   min-width: auto; /* Override the min-width defined in menu.css */
   margin-inline-end: 6px;
+}
+
+menulist[indicator=true] > menupopup menuitem:not([image]) > .menu-iconic-left > .menu-iconic-icon {
   width: 8px;
   height: 10px;
+  margin: 0;
 }
 
-menulist[indicator="true"] > menupopup menuitem[indicator="true"]:not([image]) > .menu-icon {
+menulist[indicator=true] > menupopup menuitem[indicator=true]:not([image]) > .menu-iconic-left > .menu-iconic-icon {
   list-style-image: url(chrome://browser/skin/preferences/search-arrow-indicator.svg);
-
-  &:-moz-locale-dir(rtl) {
-    transform: scaleX(-1);
-  }
 }
 
-.menu-highlightable-text {
-  margin: 0; /* Align with the margin of xul:label.menu-text */
+menulist[indicator=true] > menupopup menuitem[indicator=true]:not([image]) > .menu-iconic-left > .menu-iconic-icon:-moz-locale-dir(rtl) {
+  transform: scaleX(-1);
+}
+
+.menu-iconic-highlightable-text {
+  margin: 0; /* Align with the margin of xul:label.menu-iconic-text */
 }
 
 #no-results-message > label {
@@ -1218,13 +1218,24 @@ richlistitem .text-link:hover {
   white-space: pre-wrap;
 }
 
+#genai-chat-label,
+#genai-chat-provider,
+#genai-chat-links {
+  margin-block: 0 var(--input-space-block);
+}
+
+#genai-chat-provider {
+  width: min-content;
+  min-width: 20em;
+}
+
 .checkbox-row {
   display: flex;
   align-items: baseline;
 }
 
-.checkbox-row input[type="checkbox"] {
-  translate: 0 2px;
+.checkbox-row input[type=checkbox] {
+  translate: 0 2px
 }
 
 .checkbox-row a {
@@ -1287,10 +1298,6 @@ richlistitem .text-link:hover {
   background-image: url("chrome://browser/skin/preferences/relay-logo.svg");
 }
 
-#solo-ai {
-  background-image: url("chrome://browser/skin/preferences/solo-ai-logo.svg");
-}
-
 /*
  * The :not clause is required because hiding an element with `display: flex` only
  * partially hides it.
@@ -1340,7 +1347,7 @@ richlistitem .text-link:hover {
 }
 
 .qr-code-box-title {
-  font-size: 0.87em;
+  font-size: .87em;
   font-weight: normal;
 
   text-align: center;
@@ -1356,7 +1363,7 @@ richlistitem .text-link:hover {
 
 .simple .qr-code-box {
   padding-inline: var(--space-xlarge);
-  padding-block: 20px;
+  padding-block: 20px
 }
 
 .simple .qr-code-box-image {
@@ -1364,12 +1371,12 @@ richlistitem .text-link:hover {
 }
 
 #moreFromMozillaCategory .qr-code-link {
-  font-size: 0.87em;
+  font-size: .87em;
 }
 
 @media (prefers-color-scheme: dark) {
   .qr-code-box:not([hidden="true"]) {
-    background-color: rgba(91, 91, 102, 0.45);
+    background-color: rgba(91,91,102,0.45);
   }
 
   .qr-code-box-title {
@@ -1425,14 +1432,14 @@ richlistitem .text-link:hover {
 
   border: 1px solid var(--in-content-box-border-color);
   border-radius: 4px;
-  box-shadow: 0 0 2px 0 rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0 2px 0 rgba(0,0,0,0.2);
 
   transform: scaleX(1);
-  content: url("chrome://browser/content/preferences/web-appearance-light.svg");
+  content: url("chrome://browser/content/preferences/web-appearance-light.svg")
 }
 
 .web-appearance-choice.dark img {
-  content: url("chrome://browser/content/preferences/web-appearance-dark.svg");
+  content: url("chrome://browser/content/preferences/web-appearance-dark.svg")
 }
 
 .web-appearance-choice img:-moz-locale-dir(rtl) {
@@ -1535,13 +1542,4 @@ richlistitem .text-link:hover {
 
 .search-header:has(.section-heading) {
   margin: 0;
-}
-
-/* Styles for the "sponsors support our mission" message and link on the Home tab */
-.mission-message {
-  margin-block-start: var(--space-large);
-}
-
-.mission-message-link {
-  font-size: var(--font-size-small);
 }

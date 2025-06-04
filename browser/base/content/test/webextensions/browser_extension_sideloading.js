@@ -24,7 +24,6 @@ async function createWebExtension(details) {
 
       permissions: details.permissions,
       host_permissions: details.host_permissions,
-      incognito: details.incognito,
     },
   };
 
@@ -73,7 +72,7 @@ add_task(async function test_sideloading() {
     set: [
       ["xpinstall.signatures.required", false],
       ["extensions.autoDisableScopes", 15],
-      ["extensions.ui.showAddonIconForUnsigned", true],
+      ["extensions.ui.ignoreUnsigned", true],
     ],
   });
 
@@ -101,30 +100,6 @@ add_task(async function test_sideloading() {
     id: ID3,
     name: "Test 3",
     permissions: ["<all_urls>"],
-  });
-
-  const ID4 = "addon4@tests.mozilla.org";
-  await createWebExtension({
-    id: ID4,
-    name: "Test 4",
-    incognito: "not_allowed",
-    permissions: [],
-  });
-
-  const ID5 = "addon5@tests.mozilla.org";
-  await createWebExtension({
-    id: ID5,
-    name: "Test 5",
-    incognito: "not_allowed",
-    permissions: ["<all_urls>"],
-  });
-
-  const ID6 = "addon6@tests.mozilla.org";
-  await createWebExtension({
-    id: ID6,
-    name: "Test 6",
-    incognito: "not_allowed",
-    permissions: ["history", "https://*/*"],
   });
 
   testCleanup = async function () {
@@ -174,8 +149,8 @@ add_task(async function test_sideloading() {
   let addons = PanelUI.addonNotificationContainer;
   is(
     addons.children.length,
-    4,
-    "Have 4 menu entries for sideloaded extensions"
+    3,
+    "Have 3 menu entries for sideloaded extensions"
   );
 
   info(
@@ -228,15 +203,15 @@ add_task(async function test_sideloading() {
 
   panel.secondaryButton.click();
 
-  let [addon1, addon2, addon3, addon4, addon5, addon6] =
-    await AddonManager.getAddonsByIDs([ID1, ID2, ID3, ID4, ID5, ID6]);
+  let [addon1, addon2, addon3] = await AddonManager.getAddonsByIDs([
+    ID1,
+    ID2,
+    ID3,
+  ]);
   ok(addon1.seen, "Addon should be marked as seen");
   is(addon1.userDisabled, true, "Addon 1 should still be disabled");
   is(addon2.userDisabled, true, "Addon 2 should still be disabled");
   is(addon3.userDisabled, true, "Addon 3 should still be disabled");
-  is(addon4.userDisabled, true, "Addon 4 should still be disabled");
-  is(addon5.userDisabled, true, "Addon 5 should still be disabled");
-  is(addon6.userDisabled, true, "Addon 6 should still be disabled");
 
   BrowserTestUtils.removeTab(gBrowser.selectedTab);
 
@@ -246,8 +221,8 @@ add_task(async function test_sideloading() {
   addons = PanelUI.addonNotificationContainer;
   is(
     addons.children.length,
-    4,
-    "Have 4 menu entries for sideloaded extensions"
+    2,
+    "Have 2 menu entries for sideloaded extensions"
   );
 
   // Close the hamburger menu and go directly to the addons manager
@@ -273,10 +248,56 @@ add_task(async function test_sideloading() {
     [["webext-perms-host-description-all-urls"]],
     kSideloaded
   );
-  ok(
-    panel.querySelector(".webext-perm-privatebrowsing moz-checkbox"),
-    "Expect incognito checkbox in sideload prompt"
-  );
+
+  // Test incognito checkbox in post install notification
+  function setupPostInstallNotificationTest() {
+    if (!ExtensionsUI.POSTINSTALL_PRIVATEBROWSING_CHECKBOX) {
+      // When the post install private browsing checkbox is disabled,
+      // the private browsing checkbox has been already shown in the
+      // initial install dialog and so the post install dialog is
+      // expected to not be shown at all and so we return a no-op
+      // function.
+      //
+      // Assertions related to the private browsing checkbox expected
+      // to be shown in the initial dialog have been already been
+      // covered internally by the checkNotification test helper.
+      return () => {};
+    }
+    let promiseNotificationShown =
+      promiseAppMenuNotificationShown("addon-installed");
+    return async function (addon) {
+      info(`Expect post install notification for "${addon.name}"`);
+      let postInstallPanel = await promiseNotificationShown;
+      let incognitoCheckbox = postInstallPanel.querySelector(
+        "#addon-incognito-checkbox"
+      );
+      is(
+        window.AppMenuNotifications.activeNotification.options.name,
+        addon.name,
+        "Got the expected addon name in the active notification"
+      );
+      ok(
+        incognitoCheckbox,
+        "Got an incognito checkbox in the post install notification panel"
+      );
+      if (ExtensionsUI.POSTINSTALL_PRIVATEBROWSING_CHECKBOX) {
+        ok(
+          !incognitoCheckbox.hidden,
+          "Incognito checkbox should not be hidden"
+        );
+      } else {
+        ok(
+          incognitoCheckbox.hidden,
+          "Incognito checkbox expected to be hidden in the post install dialog"
+        );
+      }
+      // Dismiss post install notification.
+      postInstallPanel.button.click();
+    };
+  }
+
+  // Setup async test for post install notification on addon 2
+  let testPostInstallIncognitoCheckbox = setupPostInstallNotificationTest();
 
   // Accept the permissions
   panel.button.click();
@@ -286,11 +307,14 @@ add_task(async function test_sideloading() {
   is(addon2.userDisabled, false, "Addon 2 should be enabled");
   assertSideloadedAddonElementState(addonElement, true);
 
+  // Test post install notification on addon 2.
+  await testPostInstallIncognitoCheckbox(addon2);
+
   // Should still have 1 entry in the hamburger menu
   await gCUITestUtils.openMainMenu();
 
   addons = PanelUI.addonNotificationContainer;
-  is(addons.children.length, 4, "Have 4 menu entry for sideloaded extensions");
+  is(addons.children.length, 1, "Have 1 menu entry for sideloaded extensions");
 
   // Close the hamburger menu and go to the detail page for this addon
   await gCUITestUtils.hideMainMenu();
@@ -299,72 +323,33 @@ add_task(async function test_sideloading() {
     `addons://detail/${encodeURIComponent(ID3)}`
   );
 
-  // Trigger all remaining addon install from the app menu, to be able to cover the
+  info("Test enabling sideloaded addon 3 from app menu");
+  // Trigger addon 3 install as triggered from the app menu, to be able to cover the
   // post install notification that should be triggered when the permission
   // dialog is accepted from that flow.
-  const enableSideloadedFromAppMenu = async (addon, testPanelCb) => {
-    popupPromise = promisePopupNotificationShown("addon-webext-permissions");
-    ExtensionsUI.showSideloaded(gBrowser, addon);
-    panel = await popupPromise;
-    await testPanelCb();
-    // Accept the permissions
-    panel.button.click();
-    await promiseEvent(ExtensionsUI, "change");
-  };
+  popupPromise = promisePopupNotificationShown("addon-webext-permissions");
+  ExtensionsUI.showSideloaded(gBrowser, addon3);
 
-  info("Test enabling sideloaded addon 3 from app menu");
-  await enableSideloadedFromAppMenu(addon3, () => {
-    checkNotification(
-      panel,
-      DEFAULT_ICON_URL,
-      [["webext-perms-host-description-all-urls"]],
-      kSideloaded
-    );
-  });
+  panel = await popupPromise;
+  checkNotification(
+    panel,
+    DEFAULT_ICON_URL,
+    [["webext-perms-host-description-all-urls"]],
+    kSideloaded
+  );
+
+  // Setup async test for post install notification on addon 3
+  testPostInstallIncognitoCheckbox = setupPostInstallNotificationTest();
+
+  // Accept the permissions
+  panel.button.click();
+  await promiseEvent(ExtensionsUI, "change");
 
   addon3 = await AddonManager.getAddonByID(ID3);
   is(addon3.userDisabled, false, "Addon 3 should be enabled");
 
-  addons = PanelUI.addonNotificationContainer;
-  is(addons.children.length, 3, "Have 3 menu entry for sideloaded extensions");
-
-  info("Test enabling sideloaded addon 4 from app menu");
-  await enableSideloadedFromAppMenu(addon4, () => {
-    checkNotification(panel, DEFAULT_ICON_URL, [], kSideloaded);
-  });
-  addon4 = await AddonManager.getAddonByID(ID4);
-  is(addon4.userDisabled, false, "Addon 4 should be enabled");
-  addons = PanelUI.addonNotificationContainer;
-  is(addons.children.length, 2, "Have 2 menu entry for sideloaded extensions");
-
-  info("Test enabling sideloaded addon 5 from app menu");
-  await enableSideloadedFromAppMenu(addon5, () => {
-    checkNotification(
-      panel,
-      DEFAULT_ICON_URL,
-      [["webext-perms-host-description-all-urls"]],
-      kSideloaded
-    );
-  });
-  addon5 = await AddonManager.getAddonByID(ID5);
-  is(addon5.userDisabled, false, "Addon 5 should be enabled");
-  addons = PanelUI.addonNotificationContainer;
-  is(addons.children.length, 1, "Have 1 menu entry for sideloaded extensions");
-
-  info("Test enabling sideloaded addon 6 from app menu");
-  await enableSideloadedFromAppMenu(addon6, () => {
-    checkNotification(
-      panel,
-      DEFAULT_ICON_URL,
-      [
-        ["webext-perms-host-description-all-urls"],
-        ["webext-perms-description-history"],
-      ],
-      kSideloaded
-    );
-  });
-  addon6 = await AddonManager.getAddonByID(ID6);
-  is(addon6.userDisabled, false, "Addon 6 should be enabled");
+  // Test post install notification on addon 3.
+  await testPostInstallIncognitoCheckbox(addon3);
 
   isnot(
     menuButton.getAttribute("badge-status"),
@@ -374,15 +359,9 @@ add_task(async function test_sideloading() {
 
   await new Promise(resolve => setTimeout(resolve, 100));
 
-  for (let addon of [addon1, addon2, addon3, addon4, addon5, addon6]) {
+  for (let addon of [addon1, addon2, addon3]) {
     await addon.uninstall();
   }
-
-  isnot(
-    menuButton.getAttribute("badge-status"),
-    "addon-alert",
-    "Should no longer have addon alert badge"
-  );
 
   BrowserTestUtils.removeTab(gBrowser.selectedTab);
 

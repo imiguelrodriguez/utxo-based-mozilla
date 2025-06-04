@@ -17,7 +17,7 @@
 #define TLS_EARLY_DATA_AVAILABLE_BUT_NOT_USED 1
 #define TLS_EARLY_DATA_AVAILABLE_AND_USED 2
 
-#include "mozilla/glean/NetwerkProtocolHttpMetrics.h"
+#include "mozilla/Telemetry.h"
 #include "HttpConnectionBase.h"
 #include "nsHttpHandler.h"
 #include "nsIClassOfService.h"
@@ -93,35 +93,8 @@ void HttpConnectionBase::RecordConnectionCloseTelemetry(nsresult aReason) {
   SetCloseReason(ToCloseReason(aReason));
   LOG(("RecordConnectionCloseTelemetry key=%s reason=%d\n", key.get(),
        static_cast<uint32_t>(mCloseReason)));
-  glean::http::connection_close_reason.Get(key).AccumulateSingleSample(
-      static_cast<uint32_t>(mCloseReason));
-}
-
-void HttpConnectionBase::RecordConnectionAddressType() {
-  if (mAddressTypeReported) {
-    return;
-  }
-
-  NetAddr addr;
-  GetPeerAddr(&addr);
-  if (addr.GetIpAddressSpace() != nsILoadInfo::IPAddressSpace::Public) {
-    return;
-  }
-
-  if (mConnInfo->UsingProxy()) {
-    return;
-  }
-
-  nsAutoCString key(HttpVersionToTelemetryLabel(Version()));
-
-  if (addr.IsIPAddrV4()) {
-    key.Append("_ipv4");
-  } else {
-    key.Append("_ipv6");
-  }
-
-  mozilla::glean::networking::connection_address_type.Get(key).Add(1);
-  mAddressTypeReported = true;
+  Telemetry::Accumulate(Telemetry::HTTP_CONNECTION_CLOSE_REASON, key,
+                        static_cast<uint32_t>(mCloseReason));
 }
 
 }  // namespace net

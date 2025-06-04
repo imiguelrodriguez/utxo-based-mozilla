@@ -7,7 +7,7 @@
 #include "CacheFileUtils.h"
 #include "CacheObserver.h"
 #include "LoadContextInfo.h"
-#include "mozilla/glean/NetwerkProtocolHttpMetrics.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "mozilla/Tokenizer.h"
 #include "mozilla/Telemetry.h"
 #include "nsCOMPtr.h"
@@ -354,7 +354,7 @@ ValidityPair& ValidityMap::operator[](uint32_t aIdx) {
 
 StaticMutex DetailedCacheHitTelemetry::sLock;
 uint32_t DetailedCacheHitTelemetry::sRecordCnt = 0;
-MOZ_RUNINIT DetailedCacheHitTelemetry::HitRate
+DetailedCacheHitTelemetry::HitRate
     DetailedCacheHitTelemetry::sHRStats[kNumOfRanges];
 
 DetailedCacheHitTelemetry::HitRate::HitRate() { Reset(); }
@@ -367,11 +367,15 @@ void DetailedCacheHitTelemetry::HitRate::AddRecord(ERecType aType) {
   }
 }
 
-uint32_t DetailedCacheHitTelemetry::HitRate::GetHitRateBucket() const {
-  if (mHitCnt + mMissCnt == 0) {
-    return 0;
+uint32_t DetailedCacheHitTelemetry::HitRate::GetHitRateBucket(
+    uint32_t aNumOfBuckets) const {
+  uint32_t bucketIdx = (aNumOfBuckets * mHitCnt) / (mHitCnt + mMissCnt);
+  if (bucketIdx ==
+      aNumOfBuckets) {  // make sure 100% falls into the last bucket
+    --bucketIdx;
   }
-  return (100 * mHitCnt) / (mHitCnt + mMissCnt);
+
+  return bucketIdx;
 }
 
 uint32_t DetailedCacheHitTelemetry::HitRate::Count() {
@@ -404,40 +408,23 @@ void DetailedCacheHitTelemetry::AddRecord(ERecType aType,
     rangeIdx = kNumOfRanges - 1;
   }
 
-#ifndef ANDROID
-  nsAutoCString hitMissValue;
-  if (aType == HIT) {
-    hitMissValue.AppendLiteral("Hit ");
-  } else {
-    hitMissValue.AppendLiteral("Miss ");
+  uint32_t hitMissValue = 2 * rangeIdx;  // 2 values per range
+  if (aType == MISS) {                   // The order is HIT, MISS
+    ++hitMissValue;
   }
-
-  uint32_t lowerBound = rangeIdx * kRangeSize;
-  if (rangeIdx < kNumOfRanges - 1) {
-    uint32_t upperBound = (rangeIdx + 1) * kRangeSize - 1;
-    hitMissValue.AppendInt(lowerBound);
-    hitMissValue.AppendLiteral("-");
-    hitMissValue.AppendInt(upperBound);
-  } else {
-    // Since no upper limit
-    hitMissValue.AppendInt(lowerBound);
-    hitMissValue.AppendLiteral("+");
-  }
-#endif
 
   StaticMutexAutoLock lock(sLock);
 
   if (aType == MISS) {
-    mozilla::glean::network::cache_miss_time.AccumulateRawDuration(
-        TimeStamp::Now() - aLoadStart);
+    mozilla::Telemetry::AccumulateTimeDelta(
+        mozilla::Telemetry::NETWORK_CACHE_V2_MISS_TIME_MS, aLoadStart);
   } else {
     mozilla::glean::network::cache_hit_time.AccumulateRawDuration(
         TimeStamp::Now() - aLoadStart);
   }
-#ifndef ANDROID
-  mozilla::glean::network::cache_hit_miss_stat_per_cache_size.Get(hitMissValue)
-      .Add(1);
-#endif
+
+  Telemetry::Accumulate(Telemetry::NETWORK_CACHE_HIT_MISS_STAT_PER_CACHE_SIZE,
+                        hitMissValue);
 
   sHRStats[rangeIdx].AddRecord(aType);
   ++sRecordCnt;
@@ -450,22 +437,22 @@ void DetailedCacheHitTelemetry::AddRecord(ERecType aType,
 
   for (uint32_t i = 0; i < kNumOfRanges; ++i) {
     if (sHRStats[i].Count() >= kHitRateSamplesReportLimit) {
-#ifndef ANDROID
-      nsAutoCString cacheSizeIdx;
-      cacheSizeIdx.AppendInt(i);
-      uint32_t hitRateBucket = sHRStats[i].GetHitRateBucket();
+      // The telemetry enums are grouped by buckets as follows:
+      // Telemetry value : 0,1,2,3, ... ,19,20,21,22, ... ,398,399
+      // Hit rate bucket : 0,0,0,0, ... , 0, 1, 1, 1, ... , 19, 19
+      // Cache size range: 0,1,2,3, ... ,19, 0, 1, 2, ... , 18, 19
+      uint32_t bucketOffset =
+          sHRStats[i].GetHitRateBucket(kHitRateBuckets) * kNumOfRanges;
 
-      mozilla::glean::network::cache_hit_rate_per_cache_size.Get(cacheSizeIdx)
-          .AccumulateSingleSample(hitRateBucket);
-#endif
+      Telemetry::Accumulate(Telemetry::NETWORK_CACHE_HIT_RATE_PER_CACHE_SIZE,
+                            bucketOffset + i);
       sHRStats[i].Reset();
     }
   }
 }
 
 StaticMutex CachePerfStats::sLock;
-MOZ_RUNINIT CachePerfStats::PerfData
-    CachePerfStats::sData[CachePerfStats::LAST];
+CachePerfStats::PerfData CachePerfStats::sData[CachePerfStats::LAST];
 uint32_t CachePerfStats::sCacheSlowCnt = 0;
 uint32_t CachePerfStats::sCacheNotSlowCnt = 0;
 

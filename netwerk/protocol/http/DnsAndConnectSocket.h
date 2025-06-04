@@ -24,8 +24,12 @@ namespace mozilla {
 namespace net {
 
 // 8d411b53-54bc-4a99-8b78-ff125eab1564
-#define NS_DNSANDCONNECTSOCKET_IID \
-  {0x8d411b53, 0x54bc, 0x4a99, {0x8b, 0x78, 0xff, 0x12, 0x5e, 0xab, 0x15, 0x64}}
+#define NS_DNSANDCONNECTSOCKET_IID                   \
+  {                                                  \
+    0x8d411b53, 0x54bc, 0x4a99, {                    \
+      0x8b, 0x78, 0xff, 0x12, 0x5e, 0xab, 0x15, 0x64 \
+    }                                                \
+  }
 
 class PendingTransactionInfo;
 class ConnectionEntry;
@@ -40,7 +44,7 @@ class DnsAndConnectSocket final : public nsIOutputStreamCallback,
   ~DnsAndConnectSocket();
 
  public:
-  NS_INLINE_DECL_STATIC_IID(NS_DNSANDCONNECTSOCKET_IID)
+  NS_DECLARE_STATIC_IID_ACCESSOR(NS_DNSANDCONNECTSOCKET_IID)
   NS_DECL_THREADSAFE_ISUPPORTS
   NS_DECL_NSIOUTPUTSTREAMCALLBACK
   NS_DECL_NSITRANSPORTEVENTSINK
@@ -179,10 +183,6 @@ class DnsAndConnectSocket final : public nsIOutputStreamCallback,
     nsresult OnLookupComplete(DnsAndConnectSocket* dnsAndSock,
                               nsIDNSRecord* rec, nsresult status);
     nsresult CheckConnectedResult(DnsAndConnectSocket* dnsAndSock);
-    // Toggles the IP family flags (RESOLVE_DISABLE_IPV6 and
-    // RESOLVE_DISABLE_IPV4) in mDnsFlags if retrying with a different IP family
-    // is enabled.
-    bool ToggleIpFamilyFlagsIfRetryEnabled();
 
    protected:
     explicit TransportSetup(bool isBackup);
@@ -265,6 +265,8 @@ class DnsAndConnectSocket final : public nsIOutputStreamCallback,
   bool mProxyNotTransparent = false;
   bool mProxyTransparentResolvesHost = false;
 };
+
+NS_DEFINE_STATIC_IID_ACCESSOR(DnsAndConnectSocket, NS_DNSANDCONNECTSOCKET_IID)
 
 }  // namespace net
 }  // namespace mozilla

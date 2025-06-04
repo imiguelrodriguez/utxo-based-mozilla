@@ -2,13 +2,13 @@
    - License, v. 2.0. If a copy of the MPL was not distributed with this
    - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
 
-<!doctype html>
+<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src chrome:; object-src 'none'"
+      content="default-src chrome: blob:; object-src 'none'"
     />
     <meta name="color-scheme" content="light dark" />
     <link rel="localization" href="branding/brand.ftl" />
@@ -29,7 +29,14 @@
   <body>
     <div class="new-banner vpn-banner hidden">
       <div class="banner-wrapper">
-        <img class="icon" src="chrome://browser/content/logos/vpn.svg" />
+        <img
+          class="icon light"
+          src="chrome://browser/content/logos/vpn-light.svg"
+        />
+        <img
+          class="icon dark"
+          src="chrome://browser/content/logos/vpn-dark.svg"
+        />
         <div class="wrapper">
           <div>
             <h3 class="banner-title" data-l10n-id="vpn-banner-header"></h3>
@@ -542,7 +549,14 @@
 
       <section class="card card-no-hover vpn-card hidden">
         <div class="card-header">
-          <img class="icon" src="chrome://browser/content/logos/vpn.svg" />
+          <img
+            class="icon light"
+            src="chrome://browser/content/logos/vpn-light.svg"
+          />
+          <img
+            class="icon dark"
+            src="chrome://browser/content/logos/vpn-dark.svg"
+          />
           <div class="wrapper">
             <div>
               <div class="title-wrapper">

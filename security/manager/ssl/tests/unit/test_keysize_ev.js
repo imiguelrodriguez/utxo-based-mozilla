@@ -62,7 +62,7 @@ async function keySizeTestForEV(
   await checkEVStatus(
     certDB,
     constructCertFromFile(`test_keysize_ev/${endEntityCertFileName}.pem`),
-    Ci.nsIX509CertDB.verifyUsageTLSServer,
+    certificateUsageSSLServer,
     expectedResult
   );
 

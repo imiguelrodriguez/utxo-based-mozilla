@@ -71,10 +71,7 @@ async function checkDoesNotOpenOnFocus(win) {
 
 add_setup(async function () {
   await SpecialPowers.pushPrefEnv({
-    set: [
-      ["browser.urlbar.autoFill", true],
-      ["browser.urlbar.scotchBonnet.enableOverride", false],
-    ],
+    set: [["browser.urlbar.autoFill", true]],
   });
   // Add some history for the empty panel and autofill.
   await PlacesTestUtils.addVisits([

@@ -3,21 +3,9 @@
 
 "use strict";
 
-Services.scriptloader.loadSubScript(
-  "chrome://mochitests/content/browser/browser/components/profiles/tests/browser/head.js",
-  this
+const { CustomizableUITestUtils } = ChromeUtils.importESModule(
+  "resource://testing-common/CustomizableUITestUtils.sys.mjs"
 );
-
-const { FX_RELAY_OAUTH_CLIENT_ID } = ChromeUtils.importESModule(
-  "resource://gre/modules/FxAccountsCommon.sys.mjs"
-);
-
-ChromeUtils.defineESModuleGetters(this, {
-  CustomizableUITestUtils:
-    "resource://testing-common/CustomizableUITestUtils.sys.mjs",
-  ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
-  NimbusTestUtils: "resource://testing-common/NimbusTestUtils.sys.mjs",
-});
 
 let gCUITestUtils = new CustomizableUITestUtils(window);
 
@@ -163,14 +151,6 @@ add_task(async function setupForPanelTests() {
 add_task(async function test_ui_state_signedin() {
   await BrowserTestUtils.openNewForegroundTab(gBrowser, "https://example.com/");
 
-  // Setup profiles db
-  await SpecialPowers.pushPrefEnv({
-    set: [["browser.profiles.enabled", true]],
-  });
-  await initGroupDatabase();
-  let profile = SelectableProfileService.currentProfile;
-  Assert.ok(profile, "Should have a profile now");
-
   const relativeDateAnchor = new Date();
   let state = {
     status: UIState.STATUS_SIGNED_IN,
@@ -214,15 +194,8 @@ add_task(async function test_ui_state_signedin() {
       "PanelUI-fxa-menu-account-signout-button",
     ],
     disabledItems: [],
-    hiddenItems: ["PanelUI-fxa-menu-setup-sync-container"],
-    visibleItems: [],
+    hiddenItems: ["PanelUI-fxa-menu-setup-sync-button"],
   });
-
-  await checkProfilesButtons(
-    document.getElementById("fxa-manage-account-button"),
-    true
-  );
-
   checkFxAAvatar("signedin");
   gSync.relativeTimeFormat = origRelativeTimeFormat;
   await closeFxaPanel();
@@ -234,24 +207,6 @@ add_task(async function test_ui_state_signedin() {
     titleHidden: true,
     hideFxAText: true,
   });
-
-  // Ensure the profiles menuitem is not shown in the FxA panel when it is
-  // displayed as a subpanel of the app menu.
-  let appMenuFxAStatusButton = document.getElementById("appMenu-fxa-label2");
-  appMenuFxAStatusButton.click();
-  let fxaView = PanelMultiView.getViewNode(document, "PanelUI-fxa");
-  await BrowserTestUtils.waitForEvent(fxaView, "ViewShown");
-
-  // Verify the manage button is shown, just as a basic check.
-  let manageButton = fxaView.querySelector("#fxa-manage-account-button");
-  ok(
-    BrowserTestUtils.isVisible(manageButton),
-    "expected manage button to be visible after opening"
-  );
-  let profilesButton = fxaView.querySelector(
-    "PanelUI-fxa-menu-profiles-button"
-  );
-  ok(!profilesButton, "expected profiles button to not be present");
 
   await closeTabAndMainPanel();
 });
@@ -368,14 +323,6 @@ add_task(async function test_ui_state_panel_open_after_syncing() {
 add_task(async function test_ui_state_unconfigured() {
   await BrowserTestUtils.openNewForegroundTab(gBrowser, "https://example.com/");
 
-  // Setup profiles db
-  await SpecialPowers.pushPrefEnv({
-    set: [["browser.profiles.enabled", true]],
-  });
-  await initGroupDatabase();
-  let profile = SelectableProfileService.currentProfile;
-  Assert.ok(profile, "Should have a profile now");
-
   let state = {
     status: UIState.STATUS_NOT_CONFIGURED,
   };
@@ -398,15 +345,6 @@ add_task(async function test_ui_state_unconfigured() {
     hideFxAText: false,
   });
   await closeTabAndMainPanel();
-
-  await openFxaPanel();
-
-  await checkProfilesButtons(
-    document.getElementById("PanelUI-signedin-panel"),
-    false
-  );
-
-  await closeFxaPanel();
 });
 
 add_task(async function test_ui_state_signed_in() {
@@ -432,6 +370,7 @@ add_task(async function test_ui_state_signed_in() {
     enabledItems: [
       "PanelUI-fxa-menu-sendtab-button",
       "PanelUI-fxa-menu-connect-device-button",
+      "PanelUI-fxa-menu-setup-sync-button",
       "PanelUI-fxa-menu-account-signout-button",
     ],
     disabledItems: [],
@@ -439,7 +378,6 @@ add_task(async function test_ui_state_signed_in() {
       "PanelUI-fxa-menu-syncnow-button",
       "PanelUI-fxa-menu-sync-prefs-button",
     ],
-    visibleItems: ["PanelUI-fxa-menu-setup-sync-container"],
   });
   checkFxAAvatar("signedin");
   await closeFxaPanel();
@@ -477,6 +415,7 @@ add_task(async function test_ui_state_signed_in_no_display_name() {
     enabledItems: [
       "PanelUI-fxa-menu-sendtab-button",
       "PanelUI-fxa-menu-connect-device-button",
+      "PanelUI-fxa-menu-setup-sync-button",
       "PanelUI-fxa-menu-account-signout-button",
     ],
     disabledItems: [],
@@ -484,7 +423,6 @@ add_task(async function test_ui_state_signed_in_no_display_name() {
       "PanelUI-fxa-menu-syncnow-button",
       "PanelUI-fxa-menu-sync-prefs-button",
     ],
-    visibleItems: ["PanelUI-fxa-menu-setup-sync-container"],
   });
   checkFxAAvatar("signedin");
   await closeFxaPanel();
@@ -524,6 +462,7 @@ add_task(async function test_ui_state_unverified() {
     headerDescription: state.email,
     enabledItems: [
       "PanelUI-fxa-menu-sendtab-button",
+      "PanelUI-fxa-menu-setup-sync-button",
       "PanelUI-fxa-menu-account-signout-button",
     ],
     disabledItems: ["PanelUI-fxa-menu-connect-device-button"],
@@ -531,7 +470,6 @@ add_task(async function test_ui_state_unverified() {
       "PanelUI-fxa-menu-syncnow-button",
       "PanelUI-fxa-menu-sync-prefs-button",
     ],
-    visibleItems: ["PanelUI-fxa-menu-setup-sync-container"],
   });
   checkFxAAvatar("unverified");
   await closeFxaPanel();
@@ -571,6 +509,7 @@ add_task(async function test_ui_state_loginFailed() {
     headerDescription: state.displayName,
     enabledItems: [
       "PanelUI-fxa-menu-sendtab-button",
+      "PanelUI-fxa-menu-setup-sync-button",
       "PanelUI-fxa-menu-account-signout-button",
     ],
     disabledItems: ["PanelUI-fxa-menu-connect-device-button"],
@@ -578,7 +517,6 @@ add_task(async function test_ui_state_loginFailed() {
       "PanelUI-fxa-menu-syncnow-button",
       "PanelUI-fxa-menu-sync-prefs-button",
     ],
-    visibleItems: ["PanelUI-fxa-menu-setup-sync-container"],
   });
   checkFxAAvatar("login-failed");
   await closeFxaPanel();
@@ -692,7 +630,6 @@ add_task(async function test_experiment_ui_state_unconfigured() {
       "PanelUI-fxa-menu-syncnow-button",
       "PanelUI-fxa-menu-sync-prefs-button",
     ],
-    visibleItems: [],
   });
 
   // Revert the pref at the end of the test
@@ -761,8 +698,7 @@ add_task(async function test_experiment_ui_state_signedin() {
       "PanelUI-fxa-menu-vpn-button",
     ],
     disabledItems: [],
-    hiddenItems: ["PanelUI-fxa-menu-setup-sync-container"],
-    visibleItems: [],
+    hiddenItems: ["PanelUI-fxa-menu-setup-sync-button"],
   });
   checkFxAAvatar("signedin");
   gSync.relativeTimeFormat = origRelativeTimeFormat;
@@ -782,219 +718,6 @@ add_task(async function test_experiment_ui_state_signedin() {
     false
   );
   await closeTabAndMainPanel();
-});
-
-add_task(async function test_new_sync_setup_ui() {
-  let state = {
-    status: UIState.STATUS_SIGNED_IN,
-    syncEnabled: false,
-    email: "foo@bar.com",
-    displayName: "Foo Bar",
-    avatarURL: "https://foo.bar",
-  };
-
-  gSync.updateAllUI(state);
-
-  await openFxaPanel();
-
-  checkMenuBarItem("sync-enable");
-  checkPanelHeader();
-
-  checkFxaToolbarButtonPanel({
-    headerTitle: "Manage account",
-    headerDescription: "Foo Bar",
-    enabledItems: [
-      "PanelUI-fxa-menu-sendtab-button",
-      "PanelUI-fxa-menu-account-signout-button",
-      "PanelUI-fxa-menu-connect-device-button",
-    ],
-    disabledItems: [],
-    hiddenItems: [
-      "PanelUI-fxa-menu-syncnow-button",
-      "PanelUI-fxa-menu-sync-prefs-button",
-    ],
-    visibleItems: [
-      "PanelUI-fxa-menu-setup-sync-container",
-      "PanelUI-fxa-menu-connect-device-button",
-    ],
-  });
-
-  await closeFxaPanel();
-
-  // We need to reset the panel back to hidden since in the code we flip between the old and new sync setup ids
-  // so subsequent tests will fail if checking this new container
-  let newSyncSetup = document.getElementById(
-    "PanelUI-fxa-menu-setup-sync-container"
-  );
-  newSyncSetup.setAttribute("hidden", true);
-});
-
-// Ensure we can see the new "My services" section if the user has enabled relay on their account
-add_task(async function test_ui_my_services_signedin() {
-  await BrowserTestUtils.openNewForegroundTab(gBrowser, "https://example.com/");
-
-  const relativeDateAnchor = new Date();
-  let state = {
-    status: UIState.STATUS_SIGNED_IN,
-    syncEnabled: true,
-    email: "foo@bar.com",
-    displayName: "Foo Bar",
-    avatarURL: "https://foo.bar",
-    lastSync: new Date(),
-    syncing: false,
-  };
-
-  const origRelativeTimeFormat = gSync.relativeTimeFormat;
-  gSync.relativeTimeFormat = {
-    formatBestUnit(date) {
-      return origRelativeTimeFormat.formatBestUnit(date, {
-        now: relativeDateAnchor,
-      });
-    },
-  };
-
-  gSync.updateAllUI(state);
-
-  // pretend that the user has relay enabled
-  gSync._attachedClients = [
-    {
-      id: FX_RELAY_OAUTH_CLIENT_ID,
-    },
-  ];
-
-  await openFxaPanel();
-
-  checkMenuBarItem("sync-syncnowitem");
-  checkPanelHeader();
-  ok(
-    BrowserTestUtils.isVisible(
-      document.getElementById("fxa-menu-header-title")
-    ),
-    "expected toolbar to be visible after opening"
-  );
-  checkFxaToolbarButtonPanel({
-    headerTitle: "Manage account",
-    headerDescription: state.displayName,
-    enabledItems: [
-      "PanelUI-fxa-menu-sendtab-button",
-      "PanelUI-fxa-menu-connect-device-button",
-      "PanelUI-fxa-menu-syncnow-button",
-      "PanelUI-fxa-menu-sync-prefs-button",
-      "PanelUI-fxa-menu-account-signout-button",
-      "PanelUI-fxa-cta-menu",
-      "PanelUI-fxa-menu-monitor-button",
-      "PanelUI-fxa-menu-vpn-button",
-    ],
-    disabledItems: [],
-    hiddenItems: [
-      "PanelUI-fxa-menu-setup-sync-container",
-      "PanelUI-fxa-menu-relay-button", // the relay button in the "other protections" side should be hidden
-    ],
-    visibleItems: [],
-  });
-  checkFxAAvatar("signedin");
-  gSync.relativeTimeFormat = origRelativeTimeFormat;
-  await closeFxaPanel();
-
-  await openMainPanel();
-
-  checkPanelUIStatusBar({
-    description: "Foo Bar",
-    titleHidden: true,
-    hideFxAText: true,
-  });
-
-  // Revert the pref at the end of the test
-  Services.prefs.setBoolPref(
-    "identity.fxaccounts.toolbar.pxiToolbarEnabled",
-    false
-  );
-  await closeTabAndMainPanel();
-});
-
-add_task(async function test_experiment_signin_button_signed_out() {
-  // Enroll in Nimbus experiment
-  await ExperimentAPI.ready();
-  let cleanupNimbus = await NimbusTestUtils.enrollWithFeatureConfig({
-    featureId: NimbusFeatures.expandSignInButton.featureId,
-    value: {
-      ctaCopyVariant: "fxa-avatar-sign-in",
-    },
-  });
-
-  // Set UI state to STATUS_NOT_CONFIGURED (signed out)
-  let state = { status: UIState.STATUS_NOT_CONFIGURED };
-  gSync.updateAllUI(state);
-
-  const fxaAvatarLabel = document.getElementById("fxa-avatar-label");
-  ok(fxaAvatarLabel, "Avatar label element should exist");
-  is(
-    fxaAvatarLabel.hidden,
-    false,
-    "Avatar label should be visible when Nimbus experiment is enabled"
-  );
-
-  const expectedLabel =
-    gSync.fluentStrings.formatValueSync("fxa-avatar-sign-in");
-
-  is(
-    fxaAvatarLabel.getAttribute("value"),
-    expectedLabel,
-    `Avatar label should have the expected localized value: ${expectedLabel}`
-  );
-
-  // Clean up experiment
-  await cleanupNimbus();
-
-  // Reset UI state after experiment cleanup
-  gSync.updateAllUI(state);
-
-  is(
-    fxaAvatarLabel.hidden,
-    true,
-    "Avatar label should be hidden after Nimbus experiment is cleaned up"
-  );
-});
-
-add_task(async function test_experiment_signin_button_signed_in() {
-  // Enroll in Nimbus experiment
-  await ExperimentAPI.ready();
-  let cleanupNimbus = await NimbusTestUtils.enrollWithFeatureConfig({
-    featureId: NimbusFeatures.expandSignInButton.featureId,
-    value: {
-      ctaCopyVariant: "fxa-avatar-sign-in",
-    },
-  });
-
-  let state = {
-    status: UIState.STATUS_SIGNED_IN,
-    syncEnabled: true,
-    email: "foo@bar.com",
-    displayName: "Foo Bar",
-    avatarURL: "https://foo.bar",
-    lastSync: new Date(),
-    syncing: false,
-  };
-  gSync.updateAllUI(state);
-
-  const fxaAvatarLabel = document.getElementById("fxa-avatar-label");
-  is(
-    fxaAvatarLabel.hidden,
-    true,
-    "Avatar label should never be visible when signed in"
-  );
-
-  // Clean up experiment
-  await cleanupNimbus();
-
-  // Reset UI state after experiment cleanup
-  gSync.updateAllUI(state);
-
-  is(
-    fxaAvatarLabel.hidden,
-    true,
-    "Avatar label should still be hidden when signed in without experiment"
-  );
 });
 
 function checkPanelUIStatusBar({
@@ -1088,7 +811,6 @@ async function checkFxaToolbarButtonPanel({
   enabledItems,
   disabledItems,
   hiddenItems,
-  visibleItems,
 }) {
   is(
     document.getElementById("fxa-menu-header-title").value,
@@ -1115,59 +837,6 @@ async function checkFxaToolbarButtonPanel({
     const el = document.getElementById(id);
     is(el.getAttribute("hidden"), "true", id + " is hidden");
   }
-
-  for (const id of visibleItems) {
-    const el = document.getElementById(id);
-    ok(isElementVisible(el), `${id} is visible`);
-  }
-}
-
-function isElementVisible(el) {
-  if (!el) {
-    return false;
-  }
-  let style = window.getComputedStyle(el);
-  // The “hidden” property on the element itself
-  // might not exist or might be false, so we also
-  // check that the computed style is not hiding it
-  // (display: none or visibility: hidden).
-  return (
-    !el.hidden && style.display !== "none" && style.visibility !== "hidden"
-  );
-}
-
-async function checkProfilesButtons(
-  previousElementSibling,
-  separatorVisible = false
-) {
-  const profilesButton = document.getElementById(
-    "PanelUI-fxa-menu-profiles-button"
-  );
-  const emptyProfilesButton = document.getElementById(
-    "PanelUI-fxa-menu-empty-profiles-button"
-  );
-  const profilesSeparator = document.getElementById(
-    "PanelUI-fxa-menu-profiles-separator"
-  );
-
-  ok(
-    (profilesButton.hidden || emptyProfilesButton.hidden) &&
-      !(profilesButton.hidden && emptyProfilesButton.hidden),
-    "Only one of the profiles button is visible"
-  );
-
-  is(
-    !profilesSeparator.hidden,
-    separatorVisible,
-    "The profile separator is visible"
-  );
-
-  is(
-    previousElementSibling,
-    emptyProfilesButton.previousElementSibling,
-    "The profiles button is displayed after " +
-      emptyProfilesButton.previousElementSibling.id
-  );
 }
 
 async function checkFxABadged() {

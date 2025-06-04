@@ -12,7 +12,9 @@ from session_store_test_case import SessionStoreTestCase
 
 
 def inline(title):
-    return f"data:text/html;charset=utf-8,<html><head><title>{title}</title></head><body></body></html>"
+    return "data:text/html;charset=utf-8,<html><head><title>{}</title></head><body></body></html>".format(
+        title
+    )
 
 
 class TestSessionRestoreManually(SessionStoreTestCase):

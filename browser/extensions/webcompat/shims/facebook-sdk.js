@@ -563,11 +563,6 @@ if (!window.FB) {
         }
       },
     },
-    __buffer: {
-      replay: null,
-      calls: [],
-      opts: null,
-    },
   });
 
   window.FB.XFBML.parse();

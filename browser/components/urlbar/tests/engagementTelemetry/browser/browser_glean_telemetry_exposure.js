@@ -682,7 +682,7 @@ add_task(async function manyQueries_manyExposureResults_hidden_5() {
 
 add_task(async function suggestExposure_matched() {
   await doExposureTest({
-    prefs: [["quicksuggest.dynamicSuggestionTypes", "test-exposure-aaa"]],
+    prefs: [["quicksuggest.exposureSuggestionTypes", "aaa"]],
     queries: [
       {
         query: "aaa keyword",
@@ -695,7 +695,7 @@ add_task(async function suggestExposure_matched() {
 
 add_task(async function suggestExposure_notMatched() {
   await doExposureTest({
-    prefs: [["quicksuggest.dynamicSuggestionTypes", "test-exposure-aaa"]],
+    prefs: [["quicksuggest.exposureSuggestionTypes", "aaa"]],
     queries: [
       {
         query: "bbb keyword",
@@ -709,7 +709,7 @@ add_task(async function suggestExposure_notMatched() {
 add_task(async function suggestExposure_showExposureResults() {
   await doExposureTest({
     prefs: [
-      ["quicksuggest.dynamicSuggestionTypes", "test-exposure-aaa"],
+      ["quicksuggest.exposureSuggestionTypes", "aaa"],
       ["showExposureResults", true],
     ],
     queries: [

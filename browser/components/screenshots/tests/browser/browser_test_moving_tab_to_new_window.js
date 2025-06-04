@@ -40,10 +40,7 @@ add_task(async function test_movingTabToNewWindow() {
     newtab.linkedBrowser,
     "SwapDocShells"
   );
-  gBrowser.adoptTab(newWindow.gBrowser.selectedTab, {
-    tabIndex: 1,
-    selectTab: true,
-  });
+  gBrowser.adoptTab(newWindow.gBrowser.selectedTab, 1, true);
   await swapDocShellPromise;
 
   tab = gBrowser.selectedTab;
@@ -104,10 +101,7 @@ add_task(async function test_movingParentProcessTabToNewWindow() {
     newtab.linkedBrowser,
     "SwapDocShells"
   );
-  gBrowser.adoptTab(newWindow.gBrowser.selectedTab, {
-    tabIndex: 1,
-    selectTab: true,
-  });
+  gBrowser.adoptTab(newWindow.gBrowser.selectedTab, 1, true);
   await swapDocShellPromise;
 
   tab = gBrowser.selectedTab;

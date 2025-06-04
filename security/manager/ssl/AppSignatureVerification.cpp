@@ -16,7 +16,6 @@
 #include "cosec.h"
 #include "mozilla/Base64.h"
 #include "mozilla/Casting.h"
-#include "mozilla/glean/SecurityManagerSslMetrics.h"
 #include "mozilla/Logging.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/RefPtr.h"
@@ -1353,8 +1352,7 @@ nsresult OpenSignedAppFile(
   bucket += aPolicy.ProcessPK7();
   bucket += !pkcs7CertDER.IsEmpty();
   bucket += pk7Verified;
-  glean::security::addon_signature_verification_status.AccumulateSingleSample(
-      bucket);
+  Telemetry::Accumulate(Telemetry::ADDON_SIGNATURE_VERIFICATION_STATUS, bucket);
 
   if ((aPolicy.PK7Required() && !pk7Verified) ||
       (aPolicy.COSERequired() && !coseVerified)) {

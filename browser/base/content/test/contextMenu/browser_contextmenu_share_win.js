@@ -8,22 +8,24 @@ const { sinon } = ChromeUtils.importESModule(
 );
 const BASE = getRootDirectory(gTestPath).replace(
   "chrome://mochitests/content",
-  "https://example.com"
+  // eslint-disable-next-line @microsoft/sdl/no-insecure-url
+  "http://example.com"
 );
 const TEST_URL = BASE + "browser_contextmenu_shareurl.html";
 
-// Setup spies for observing function calls from WindowsUIUtils.
+// Setup spies for observing function calls from MacSharingService
 let shareUrlSpy = sinon.spy();
 
-SharingUtils.testOnlyMockUIUtils({
-  shareUrl(url, title) {
-    shareUrlSpy(url, title);
-  },
-  QueryInterface: ChromeUtils.generateQI([Ci.nsIWindowsUIUtils]),
+let stub = sinon.stub(gBrowser.ownerGlobal, "WindowsUIUtils").get(() => {
+  return {
+    shareUrl(url, title) {
+      shareUrlSpy(url, title);
+    },
+  };
 });
 
-registerCleanupFunction(function () {
-  SharingUtils.testOnlyMockUIUtils(null);
+registerCleanupFunction(async function () {
+  stub.restore();
 });
 
 /**

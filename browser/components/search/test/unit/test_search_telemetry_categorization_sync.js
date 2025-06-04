@@ -10,12 +10,11 @@
 ChromeUtils.defineESModuleGetters(this, {
   RemoteSettings: "resource://services-settings/remote-settings.sys.mjs",
   Region: "resource://gre/modules/Region.sys.mjs",
-  SERPCategorization:
-    "moz-src:///browser/components/search/SERPCategorization.sys.mjs",
-  SERPDomainToCategoriesMap:
-    "moz-src:///browser/components/search/SERPCategorization.sys.mjs",
+  SearchSERPCategorization: "resource:///modules/SearchSERPTelemetry.sys.mjs",
+  SearchSERPDomainToCategoriesMap:
+    "resource:///modules/SearchSERPTelemetry.sys.mjs",
   TELEMETRY_CATEGORIZATION_KEY:
-    "moz-src:///browser/components/search/SERPCategorization.sys.mjs",
+    "resource:///modules/SearchSERPTelemetry.sys.mjs",
   TestUtils: "resource://testing-common/TestUtils.sys.mjs",
 });
 
@@ -183,24 +182,24 @@ add_task(async function test_initial_import() {
 
   info("Initialize search categorization mappings.");
   let promise = waitForDomainToCategoriesUpdate();
-  await SERPDomainToCategoriesMap.init();
+  await SearchSERPDomainToCategoriesMap.init();
   await promise;
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [{ category: 1, score: 100 }],
     "Return value from lookup of example.com should be the same."
   );
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.org"),
+    await SearchSERPDomainToCategoriesMap.get("example.org"),
     [{ category: 2, score: 90 }],
     "Return value from lookup of example.org should be the same."
   );
 
   // Clean up.
   await db.clear();
-  await SERPDomainToCategoriesMap.uninit(true);
+  await SearchSERPDomainToCategoriesMap.uninit(true);
 });
 
 add_task(async function test_update_records() {
@@ -217,7 +216,7 @@ add_task(async function test_update_records() {
 
   info("Initialize search categorization mappings.");
   let promise = waitForDomainToCategoriesUpdate();
-  await SERPDomainToCategoriesMap.init();
+  await SearchSERPDomainToCategoriesMap.init();
   await promise;
 
   info("Send update from Remote Settings with updates to attachments.");
@@ -239,13 +238,13 @@ add_task(async function test_update_records() {
   await promise;
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [{ category: 1, score: 80 }],
     "Return value from lookup of example.com should have changed."
   );
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.org"),
+    await SearchSERPDomainToCategoriesMap.get("example.org"),
     [
       { category: 2, score: 50 },
       { category: 4, score: 80 },
@@ -254,14 +253,14 @@ add_task(async function test_update_records() {
   );
 
   Assert.equal(
-    SERPDomainToCategoriesMap.version,
+    SearchSERPDomainToCategoriesMap.version,
     2,
     "Version should be correct."
   );
 
   // Clean up.
   await db.clear();
-  await SERPDomainToCategoriesMap.uninit(true);
+  await SearchSERPDomainToCategoriesMap.uninit(true);
 });
 
 add_task(async function test_delayed_initial_import() {
@@ -275,10 +274,10 @@ add_task(async function test_delayed_initial_import() {
     );
   });
   info("Initialize without records.");
-  await SERPDomainToCategoriesMap.init();
+  await SearchSERPDomainToCategoriesMap.init();
   await observeNoRecordsFound;
 
-  Assert.ok(SERPDomainToCategoriesMap.empty, "Map is empty.");
+  Assert.ok(SearchSERPDomainToCategoriesMap.empty, "Map is empty.");
 
   info("Send update from Remote Settings with updates to attachments.");
   let record1a = await mockRecordWithCachedAttachment(RECORDS.record1a);
@@ -296,26 +295,26 @@ add_task(async function test_delayed_initial_import() {
   await promise;
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [{ category: 1, score: 100 }],
     "Return value from lookup of example.com should be the same."
   );
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.org"),
+    await SearchSERPDomainToCategoriesMap.get("example.org"),
     [{ category: 2, score: 90 }],
     "Return value from lookup of example.org should be the same."
   );
 
   Assert.equal(
-    SERPDomainToCategoriesMap.version,
+    SearchSERPDomainToCategoriesMap.version,
     1,
     "Version should be correct."
   );
 
   // Clean up.
   await db.clear();
-  await SERPDomainToCategoriesMap.uninit(true);
+  await SearchSERPDomainToCategoriesMap.uninit(true);
 });
 
 add_task(async function test_remove_record() {
@@ -332,11 +331,11 @@ add_task(async function test_remove_record() {
 
   info("Initialize search categorization mappings.");
   let promise = waitForDomainToCategoriesUpdate();
-  await SERPDomainToCategoriesMap.init();
+  await SearchSERPDomainToCategoriesMap.init();
   await promise;
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [{ category: 1, score: 80 }],
     "Initialized properly."
   );
@@ -355,26 +354,26 @@ add_task(async function test_remove_record() {
   await promise;
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [{ category: 1, score: 80 }],
     "Return value from lookup of example.com should remain unchanged."
   );
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.org"),
+    await SearchSERPDomainToCategoriesMap.get("example.org"),
     [],
     "Return value from lookup of example.org should be empty."
   );
 
   Assert.equal(
-    SERPDomainToCategoriesMap.version,
+    SearchSERPDomainToCategoriesMap.version,
     2,
     "Version should be correct."
   );
 
   // Clean up.
   await db.clear();
-  await SERPDomainToCategoriesMap.uninit(true);
+  await SearchSERPDomainToCategoriesMap.uninit(true);
 });
 
 add_task(async function test_different_versions_coexisting() {
@@ -391,11 +390,11 @@ add_task(async function test_different_versions_coexisting() {
 
   info("Initialize search categorization mappings.");
   let promise = waitForDomainToCategoriesUpdate();
-  await SERPDomainToCategoriesMap.init();
+  await SearchSERPDomainToCategoriesMap.init();
   await promise;
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [
       {
         category: 1,
@@ -406,7 +405,7 @@ add_task(async function test_different_versions_coexisting() {
   );
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.org"),
+    await SearchSERPDomainToCategoriesMap.get("example.org"),
     [
       { category: 2, score: 50 },
       { category: 4, score: 80 },
@@ -415,14 +414,14 @@ add_task(async function test_different_versions_coexisting() {
   );
 
   Assert.equal(
-    SERPDomainToCategoriesMap.version,
+    SearchSERPDomainToCategoriesMap.version,
     2,
     "Version should be the latest."
   );
 
   // Clean up.
   await db.clear();
-  await SERPDomainToCategoriesMap.uninit(true);
+  await SearchSERPDomainToCategoriesMap.uninit(true);
 });
 
 add_task(async function test_download_error() {
@@ -435,11 +434,11 @@ add_task(async function test_download_error() {
 
   info("Initialize search categorization mappings.");
   let promise = waitForDomainToCategoriesUpdate();
-  await SERPDomainToCategoriesMap.init();
+  await SearchSERPDomainToCategoriesMap.init();
   await promise;
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [
       {
         category: 1,
@@ -450,7 +449,7 @@ add_task(async function test_download_error() {
   );
 
   Assert.equal(
-    SERPDomainToCategoriesMap.version,
+    SearchSERPDomainToCategoriesMap.version,
     1,
     "Version should be present."
   );
@@ -478,20 +477,20 @@ add_task(async function test_download_error() {
   await observeDownloadError;
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [],
     "Domain should not exist in store."
   );
 
   Assert.equal(
-    SERPDomainToCategoriesMap.version,
+    SearchSERPDomainToCategoriesMap.version,
     null,
     "Version should remain null."
   );
 
   // Clean up.
   await db.clear();
-  await SERPDomainToCategoriesMap.uninit(true);
+  await SearchSERPDomainToCategoriesMap.uninit(true);
 });
 
 add_task(async function test_mock_restart() {
@@ -508,11 +507,11 @@ add_task(async function test_mock_restart() {
 
   info("Initialize search categorization mappings.");
   let promise = waitForDomainToCategoriesUpdate();
-  await SERPCategorization.init();
+  await SearchSERPCategorization.init();
   await promise;
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [
       {
         category: 1,
@@ -523,19 +522,19 @@ add_task(async function test_mock_restart() {
   );
 
   Assert.equal(
-    SERPDomainToCategoriesMap.version,
+    SearchSERPDomainToCategoriesMap.version,
     2,
     "Version should be the latest."
   );
 
   info("Mock a restart by un-initializing the map.");
-  await SERPCategorization.uninit();
+  await SearchSERPCategorization.uninit();
   promise = waitForDomainToCategoriesUpdate();
-  await SERPCategorization.init();
+  await SearchSERPCategorization.init();
   await promise;
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [
       {
         category: 1,
@@ -546,14 +545,14 @@ add_task(async function test_mock_restart() {
   );
 
   Assert.equal(
-    SERPDomainToCategoriesMap.version,
+    SearchSERPDomainToCategoriesMap.version,
     2,
     "Version should be the latest."
   );
 
   // Clean up.
   await db.clear();
-  await SERPDomainToCategoriesMap.uninit(true);
+  await SearchSERPDomainToCategoriesMap.uninit(true);
 });
 
 add_task(async function update_record_from_non_matching_region() {
@@ -566,11 +565,11 @@ add_task(async function update_record_from_non_matching_region() {
 
   info("Initialize search categorization mappings.");
   let promise = waitForDomainToCategoriesUpdate();
-  await SERPDomainToCategoriesMap.init();
+  await SearchSERPDomainToCategoriesMap.init();
   await promise;
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [{ category: 1, score: 100 }],
     "Return value from lookup of example.com should exist."
   );
@@ -598,26 +597,26 @@ add_task(async function update_record_from_non_matching_region() {
   await observeNoChange;
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [{ category: 1, score: 100 }],
     "Return value from lookup of example.com should still exist."
   );
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.ca"),
+    await SearchSERPDomainToCategoriesMap.get("example.ca"),
     [],
     "Domain from non-home region should not exist."
   );
 
   Assert.equal(
-    SERPDomainToCategoriesMap.version,
+    SearchSERPDomainToCategoriesMap.version,
     1,
     "Version should be remain the same."
   );
 
   // Clean up.
   await db.clear();
-  await SERPDomainToCategoriesMap.uninit(true);
+  await SearchSERPDomainToCategoriesMap.uninit(true);
 });
 
 add_task(async function update_record_from_non_matching_region() {
@@ -630,11 +629,11 @@ add_task(async function update_record_from_non_matching_region() {
 
   info("Initialize search categorization mappings.");
   let promise = waitForDomainToCategoriesUpdate();
-  await SERPDomainToCategoriesMap.init();
+  await SearchSERPDomainToCategoriesMap.init();
   await promise;
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [{ category: 1, score: 100 }],
     "Return value from lookup of example.com should exist."
   );
@@ -662,26 +661,26 @@ add_task(async function update_record_from_non_matching_region() {
   await observeNoChange;
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [{ category: 1, score: 100 }],
     "Return value from lookup of example.com should still exist."
   );
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.ca"),
+    await SearchSERPDomainToCategoriesMap.get("example.ca"),
     [],
     "Domain from non-home region should not exist."
   );
 
   Assert.equal(
-    SERPDomainToCategoriesMap.version,
+    SearchSERPDomainToCategoriesMap.version,
     1,
     "Version should be remain the same."
   );
 
   // Clean up.
   await db.clear();
-  await SERPDomainToCategoriesMap.uninit(true);
+  await SearchSERPDomainToCategoriesMap.uninit(true);
 });
 
 add_task(async function update_() {
@@ -694,17 +693,17 @@ add_task(async function update_() {
 
   info("Initialize search categorization mappings.");
   let promise = waitForDomainToCategoriesUpdate();
-  await SERPDomainToCategoriesMap.init();
+  await SearchSERPDomainToCategoriesMap.init();
   await promise;
 
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [{ category: 1, score: 100 }],
     "Return value from lookup of example.com should exist."
   );
 
   // Re-init the Map to mimic a restart.
-  await SERPDomainToCategoriesMap.uninit();
+  await SearchSERPDomainToCategoriesMap.uninit();
 
   info("Change home region to one that doesn't match region of map.");
   let originalHomeRegion = Region.home;
@@ -719,10 +718,10 @@ add_task(async function update_() {
     );
   });
 
-  await SERPDomainToCategoriesMap.init();
+  await SearchSERPDomainToCategoriesMap.init();
   await observeDropStore;
   Assert.deepEqual(
-    await SERPDomainToCategoriesMap.get("example.com"),
+    await SearchSERPDomainToCategoriesMap.get("example.com"),
     [],
     "Return value from lookup of example.com should be empty."
   );
@@ -730,5 +729,5 @@ add_task(async function update_() {
   // Clean up.
   await db.clear();
   Region._setHomeRegion(originalHomeRegion);
-  await SERPDomainToCategoriesMap.uninit(true);
+  await SearchSERPDomainToCategoriesMap.uninit(true);
 });

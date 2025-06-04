@@ -6,27 +6,11 @@
 
 /* global ExtensionAPI, ExtensionCommon, Services */
 
-this.aboutConfigPrefs = class AboutConfigPrefsAPI extends ExtensionAPI {
-  static ALLOWED_GLOBAL_PREFS = Object.freeze(
-    [
-      "layout.css.prefixes.transforms",
-      "timer.auto_increase_timer_resolution",
-    ].concat(
-      Cu.isInAutomation ? ["webcompat.test.pref1", "webcompat.test.pref2"] : []
-    )
-  );
-
+this.aboutConfigPrefs = class extends ExtensionAPI {
   getAPI(context) {
     const EventManager = ExtensionCommon.EventManager;
     const extensionIDBase = context.extension.id.split("@")[0];
     const extensionPrefNameBase = `extensions.${extensionIDBase}.`;
-
-    function getSafePref(name) {
-      if (AboutConfigPrefsAPI.ALLOWED_GLOBAL_PREFS.includes(name)) {
-        return name;
-      }
-      return `${extensionPrefNameBase}${name}`;
-    }
 
     return {
       aboutConfigPrefs: {
@@ -34,7 +18,7 @@ this.aboutConfigPrefs = class AboutConfigPrefsAPI extends ExtensionAPI {
           context,
           name: "aboutConfigPrefs.onUAOverridesPrefChange",
           register: (fire, name) => {
-            const prefName = getSafePref(name);
+            const prefName = `${extensionPrefNameBase}${name}`;
             const callback = () => {
               fire.async(name).catch(() => {}); // ignore Message Manager disconnects
             };
@@ -51,33 +35,17 @@ this.aboutConfigPrefs = class AboutConfigPrefsAPI extends ExtensionAPI {
             return { name, value: Services.prefs.getBoolPref(pref) };
           });
         },
-        async getPref(_name) {
-          const name = getSafePref(_name);
+        async getPref(name) {
           try {
-            switch (Services.prefs.getPrefType(name)) {
-              case Ci.nsIPrefBranch.PREF_BOOL:
-                return Services.prefs.getBoolPref(name);
-              case Ci.nsIPrefBranch.PREF_INT:
-                return Services.prefs.getIntPref(name);
-              case Ci.nsIPrefBranch.PREF_STRING:
-                return Services.prefs.getStringPref(name);
-            }
-          } catch (_) {}
-          return undefined;
-        },
-        async setPref(_name, value) {
-          const name = getSafePref(_name);
-          switch (typeof value) {
-            case "boolean":
-              Services.prefs.setBoolPref(name, value);
-              break;
-            case "number":
-              Services.prefs.setIntPref(name, value);
-              break;
-            case "string":
-              Services.prefs.setStringPref(name, value);
-              break;
+            return Services.prefs.getBoolPref(
+              `${extensionPrefNameBase}${name}`
+            );
+          } catch (_) {
+            return undefined;
           }
+        },
+        async setPref(name, value) {
+          Services.prefs.setBoolPref(`${extensionPrefNameBase}${name}`, value);
         },
       },
     };

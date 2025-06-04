@@ -1,9 +1,3 @@
-add_setup(async function () {
-  await SpecialPowers.pushPrefEnv({
-    set: [["test.wait300msAfterTabSwitch", true]],
-  });
-});
-
 function checkCommandState(testid, undoEnabled, copyEnabled, deleteEnabled) {
   is(
     !document.getElementById("cmd_undo").hasAttribute("disabled"),
@@ -72,7 +66,9 @@ add_task(async function test_controllers_subframes() {
 
     // Force the UI to update on platforms that don't
     // normally do so until menus are opened.
-    goUpdateGlobalEditMenuItems(true);
+    if (AppConstants.platform != "macosx") {
+      goUpdateGlobalEditMenuItems(true);
+    }
 
     await SpecialPowers.spawn(
       browsingContexts[stepNum],
@@ -104,7 +100,9 @@ add_task(async function test_controllers_subframes() {
       await keyAndUpdate("VK_TAB", {}, 1);
     }
 
-    goUpdateGlobalEditMenuItems(true);
+    if (AppConstants.platform != "macosx") {
+      goUpdateGlobalEditMenuItems(true);
+    }
 
     await SpecialPowers.spawn(browsingContexts[stepNum], [], () => {
       Assert.equal(
@@ -134,7 +132,9 @@ add_task(async function test_controllers_subframes() {
 
     // Select all text; this causes the Copy and Delete commands to be enabled.
     await keyAndUpdate("a", { accelKey: true }, 1);
-    goUpdateGlobalEditMenuItems(true);
+    if (AppConstants.platform != "macosx") {
+      goUpdateGlobalEditMenuItems(true);
+    }
 
     checkCommandState("step " + stepNum + " selected", true, true, true);
 

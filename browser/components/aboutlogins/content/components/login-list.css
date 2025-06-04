@@ -106,7 +106,7 @@ ol {
   display: block;
   position: sticky;
   top: 0;
-  font-size: 0.85em;
+  font-size: .85em;
   font-weight: var(--font-weight-bold);
   padding: 4px 16px;
   border-bottom: 1px solid var(--in-content-border-color);
@@ -131,7 +131,7 @@ ol {
 }
 
 .login-list-item.selected {
-  border-inline-start-color: var(--color-accent-primary);
+  border-inline-start-color: var(--in-content-accent-color);
   background-color: var(--in-content-page-background);
 }
 

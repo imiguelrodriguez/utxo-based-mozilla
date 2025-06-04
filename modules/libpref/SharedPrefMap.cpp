@@ -13,6 +13,8 @@
 #include "mozilla/Try.h"
 #include "mozilla/ipc/FileDescriptor.h"
 
+using namespace mozilla::loader;
+
 namespace mozilla {
 
 using namespace ipc;
@@ -22,31 +24,24 @@ static inline size_t GetAlignmentOffset(size_t aOffset, size_t aAlign) {
   return mod ? aAlign - mod : 0;
 }
 
-SharedPrefMap::SharedPrefMap(const ReadOnlySharedMemoryHandle& aMapHandle) {
-  auto map = aMapHandle.Map();
-  MOZ_RELEASE_ASSERT(map);
-
-  mHandle = aMapHandle.Clone();
+SharedPrefMap::SharedPrefMap(const FileDescriptor& aMapFile, size_t aMapSize) {
+  auto result = mMap.initWithHandle(aMapFile, aMapSize);
+  MOZ_RELEASE_ASSERT(result.isOk());
   // We return literal nsCStrings pointing to the mapped data for preference
   // names and string values, which means that we may still have references to
   // the mapped data even after this instance is destroyed. That means that we
   // need to keep the mapping alive until process shutdown, in order to be safe.
-  mMappedMemory = std::move(map).Release();
+  mMap.setPersistent();
 }
 
 SharedPrefMap::SharedPrefMap(SharedPrefMapBuilder&& aBuilder) {
-  ReadOnlySharedMemoryMappingWithHandle mapWithHandle;
-  auto result = aBuilder.Finalize();
+  auto result = aBuilder.Finalize(mMap);
   MOZ_RELEASE_ASSERT(result.isOk());
-  mHandle = result.unwrap();
-  auto map = mHandle.Map();
-  MOZ_RELEASE_ASSERT(map.IsValid());
-  mMappedMemory = std::move(map).Release();
+  mMap.setPersistent();
 }
 
-mozilla::ipc::ReadOnlySharedMemoryHandle SharedPrefMap::CloneHandle() const {
-  MOZ_ASSERT(XRE_IsParentProcess());
-  return mHandle.Clone();
+mozilla::ipc::FileDescriptor SharedPrefMap::CloneFileDescriptor() const {
+  return mMap.cloneHandle();
 }
 
 bool SharedPrefMap::Has(const char* aKey) const {
@@ -141,7 +136,7 @@ void SharedPrefMapBuilder::Add(const nsCString& aKey, const Flags& aFlags,
   });
 }
 
-Result<ReadOnlySharedMemoryHandle, nsresult> SharedPrefMapBuilder::Finalize() {
+Result<Ok, nsresult> SharedPrefMapBuilder::Finalize(loader::AutoMemMap& aMap) {
   using Header = SharedPrefMap::Header;
 
   // Create an array of entry pointers for the entry array, and sort it by
@@ -236,7 +231,7 @@ Result<ReadOnlySharedMemoryHandle, nsresult> SharedPrefMapBuilder::Finalize() {
   mStringValueTable.Clear();
   mEntries.Clear();
 
-  return mem.Finalize();
+  return mem.Finalize(aMap);
 }
 
 }  // namespace mozilla

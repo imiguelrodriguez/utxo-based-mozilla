@@ -4,32 +4,24 @@
 ChromeUtils.defineESModuleGetters(this, {
   ADLINK_CHECK_TIMEOUT_MS:
     "resource:///actors/SearchSERPTelemetryChild.sys.mjs",
-  BrowserSearchTelemetry:
-    "moz-src:///browser/components/search/BrowserSearchTelemetry.sys.mjs",
-  CATEGORIZATION_SETTINGS:
-    "moz-src:///browser/components/search/SERPCategorization.sys.mjs",
+  CATEGORIZATION_SETTINGS: "resource:///modules/SearchSERPTelemetry.sys.mjs",
   CustomizableUITestUtils:
     "resource://testing-common/CustomizableUITestUtils.sys.mjs",
   Region: "resource://gre/modules/Region.sys.mjs",
   RemoteSettings: "resource://services-settings/remote-settings.sys.mjs",
-  SEARCH_TELEMETRY_SHARED:
-    "moz-src:///browser/components/search/SearchSERPTelemetry.sys.mjs",
-  SearchSERPTelemetry:
-    "moz-src:///browser/components/search/SearchSERPTelemetry.sys.mjs",
-  SearchSERPTelemetryUtils:
-    "moz-src:///browser/components/search/SearchSERPTelemetry.sys.mjs",
+  SEARCH_TELEMETRY_SHARED: "resource:///modules/SearchSERPTelemetry.sys.mjs",
+  SearchSERPDomainToCategoriesMap:
+    "resource:///modules/SearchSERPTelemetry.sys.mjs",
+  SearchSERPTelemetry: "resource:///modules/SearchSERPTelemetry.sys.mjs",
+  SearchSERPTelemetryUtils: "resource:///modules/SearchSERPTelemetry.sys.mjs",
   SearchTestUtils: "resource://testing-common/SearchTestUtils.sys.mjs",
-  SearchUITestUtils: "resource://testing-common/SearchUITestUtils.sys.mjs",
-  SearchUtils: "moz-src:///toolkit/components/search/SearchUtils.sys.mjs",
-  SERPCategorizationRecorder:
-    "moz-src:///browser/components/search/SERPCategorization.sys.mjs",
-  SERPDomainToCategoriesMap:
-    "moz-src:///browser/components/search/SERPCategorization.sys.mjs",
+  SearchUtils: "resource://gre/modules/SearchUtils.sys.mjs",
+  SERPCategorizationRecorder: "resource:///modules/SearchSERPTelemetry.sys.mjs",
   sinon: "resource://testing-common/Sinon.sys.mjs",
   SPA_ADLINK_CHECK_TIMEOUT_MS:
-    "moz-src:///browser/components/search/SearchSERPTelemetry.sys.mjs",
+    "resource:///modules/SearchSERPTelemetry.sys.mjs",
   TELEMETRY_CATEGORIZATION_KEY:
-    "moz-src:///browser/components/search/SERPCategorization.sys.mjs",
+    "resource:///modules/SearchSERPTelemetry.sys.mjs",
   TelemetryTestUtils: "resource://testing-common/TelemetryTestUtils.sys.mjs",
   VISIBILITY_THRESHOLD: "resource:///actors/SearchSERPTelemetryChild.sys.mjs",
 });
@@ -69,7 +61,6 @@ const REGION = Region.home;
 let gCUITestUtils = new CustomizableUITestUtils(window);
 
 SearchTestUtils.init(this);
-SearchUITestUtils.init(this);
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -117,7 +108,7 @@ async function typeInSearchField(browser, text, fieldName) {
 
 async function searchInSearchbar(inputText, win = window) {
   await new Promise(r => waitForFocus(r, win));
-  let sb = win.document.getElementById("searchbar");
+  let sb = win.BrowserSearch.searchBar;
   // Write the search query in the searchbar.
   sb.focus();
   sb.value = inputText;

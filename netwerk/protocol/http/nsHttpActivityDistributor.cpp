@@ -106,10 +106,9 @@ nsHttpActivityDistributor::ObserveActivityWithArgs(
         portStr.AppendInt(port);
       }
 
-      nsresult rv =
-          NS_NewURI(getter_AddRefs(uri),
-                    (endToEndSSL ? "https://"_ns : "http://"_ns) +
-                        args.get_HttpActivity().host() + ":"_ns + portStr);
+      nsresult rv = NS_NewURI(getter_AddRefs(uri),
+                              (endToEndSSL ? "https://"_ns : "http://"_ns) +
+                                  args.get_HttpActivity().host() + portStr);
       if (NS_FAILED(rv)) {
         return;
       }

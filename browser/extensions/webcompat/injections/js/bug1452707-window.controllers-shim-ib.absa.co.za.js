@@ -24,7 +24,10 @@ console.info(
   "window.controllers has been shimmed for compatibility reasons. See https://webcompat.com/issues/16401 for details."
 );
 
-Object.getPrototypeOf(window).wrappedJSObject.controllers = exportFunction(
-  () => true,
-  window
-);
+Object.defineProperty(window.wrappedJSObject, "controllers", {
+  get: exportFunction(function () {
+    return true;
+  }, window),
+
+  set: exportFunction(function () {}, window),
+});

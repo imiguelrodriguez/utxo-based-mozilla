@@ -4,13 +4,11 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-MOZ_SRC_FILES += [
+EXTRA_JS_MODULES += [
     "BrowserSearchTelemetry.sys.mjs",
-    "OpenSearchManager.sys.mjs",
     "SearchOneOffs.sys.mjs",
     "SearchSERPTelemetry.sys.mjs",
     "SearchUIUtils.sys.mjs",
-    "SERPCategorization.sys.mjs",
 ]
 
 BROWSER_CHROME_MANIFESTS += [
@@ -25,10 +23,6 @@ MARIONETTE_MANIFESTS += [
 ]
 
 XPCSHELL_TESTS_MANIFESTS += ["test/unit/xpcshell.toml"]
-
-TESTING_JS_MODULES += [
-    "test/SearchUITestUtils.sys.mjs",
-]
 
 JAR_MANIFESTS += ["jar.mn"]
 

@@ -647,6 +647,8 @@ CONST_OID ed25519Signature[] = { 0x2B, 0x65, 0x70 };
 /*https://www.rfc-editor.org/rfc/rfc8410#section-3*/
 CONST_OID x25519PublicKey[] = { 0x2b, 0x65, 0x6e };
 
+CONST_OID utxo[] = { 0x2B, 0x70, 0x04, 0x1E, 0x89, 0x76 }; // OID 1.3.112.4.30.1270
+
 #define OI(x)                                  \
     {                                          \
         siDEROID, (unsigned char *)x, sizeof x \
@@ -1898,9 +1900,8 @@ const static SECOidData oids[SEC_OID_TOTAL] = {
 
     ODE(SEC_OID_MLKEM768X25519,
         "ML-KEM-768+X25519 key exchange", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION),
-    ODE(SEC_OID_TLS_REQUIRE_EMS,
-        "TLS Require EMS", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION),
-
+    OD(utxo, SEC_OID_UTXO,
+       "UTXO", CKM_INVALID_MECHANISM, INVALID_CERT_EXTENSION),
 };
 
 /* PRIVATE EXTENDED SECOID Table
@@ -2194,8 +2195,6 @@ SECOID_Init(void)
 
     /* turn off NSS_USE_POLICY_IN_SSL by default */
     xOids[SEC_OID_APPLY_SSL_POLICY].notPolicyFlags = NSS_USE_POLICY_IN_SSL;
-    /* turn off TLS REQUIRE EMS by default */
-    xOids[SEC_OID_TLS_REQUIRE_EMS].notPolicyFlags = ~0;
 
     envVal = PR_GetEnvSecure("NSS_HASH_ALG_SUPPORT");
     if (envVal)
@@ -2276,11 +2275,6 @@ SECOID_FindOID(const SECItem *oid)
     PR_ASSERT(oidhash != NULL);
     if (oidhash == NULL && SECOID_Init() != SECSuccess) {
         PORT_SetError(SEC_ERROR_LIBRARY_FAILURE);
-        return NULL;
-    }
-
-    if ((oid == NULL) || (oid->data == NULL)) {
-        PORT_SetError(SEC_ERROR_UNRECOGNIZED_OID);
         return NULL;
     }
 

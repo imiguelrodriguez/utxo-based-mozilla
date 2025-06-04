@@ -9,8 +9,8 @@
   --toolbarbutton-outer-padding: 2px;
   --toolbarbutton-inner-padding: 8px;
 
-  --toolbarbutton-hover-background: color-mix(in srgb, currentColor 17%, transparent);
-  --toolbarbutton-active-background: color-mix(in srgb, currentColor 30%, transparent);
+  --toolbarbutton-hover-background: var(--button-background-color-hover);
+  --toolbarbutton-active-background: var(--button-background-color-active);
   --toolbarbutton-outline-color: transparent;
   --toolbarbutton-hover-outline-color: transparent;
   --toolbarbutton-active-outline-color: transparent;
@@ -38,13 +38,13 @@
 
   --bookmark-block-padding: 4px;
 
-  &[uidensity="compact"] {
+  &[uidensity=compact] {
     --toolbarbutton-outer-padding: 3px;
     --toolbarbutton-inner-padding: 6px;
     --bookmark-block-padding: 1px;
   }
 
-  &[uidensity="touch"] {
+  &[uidensity=touch] {
     --toolbarbutton-inner-padding: 9px;
     --bookmark-block-padding: 7px;
   }
@@ -72,33 +72,6 @@
   > .toolbarbutton-icon,
   > .toolbarbutton-badge-stack > .toolbarbutton-icon {
     width: 16px;
-  }
-}
-
-/* Taskbar Tab windows will hide all toolbar buttons that are not on the following list */
-
-:root[taskbartab] {
-  .chromeclass-toolbar-additional {
-    display: none;
-  }
-  #back-button,
-  #forward-button,
-  #stop-reload-button,
-  #customizableui-special-spring1,
-  #vertical-spacer,
-  #customizableui-special-spring2,
-  #downloads-button,
-  #unified-extensions-button,
-  #save-page-button,
-  #print-button,
-  #find-button,
-  #zoom-controls,
-  #edit-controls,
-  #characterencoding-button,
-  #email-link-button,
-  #screenshot-button,
-  #fullscreen-button {
-    display: revert;
   }
 }
 
@@ -152,30 +125,20 @@ toolbar .toolbarbutton-1 {
     &:hover > :is(.toolbarbutton-icon, .toolbarbutton-text, .toolbarbutton-badge-stack) {
       background-color: var(--toolbarbutton-hover-background);
       color: inherit;
+      outline-color: var(--toolbarbutton-hover-outline-color);
     }
 
-    &:is(:hover:active, [open], [checked]) > :is(.toolbarbutton-icon, .toolbarbutton-text, .toolbarbutton-badge-stack) {
+    &:hover:active > :is(.toolbarbutton-icon, .toolbarbutton-text, .toolbarbutton-badge-stack) {
       background-color: var(--toolbarbutton-active-background);
       color: inherit;
+      outline-color: var(--toolbarbutton-active-outline-color);
     }
 
-    &:not(:focus-visible) {
-      &:hover > :is(.toolbarbutton-icon, .toolbarbutton-text, .toolbarbutton-badge-stack) {
-        outline-color: var(--toolbarbutton-hover-outline-color);
-      }
-
-      &:hover:active > :is(.toolbarbutton-icon, .toolbarbutton-text, .toolbarbutton-badge-stack) {
-        outline-color: var(--toolbarbutton-active-outline-color);
-      }
-
-      &:is([open], [checked]) > :is(.toolbarbutton-icon, .toolbarbutton-text, .toolbarbutton-badge-stack) {
-        outline-color: var(--toolbarbutton-selected-outline-color);
-      }
+    &:is([open], [checked]) > :is(.toolbarbutton-icon, .toolbarbutton-text, .toolbarbutton-badge-stack) {
+      background-color: var(--toolbarbutton-active-background);
+      color: inherit;
+      outline-color: var(--toolbarbutton-selected-outline-color);
     }
-  }
-
-  &.avatar-button-background > .toolbarbutton-badge-stack {
-    border: 1px solid var(--border-color-card);
   }
 }
 
@@ -207,29 +170,25 @@ toolbar .toolbaritem-combined-buttons {
     padding-block: calc(var(--toolbarbutton-inner-padding) + (16px - 12px) / 2);
     width: calc(2 * 2px + 12px);
   }
-}
 
-.toolbaritem-combined-buttons {
   > separator {
-    width: 0;
+    width: 1px;
     height: 16px;
-    pointer-events: none;
-
-    /* place the border on a pseudo-element so that
-       the separator doesn't take up any space */
-    &::before {
-      content: "";
-      border-inline-start: 1px solid currentColor;
-    }
+    margin-inline-end: -1px;
+    background-image: linear-gradient(currentColor 0, currentColor 100%);
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 1px 16px;
+    opacity: .2;
   }
 
   &:hover > separator {
-    opacity: 0;
+    display: none;
   }
 }
 
-toolbar .toolbaritem-combined-buttons > separator {
-  color: light-dark(color-mix(in srgb, currentColor 20%, transparent), color-mix(in srgb, currentColor 30%, transparent));
+toolbar[brighttext] .toolbaritem-combined-buttons > separator {
+  opacity: .3;
 }
 
 /* Toolbar button animations */
@@ -331,7 +290,7 @@ toolbar .toolbaritem-combined-buttons > separator {
   /* resume at 7/35 and animate across the next 14 frames */
   17.14% {
     animation-timing-function: steps(14);
-    transform: translateX(calc(0 * -20px));
+    transform: translateX(calc(0  * -20px));
   }
   /* pause on the last frame for the remainder of the duration */
   54.29% {
@@ -371,6 +330,15 @@ toolbar .toolbaritem-combined-buttons > separator {
     display: none;
   }
 }
+
+#bitcoin-button > .toolbarbutton-animatable-box > .toolbarbutton-animatable-image {
+    width: 12px;      /* example size */
+    height: 12px;     /* example size */
+    background-color: red;
+    border-radius: 50%;
+    display: inline-block; /* ensure it behaves like a box */
+}
+
 
 #stop-reload-button[animate] {
   > #reload-button > .toolbarbutton-icon,
@@ -449,7 +417,7 @@ toolbarbutton.bookmark-item:not(.subviewbutton) {
   --toolbarbutton-inner-padding: 4px;
   --toolbarbutton-outer-padding: 2px;
 
-  :root[uidensity="compact"] & {
+  :root[uidensity=compact] & {
     --toolbarbutton-outer-padding: 1px;
   }
 
@@ -496,7 +464,7 @@ toolbarbutton.bookmark-item:not(.subviewbutton) {
     outline-offset: var(--focus-outline-inset);
   }
 
-  :root[uidensity="compact"] & {
+  :root[uidensity=compact] & {
     margin-inline: 1px;
   }
 }
@@ -538,7 +506,7 @@ toolbarbutton.bookmark-item:not(.subviewbutton) {
 
 toolbarpaletteitem[place="toolbar"] > #personal-bookmarks > #bookmarks-toolbar-placeholder,
 toolbarpaletteitem[place="palette"] > #personal-bookmarks > #bookmarks-toolbar-button,
-#personal-bookmarks:is([overflowedItem="true"], [cui-areatype="panel"]) > #bookmarks-toolbar-button {
+#personal-bookmarks:is([overflowedItem=true], [cui-areatype="panel"]) > #bookmarks-toolbar-button {
   display: flex;
 }
 
@@ -568,7 +536,7 @@ toolbar:not(#TabsToolbar) > #personal-bookmarks {
 #PlacesToolbarItems > .bookmark-item > .toolbarbutton-icon[label]:not([label=""]),
 #PersonalToolbar #import-button > .toolbarbutton-icon,
 #PersonalToolbar #aboutwelcome-button > .toolbarbutton-icon,
-#PersonalToolbar #fxms-bmb-button > .toolbarbutton-icon,
+#PersonalToolbar .fxms-bmb-button > .toolbarbutton-icon,
 #OtherBookmarks.bookmark-item[container] > .toolbarbutton-icon {
   margin-inline-end: 4px;
 }
@@ -591,8 +559,7 @@ toolbar:not(#TabsToolbar) > #personal-bookmarks {
       transparent 3.75px,
       var(--toolbarseparator-color) 3.75px,
       var(--toolbarseparator-color) calc(100% - 3.75px),
-      transparent calc(100% - 3.75px)
-    );
+      transparent calc(100% - 3.75px) );
     border-image-slice: 1;
   }
 
@@ -611,14 +578,14 @@ toolbar:not(#TabsToolbar) > #personal-bookmarks {
   #PersonalToolbar & {
     margin-top: -1px !important;
 
-    :root[uidensity="touch"] & {
+    :root[uidensity=touch] & {
       margin-top: -4px !important;
     }
   }
 
   /* Remove a pixel of margin on the end so that the badge doesn't
    * overflow the toolbar and push the button into the overflow menu. */
-  :root[uidensity="compact"] & {
+  :root[uidensity=compact] & {
     margin-inline-end: -7px !important;
   }
 
@@ -639,13 +606,13 @@ toolbar:not(#TabsToolbar) > #personal-bookmarks {
 
 /* Flexible spacer sizing */
 
-toolbarpaletteitem[place="toolbar"][id^="wrapper-customizableui-special-spring"],
+toolbarpaletteitem[place=toolbar][id^=wrapper-customizableui-special-spring],
 toolbarspring {
   flex: 1;
   min-width: 28px;
   max-width: 112px;
 
-  #nav-bar &:not(#vertical-spacer) {
+  #nav-bar & {
     flex: 80 80;
     /* Ensure flexible spacers don't shrink to nothing so they can be
      * manipulated in customize mode. */
@@ -653,14 +620,14 @@ toolbarspring {
   }
 }
 
-#nav-bar:not([customizing]) toolbarspring:not(#vertical-spacer) {
+#nav-bar:not([customizing]) toolbarspring {
   /* Allow flexible spacers to shrink further outside of customize mode. */
   min-width: 1px;
 }
 
 /* Keyboard navigation */
 
-toolbar[keyNav]:not([collapsed="true"], [customizing]) toolbartabstop,
+toolbar[keyNav]:not([collapsed=true], [customizing]) toolbartabstop,
 #tabbrowser-tabs[orient="vertical"] #tabs-newtab-button,
 #vertical-tabs-newtab-button {
   -moz-user-focus: normal;

@@ -20,7 +20,6 @@
 #include "mozilla/Attributes.h"
 #include "mozilla/Monitor.h"
 #include "WifiScanner.h"
-#include "nsTHashMap.h"
 
 namespace mozilla {
 class TestWifiMonitor;
@@ -39,12 +38,14 @@ class nsWifiAccessPoint;
 #  define kMacOSWifiMonitorStackSize (512 * 1024)
 #endif
 
-struct WifiListenerData {
+struct WifiListenerHolder {
+  RefPtr<nsIWifiListener> mListener;
   bool mShouldPoll;
   bool mHasSentData = false;
 
-  explicit WifiListenerData(bool aShouldPoll = false)
-      : mShouldPoll(aShouldPoll) {}
+  explicit WifiListenerHolder(nsIWifiListener* aListener,
+                              bool aShouldPoll = false)
+      : mListener(aListener), mShouldPoll(aShouldPoll) {}
 };
 
 class nsWifiMonitor final : public nsIWifiMonitor, public nsIObserver {
@@ -85,9 +86,6 @@ class nsWifiMonitor final : public nsIWifiMonitor, public nsIObserver {
            mNumPollingListeners > 0;
   };
 
-  template <typename CallbackFn>
-  nsresult NotifyListeners(CallbackFn&& aCallback);
-
 #ifdef ENABLE_TESTS
   // Test-only function that confirms we "should" be polling.  May be wrong
   // if somehow the polling tasks are not set to run on the background
@@ -99,7 +97,7 @@ class nsWifiMonitor final : public nsIWifiMonitor, public nsIObserver {
   nsCOMPtr<nsIThread> mThread;
 
   // Main thread only.
-  nsTHashMap<RefPtr<nsIWifiListener>, WifiListenerData> mListeners;
+  nsTArray<WifiListenerHolder> mListeners;
 
   // Background thread only.
   mozilla::UniquePtr<mozilla::WifiScanner> mWifiScanner;

@@ -10,7 +10,7 @@
 "use strict";
 
 const { SearchSuggestionController } = ChromeUtils.importESModule(
-  "moz-src:///toolkit/components/search/SearchSuggestionController.sys.mjs"
+  "resource://gre/modules/SearchSuggestionController.sys.mjs"
 );
 
 let gEngine;

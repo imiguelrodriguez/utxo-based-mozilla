@@ -109,10 +109,6 @@ add_task(function makeResultGroups_true() {
                   group: UrlbarUtils.RESULT_GROUP.INPUT_HISTORY,
                 },
                 {
-                  availableSpan: 2,
-                  group: UrlbarUtils.RESULT_GROUP.HISTORY_SEMANTIC,
-                },
-                {
                   flexChildren: true,
                   children: [
                     {
@@ -188,10 +184,6 @@ add_task(function makeResultGroups_false() {
                 {
                   availableSpan: 3,
                   group: UrlbarUtils.RESULT_GROUP.INPUT_HISTORY,
-                },
-                {
-                  availableSpan: 2,
-                  group: UrlbarUtils.RESULT_GROUP.HISTORY_SEMANTIC,
                 },
                 {
                   flexChildren: true,
@@ -415,7 +407,7 @@ add_task(async function onNimbusChanged() {
   Assert.ok(
     observer.nimbusChangedList.includes("autoFillAdaptiveHistoryEnabled")
   );
-  await doCleanup();
+  doCleanup();
 });
 
 // Tests whether observer.onPrefChanged works.
@@ -467,5 +459,5 @@ add_task(async function onPrefChanged() {
   Services.prefs.clearUserPref(
     "browser.urlbar.autoFill.adaptiveHistory.enabled"
   );
-  await doCleanup();
+  doCleanup();
 });

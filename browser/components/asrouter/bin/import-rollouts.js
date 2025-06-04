@@ -139,10 +139,6 @@ async function getMessageValidators(skipValidation) {
       "./content-src/templates/OnboardingMessage/MenuMessage.schema.json",
       { common: true }
     ),
-    newtab_message: await getValidator(
-      "./content-src/templates/OnboardingMessage/NewtabMessage.schema.json",
-      { common: true }
-    ),
   };
 
   messageValidators.milestone_message = messageValidators.cfr_doorhanger;
@@ -205,7 +201,7 @@ async function main() {
   
     Examples
       $ node bin/import-rollouts.js --collection nimbus-preview
-      $ ./mach npm run import-rollouts --prefix=browser/components/asrouter -- -e
+      $ ./mach npm run import-rollouts --prefix=browser/components/newtab -- -e
   `,
     {
       description: false,

@@ -10,32 +10,26 @@ ChromeUtils.defineESModuleGetters(this, {
     "resource:///modules/UrlbarProviderQuickSuggest.sys.mjs",
 });
 
+const REMOTE_SETTINGS_RESULTS = [
+  QuickSuggestTestUtils.ampRemoteSettings({
+    keywords: ["amp", "amp and wikipedia"],
+  }),
+  QuickSuggestTestUtils.wikipediaRemoteSettings({
+    keywords: ["wikipedia", "amp and wikipedia"],
+  }),
+];
+
 add_setup(async function setup() {
   await QuickSuggestTestUtils.ensureQuickSuggestInit({
     remoteSettingsRecords: [
       {
-        collection: QuickSuggestTestUtils.RS_COLLECTION.AMP,
-        type: QuickSuggestTestUtils.RS_TYPE.AMP,
-        attachment: [
-          QuickSuggestTestUtils.ampRemoteSettings({
-            keywords: ["amp", "amp and wikipedia"],
-          }),
-        ],
-      },
-      {
-        collection: QuickSuggestTestUtils.RS_COLLECTION.OTHER,
-        type: QuickSuggestTestUtils.RS_TYPE.WIKIPEDIA,
-        attachment: [
-          QuickSuggestTestUtils.wikipediaRemoteSettings({
-            keywords: ["wikipedia", "amp and wikipedia"],
-          }),
-        ],
+        type: "data",
+        attachment: REMOTE_SETTINGS_RESULTS,
       },
     ],
     prefs: [
       ["suggest.quicksuggest.nonsponsored", true],
       ["suggest.quicksuggest.sponsored", true],
-      ["quicksuggest.ampTopPickCharThreshold", 0],
     ],
   });
 });
@@ -283,5 +277,6 @@ add_task(async function manyExposureResults_hidden_manyMatched() {
 });
 
 function suggestResultType(typeWithoutSource) {
-  return `rust_${typeWithoutSource}`;
+  let source = UrlbarPrefs.get("quickSuggestRustEnabled") ? "rust" : "rs";
+  return `${source}_${typeWithoutSource}`;
 }

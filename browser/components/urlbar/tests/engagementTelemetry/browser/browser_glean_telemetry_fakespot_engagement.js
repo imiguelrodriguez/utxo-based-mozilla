@@ -33,10 +33,7 @@ add_setup(async function test_setup() {
         ],
       },
       {
-        // eslint-disable-next-line mozilla/valid-lazy
-        collection: lazy.QuickSuggestTestUtils.RS_COLLECTION.AMP,
-        // eslint-disable-next-line mozilla/valid-lazy
-        type: lazy.QuickSuggestTestUtils.RS_TYPE.AMP,
+        type: "data",
         // eslint-disable-next-line mozilla/valid-lazy
         attachment: [lazy.QuickSuggestTestUtils.ampRemoteSettings()],
       },

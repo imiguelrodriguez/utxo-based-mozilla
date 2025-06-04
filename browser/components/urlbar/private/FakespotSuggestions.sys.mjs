@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { SuggestProvider } from "resource:///modules/urlbar/private/SuggestFeature.sys.mjs";
+import { BaseFeature } from "resource:///modules/urlbar/private/BaseFeature.sys.mjs";
 
 const lazy = {};
 
@@ -77,27 +77,27 @@ const REVIEWS_OVERFLOW = 99999;
 /**
  * A feature that supports Fakespot suggestions.
  */
-export class FakespotSuggestions extends SuggestProvider {
+export class FakespotSuggestions extends BaseFeature {
   constructor() {
     super();
     lazy.UrlbarResult.addDynamicResultType("fakespot");
     lazy.UrlbarView.addDynamicViewTemplate("fakespot", VIEW_TEMPLATE);
   }
 
+  get shouldEnable() {
+    return (
+      lazy.UrlbarPrefs.get("suggest.quicksuggest.sponsored") &&
+      lazy.UrlbarPrefs.get("fakespotFeatureGate") &&
+      lazy.UrlbarPrefs.get("suggest.fakespot")
+    );
+  }
+
   get enablingPreferences() {
-    return [
-      "fakespotFeatureGate",
-      "suggest.fakespot",
-      "suggest.quicksuggest.sponsored",
-    ];
+    return ["suggest.quicksuggest.sponsored", "suggest.fakespot"];
   }
 
-  get primaryUserControlledPreference() {
-    return "suggest.fakespot";
-  }
-
-  get rustSuggestionType() {
-    return "Fakespot";
+  get rustSuggestionTypes() {
+    return ["Fakespot"];
   }
 
   get showLessFrequentlyCount() {
@@ -108,13 +108,9 @@ export class FakespotSuggestions extends SuggestProvider {
   get canShowLessFrequently() {
     let cap =
       lazy.UrlbarPrefs.get("fakespotShowLessFrequentlyCap") ||
-      lazy.QuickSuggest.config.showLessFrequentlyCap ||
+      lazy.QuickSuggest.backend.config?.showLessFrequentlyCap ||
       0;
     return !cap || this.showLessFrequentlyCount < cap;
-  }
-
-  isSuggestionSponsored(_suggestion) {
-    return true;
   }
 
   getSuggestionTelemetryType(suggestion) {
@@ -210,7 +206,7 @@ export class FakespotSuggestions extends SuggestProvider {
       commands.push({
         name: RESULT_MENU_COMMAND.SHOW_LESS_FREQUENTLY,
         l10n: {
-          id: "urlbar-result-menu-show-less-frequently",
+          id: "firefox-suggest-command-show-less-frequently",
         },
       });
     }
@@ -253,9 +249,8 @@ export class FakespotSuggestions extends SuggestProvider {
     return commands;
   }
 
-  onEngagement(queryContext, controller, details, searchString) {
-    let { result } = details;
-    switch (details.selType) {
+  handleCommand(view, result, selType, searchString) {
+    switch (selType) {
       case RESULT_MENU_COMMAND.HELP:
       case RESULT_MENU_COMMAND.MANAGE:
         // "help" and "manage" are handled by UrlbarInput, no need to do
@@ -264,24 +259,24 @@ export class FakespotSuggestions extends SuggestProvider {
       // selType == "dismiss" when the user presses the dismiss key shortcut.
       case "dismiss":
       case RESULT_MENU_COMMAND.NOT_RELEVANT:
-        lazy.QuickSuggest.dismissResult(result);
+        lazy.QuickSuggest.blockedSuggestions.add(result.payload.originalUrl);
         result.acknowledgeDismissalL10n = {
           id: "firefox-suggest-dismissal-acknowledgment-one-fakespot",
         };
-        controller.removeResult(result);
+        view.controller.removeResult(result);
         break;
       case RESULT_MENU_COMMAND.NOT_INTERESTED:
         lazy.UrlbarPrefs.set("suggest.fakespot", false);
         result.acknowledgeDismissalL10n = {
           id: "firefox-suggest-dismissal-acknowledgment-all-fakespot",
         };
-        controller.removeResult(result);
+        view.controller.removeResult(result);
         break;
       case RESULT_MENU_COMMAND.SHOW_LESS_FREQUENTLY:
-        controller.view.acknowledgeFeedback(result);
+        view.acknowledgeFeedback(result);
         this.incrementShowLessFrequentlyCount();
         if (!this.canShowLessFrequently) {
-          controller.view.invalidateResultMenuCommands();
+          view.invalidateResultMenuCommands();
         }
         lazy.UrlbarPrefs.set(
           "fakespot.minKeywordLength",
@@ -289,12 +284,6 @@ export class FakespotSuggestions extends SuggestProvider {
         );
         break;
     }
-
-    Glean.urlbar.fakespotEngagement.record({
-      grade: result.payload.fakespotGrade,
-      rating: String(result.payload.rating),
-      provider: result.payload.fakespotProvider,
-    });
   }
 
   incrementShowLessFrequentlyCount() {
@@ -304,6 +293,15 @@ export class FakespotSuggestions extends SuggestProvider {
         this.showLessFrequentlyCount + 1
       );
     }
+  }
+
+  onEngagement(queryContext, controller, details) {
+    let { result } = details;
+    Glean.urlbar.fakespotEngagement.record({
+      grade: result.payload.fakespotGrade,
+      rating: String(result.payload.rating),
+      provider: result.payload.fakespotProvider,
+    });
   }
 
   get #minKeywordLength() {

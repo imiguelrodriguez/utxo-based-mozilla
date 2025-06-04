@@ -19,14 +19,14 @@ add_task(async function test_translations_engine_destroy() {
   await FullPageTranslationsTestUtils.openPanel({
     expectedFromLanguage: "es",
     expectedToLanguage: "en",
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
   });
 
   await FullPageTranslationsTestUtils.clickTranslateButton({
     downloadHandler: resolveDownloads,
   });
 
-  await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated({
+  await FullPageTranslationsTestUtils.assertPageIsTranslated({
     fromLanguage: "es",
     toLanguage: "en",
     runInPage,
@@ -36,20 +36,13 @@ add_task(async function test_translations_engine_destroy() {
   await EngineProcess.destroyTranslationsEngine();
 
   info("Mutate the page's content to re-trigger a translation.");
-  const { promise: animationPromise, resolve } = Promise.withResolvers();
-  requestAnimationFrame(() => {
-    requestAnimationFrame(resolve);
-  });
-
   await runInPage(async TranslationsTest => {
     const { getH1 } = TranslationsTest.getSelectors();
     getH1().innerText = "New text for the H1";
   });
 
-  await animationPromise;
-
   info("The engine downloads should be requested again.");
-  await resolveDownloads(1);
+  resolveDownloads(1);
 
   await runInPage(async TranslationsTest => {
     const { getH1 } = TranslationsTest.getSelectors();

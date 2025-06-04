@@ -1,6 +1,6 @@
 import { ASRouterTriggerListeners } from "modules/ASRouterTriggerListeners.sys.mjs";
 import { ASRouterPreferences } from "modules/ASRouterPreferences.sys.mjs";
-import { GlobalOverrider } from "tests/unit/utils";
+import { GlobalOverrider } from "test/unit/utils";
 
 describe("ASRouterTriggerListeners", () => {
   let sandbox;

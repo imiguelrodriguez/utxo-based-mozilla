@@ -10,30 +10,34 @@
  */
 add_task(async function () {
   info("Setting browser to RTL locale");
-  await BrowserTestUtils.enableRtlLocale();
+  await SpecialPowers.pushPrefEnv({ set: [["intl.l10n.pseudo", "bidi"]] });
+
+  // window.RTL_UI doesn't update in existing windows when this pref is changed,
+  // so we need to test in a new window.
+  let win = await BrowserTestUtils.openNewBrowserWindow();
+  await switchToWindow(win);
 
   const TEST_ROOT = getRootDirectory(gTestPath).replace(
     "chrome://mochitests/content",
     "https://example.com"
   );
-  let newTab = gBrowser.tabs[0];
+  let newTab = win.gBrowser.tabs[0];
 
   let waitForTestTabPromise = BrowserTestUtils.waitForNewTab(
-    gBrowser,
+    win.gBrowser,
     TEST_ROOT + "file_new_tab_page.html"
   );
   let testTab = await BrowserTestUtils.openNewForegroundTab(
-    gBrowser,
+    win.gBrowser,
     TEST_ROOT + "file_new_tab_page.html"
   );
   await waitForTestTabPromise;
 
-  // FIXME (bug 1958909): This uses the wrong document.
-  let linkSrcEl = document.querySelector("a");
+  let linkSrcEl = win.document.querySelector("a");
   ok(linkSrcEl, "Link exists");
 
   let dropPromise = BrowserTestUtils.waitForEvent(
-    gBrowser.tabContainer,
+    win.gBrowser.tabContainer,
     "drop"
   );
 
@@ -42,11 +46,11 @@ add_task(async function () {
    * 1. new tab (auto-generated)
    * 2. test tab
    */
-  is(gBrowser.visibleTabs.length, 2, "There should be 2 tabs");
+  is(win.gBrowser.visibleTabs.length, 2, "There should be 2 tabs");
 
   // Now open Firefox View tab
   info("Opening Firefox View tab");
-  await openFirefoxViewTab(window);
+  await openFirefoxViewTab(win);
 
   /**
    * There should be 2 visible tabs:
@@ -55,16 +59,16 @@ add_task(async function () {
    * Firefox View tab is hidden.
    */
   is(
-    gBrowser.visibleTabs.length,
+    win.gBrowser.visibleTabs.length,
     2,
     "There should still be 2 visible tabs after opening Firefox View tab"
   );
 
   info("Switching to test tab");
-  await BrowserTestUtils.switchTab(gBrowser, testTab);
+  await BrowserTestUtils.switchTab(win.gBrowser, testTab);
 
   let waitForDraggedTabPromise = BrowserTestUtils.waitForNewTab(
-    gBrowser,
+    win.gBrowser,
     "https://example.com/#test"
   );
 
@@ -74,8 +78,8 @@ add_task(async function () {
     testTab,
     [[{ type: "text/plain", data: "https://example.com/#test" }]],
     "link",
-    window,
-    window,
+    win,
+    win,
     {
       clientX: testTab.getBoundingClientRect().right,
     }
@@ -95,25 +99,23 @@ add_task(async function () {
    * In RTL build, it should appear in the following order:
    * <test tab> <link dragged tab> <new tab> | <FxView tab>
    */
-  is(gBrowser.visibleTabs.length, 3, "There should be 3 tabs");
+  is(win.gBrowser.visibleTabs.length, 3, "There should be 3 tabs");
   is(
-    gBrowser.visibleTabs.indexOf(newTab),
+    win.gBrowser.visibleTabs.indexOf(newTab),
     0,
     "New tab should still be rightmost visible tab"
   );
   is(
-    gBrowser.visibleTabs.indexOf(draggedTab),
+    win.gBrowser.visibleTabs.indexOf(draggedTab),
     1,
     "Dragged link should positioned at new index"
   );
   is(
-    gBrowser.visibleTabs.indexOf(testTab),
+    win.gBrowser.visibleTabs.indexOf(testTab),
     2,
     "Test tab should be to the left of dragged tab"
   );
-  BrowserTestUtils.removeTab(draggedTab);
-  BrowserTestUtils.removeTab(testTab);
-  BrowserTestUtils.removeTab(FirefoxViewHandler.tab);
 
-  await BrowserTestUtils.disableRtlLocale();
+  await BrowserTestUtils.closeWindow(win);
+  await SpecialPowers.popPrefEnv();
 });

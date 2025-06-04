@@ -83,43 +83,37 @@ nsresult nsSimpleURI::ReadPrivate(nsIObjectInputStream* aStream) {
   if (NS_FAILED(rv)) return rv;
   Unused << isMutable;
 
-  nsAutoCString scheme;
-  rv = aStream->ReadCString(scheme);
+  rv = aStream->ReadCString(mScheme);
   if (NS_FAILED(rv)) return rv;
 
-  nsAutoCString path;
-  rv = aStream->ReadCString(path);
+  rv = aStream->ReadCString(mPath);
   if (NS_FAILED(rv)) return rv;
 
   bool isRefValid;
   rv = aStream->ReadBoolean(&isRefValid);
   if (NS_FAILED(rv)) return rv;
+  mIsRefValid = isRefValid;
 
-  nsAutoCString ref;
   if (isRefValid) {
-    rv = aStream->ReadCString(ref);
+    rv = aStream->ReadCString(mRef);
     if (NS_FAILED(rv)) return rv;
+  } else {
+    mRef.Truncate();  // invariant: mRef should be empty when it's not valid
   }
 
   bool isQueryValid;
   rv = aStream->ReadBoolean(&isQueryValid);
   if (NS_FAILED(rv)) return rv;
+  mIsQueryValid = isQueryValid;
 
-  nsAutoCString query;
   if (isQueryValid) {
-    rv = aStream->ReadCString(query);
+    rv = aStream->ReadCString(mQuery);
     if (NS_FAILED(rv)) return rv;
+  } else {
+    mQuery.Truncate();  // invariant: mQuery should be empty when it's not valid
   }
 
-  // Re-constitute the spec, and initialize from it.
-  nsAutoCString spec = scheme + ":"_ns + path;
-  if (isQueryValid) {
-    spec += "?"_ns + query;
-  }
-  if (isRefValid) {
-    spec += "#"_ns + ref;
-  }
-  return SetSpecInternal(spec);
+  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -129,25 +123,25 @@ nsSimpleURI::Write(nsIObjectOutputStream* aStream) {
   rv = aStream->WriteBoolean(false);  // former mMutable
   if (NS_FAILED(rv)) return rv;
 
-  rv = aStream->WriteCString(Scheme());
+  rv = aStream->WriteStringZ(mScheme.get());
   if (NS_FAILED(rv)) return rv;
 
-  rv = aStream->WriteCString(Path());
+  rv = aStream->WriteStringZ(mPath.get());
   if (NS_FAILED(rv)) return rv;
 
-  rv = aStream->WriteBoolean(IsRefValid());
+  rv = aStream->WriteBoolean(mIsRefValid);
   if (NS_FAILED(rv)) return rv;
 
-  if (IsRefValid()) {
-    rv = aStream->WriteCString(Ref());
+  if (mIsRefValid) {
+    rv = aStream->WriteStringZ(mRef.get());
     if (NS_FAILED(rv)) return rv;
   }
 
-  rv = aStream->WriteBoolean(IsQueryValid());
+  rv = aStream->WriteBoolean(mIsQueryValid);
   if (NS_FAILED(rv)) return rv;
 
-  if (IsQueryValid()) {
-    rv = aStream->WriteCString(Query());
+  if (mIsQueryValid) {
+    rv = aStream->WriteStringZ(mQuery.get());
     if (NS_FAILED(rv)) return rv;
   }
 
@@ -157,7 +151,20 @@ nsSimpleURI::Write(nsIObjectOutputStream* aStream) {
 void nsSimpleURI::Serialize(URIParams& aParams) {
   SimpleURIParams params;
 
-  params.spec() = mSpec;
+  params.scheme() = mScheme;
+  params.path() = mPath;
+
+  if (mIsRefValid) {
+    params.ref() = mRef;
+  } else {
+    params.ref().SetIsVoid(true);
+  }
+
+  if (mIsQueryValid) {
+    params.query() = mQuery;
+  } else {
+    params.query().SetIsVoid(true);
+  }
 
   aParams = params;
 }
@@ -170,10 +177,23 @@ bool nsSimpleURI::Deserialize(const URIParams& aParams) {
 
   const SimpleURIParams& params = aParams.get_SimpleURIParams();
 
-  nsresult rv = SetSpecInternal(params.spec());
-  if (NS_FAILED(rv)) {
-    NS_ERROR("Failed to set spec from other process");
-    return false;
+  mScheme = params.scheme();
+  mPath = params.path();
+
+  if (params.ref().IsVoid()) {
+    mRef.Truncate();
+    mIsRefValid = false;
+  } else {
+    mRef = params.ref();
+    mIsRefValid = true;
+  }
+
+  if (params.query().IsVoid()) {
+    mQuery.Truncate();
+    mIsQueryValid = false;
+  } else {
+    mQuery = params.query();
+    mIsQueryValid = true;
   }
 
   return true;
@@ -184,20 +204,37 @@ bool nsSimpleURI::Deserialize(const URIParams& aParams) {
 
 NS_IMETHODIMP
 nsSimpleURI::GetSpec(nsACString& result) {
-  result = mSpec;
+  if (!result.Assign(mScheme, fallible) || !result.Append(":"_ns, fallible) ||
+      !result.Append(mPath, fallible)) {
+    return NS_ERROR_OUT_OF_MEMORY;
+  }
+
+  if (mIsQueryValid) {
+    if (!result.Append("?"_ns, fallible) || !result.Append(mQuery, fallible)) {
+      return NS_ERROR_OUT_OF_MEMORY;
+    }
+  } else {
+    MOZ_ASSERT(mQuery.IsEmpty(), "mIsQueryValid/mQuery invariant broken");
+  }
+
+  if (mIsRefValid) {
+    if (!result.Append("#"_ns, fallible) || !result.Append(mRef, fallible)) {
+      return NS_ERROR_OUT_OF_MEMORY;
+    }
+  } else {
+    MOZ_ASSERT(mRef.IsEmpty(), "mIsRefValid/mRef invariant broken");
+  }
+
   return NS_OK;
 }
 
 // result may contain unescaped UTF-8 characters
 NS_IMETHODIMP
 nsSimpleURI::GetSpecIgnoringRef(nsACString& result) {
-  if (!IsRefValid()) {
-    // Optimization: If there is no ref which needs to be trimmed, call
-    // `GetSpec` to allow result to share the `mSpec` string buffer.
-    return GetSpec(result);
+  result = mScheme + ":"_ns + mPath;
+  if (mIsQueryValid) {
+    result += "?"_ns + mQuery;
   }
-
-  result = SpecIgnoringRef();
   return NS_OK;
 }
 
@@ -223,7 +260,7 @@ nsSimpleURI::GetDisplayPrePath(nsACString& aPrePath) {
 
 NS_IMETHODIMP
 nsSimpleURI::GetHasRef(bool* result) {
-  *result = IsRefValid();
+  *result = mIsRefValid;
   return NS_OK;
 }
 
@@ -240,8 +277,7 @@ nsresult nsSimpleURI::SetSpecInternal(const nsACString& aSpec,
     return NS_ERROR_MALFORMED_URI;
   }
 
-  nsAutoCString scheme;
-  nsresult rv = net_ExtractURLScheme(aSpec, scheme);
+  nsresult rv = net_ExtractURLScheme(aSpec, mScheme);
   if (NS_FAILED(rv)) {
     return rv;
   }
@@ -255,32 +291,15 @@ nsresult nsSimpleURI::SetSpecInternal(const nsACString& aSpec,
     return rv;
   }
 
-  // Copy the filtered string into `mSpec`. We'll try not to mutate this buffer
-  // unless it's required so we can share the (potentially very large data: URI)
-  // string buffer.
-  mSpec = std::move(spec);
-  mPathSep = mSpec.FindChar(':');
-  MOZ_ASSERT(mPathSep != kNotFound, "A colon should be in this string");
-  mQuerySep = kNotFound;
-  mRefSep = kNotFound;
-
-  // Check if `net_ExtractURLScheme` changed the scheme as written, and update
-  // `mSpec` if it did.
-  if (Scheme() != scheme) {
-    if (!mSpec.Replace(SchemeStart(), SchemeLen(), scheme, fallible)) {
-      return NS_ERROR_OUT_OF_MEMORY;
-    }
-    mPathSep = scheme.Length();
-    MOZ_ASSERT(mSpec.CharAt(mPathSep) == ':');
-  }
-
-  // Populate the remaining members.
-  return SetPathQueryRefInternal();
+  int32_t colonPos = spec.FindChar(':');
+  MOZ_ASSERT(colonPos != kNotFound, "A colon should be in this string");
+  // This sets mPath, mQuery and mRef.
+  return SetPathQueryRefInternal(Substring(spec, colonPos + 1));
 }
 
 NS_IMETHODIMP
 nsSimpleURI::GetScheme(nsACString& result) {
-  result = Scheme();
+  result = mScheme;
   return NS_OK;
 }
 
@@ -288,34 +307,20 @@ nsresult nsSimpleURI::SetScheme(const nsACString& input) {
   // Strip tabs, newlines, carriage returns from input
   nsAutoCString scheme(input);
   scheme.StripTaggedASCII(ASCIIMask::MaskCRLFTab());
-  ToLowerCase(scheme);
 
   if (!net_IsValidScheme(scheme)) {
     NS_WARNING("the given url scheme contains invalid characters");
     return NS_ERROR_MALFORMED_URI;
   }
 
-  int32_t delta = static_cast<int32_t>(scheme.Length()) - mPathSep;
-  mSpec.Replace(SchemeStart(), SchemeLen(), scheme);
-
-  // Adjust the separator indexes to account for the change in scheme length.
-  mPathSep += delta;
-  MOZ_ASSERT(mSpec.CharAt(mPathSep) == ':');
-  if (IsQueryValid()) {
-    mQuerySep += delta;
-    MOZ_ASSERT(mSpec.CharAt(mQuerySep) == '?');
-  }
-  if (IsRefValid()) {
-    mRefSep += delta;
-    MOZ_ASSERT(mSpec.CharAt(mRefSep) == '#');
-  }
-
+  mScheme = scheme;
+  ToLowerCase(mScheme);
   return NS_OK;
 }
 
 NS_IMETHODIMP
 nsSimpleURI::GetPrePath(nsACString& result) {
-  result = Substring(mSpec, 0, PathStart());
+  result = mScheme + ":"_ns;
   return NS_OK;
 }
 
@@ -374,19 +379,21 @@ nsresult nsSimpleURI::SetPort(int32_t port) { return NS_ERROR_FAILURE; }
 
 NS_IMETHODIMP
 nsSimpleURI::GetPathQueryRef(nsACString& result) {
-  result = Substring(mSpec, PathStart());
+  result = mPath;
+  if (mIsQueryValid) {
+    result += "?"_ns + mQuery;
+  }
+  if (mIsRefValid) {
+    result += "#"_ns + mRef;
+  }
+
   return NS_OK;
 }
 
 nsresult nsSimpleURI::SetPathQueryRef(const nsACString& aPath) {
-  if (StaticPrefs::network_url_max_length()) {
-    CheckedInt<uint32_t> newLength(mSpec.Length());
-    newLength -= PathLen();
-    newLength += aPath.Length();
-    if (!newLength.isValid() ||
-        newLength.value() > StaticPrefs::network_url_max_length()) {
-      return NS_ERROR_MALFORMED_URI;
-    }
+  if (StaticPrefs::network_url_max_length() &&
+      aPath.Length() > StaticPrefs::network_url_max_length()) {
+    return NS_ERROR_MALFORMED_URI;
   }
 
   nsAutoCString path;
@@ -394,63 +401,59 @@ nsresult nsSimpleURI::SetPathQueryRef(const nsACString& aPath) {
   if (NS_FAILED(rv)) {
     return rv;
   }
+  return SetPathQueryRefInternal(path);
+}
 
-  // Clear out the components being replaced. They'll be re-initialized below.
-  mQuerySep = kNotFound;
-  mRefSep = kNotFound;
+nsresult nsSimpleURI::SetPathQueryRefInternal(const nsACString& aPath) {
+  nsresult rv;
+  const auto* start = aPath.BeginReading();
+  const auto* end = aPath.EndReading();
 
-  mSpec.Truncate(PathStart());
-  if (!mSpec.Append(path, fallible)) {
+  // Find the first instance of ? or # that marks the end of the path.
+  auto hashOrQueryFilter = [](char c) { return c == '?' || c == '#'; };
+  const auto* pathEnd = std::find_if(start, end, hashOrQueryFilter);
+
+  mIsQueryValid = false;
+  mQuery.Truncate();
+
+  mIsRefValid = false;
+  mRef.Truncate();
+
+  // The path
+  if (!mPath.Assign(Substring(start, pathEnd), fallible)) {
     return NS_ERROR_OUT_OF_MEMORY;
   }
 
-  return SetPathQueryRefInternal();
-}
+  if (pathEnd == end) {
+    return NS_OK;
+  }
 
-nsresult nsSimpleURI::SetPathQueryRefInternal() {
-  MOZ_ASSERT(mSpec.CharAt(mPathSep) == ':');
-  MOZ_ASSERT(mQuerySep == kNotFound);
-  MOZ_ASSERT(mRefSep == kNotFound);
+  const auto* queryEnd =
+      std::find_if(pathEnd, end, [](char c) { return c == '#'; });
 
-  // Initialize `mQuerySep` and `mRefSep` if those components are present.
-  int32_t pathEnd = mSpec.FindCharInSet("?#", PathStart());
-  if (pathEnd != kNotFound) {
-    if (mSpec.CharAt(pathEnd) == '?') {
-      mQuerySep = pathEnd;
-    } else {
-      mRefSep = pathEnd;
+  // Bug 1874118: If the URL does not contain a '?' or '?' appears after '#',
+  // SetQuery will not execute, preventing TrimTrailingCharactersFromPath
+  if (pathEnd != end && *pathEnd == '?') {
+    rv = SetQuery(Substring(pathEnd, queryEnd));
+    if (NS_FAILED(rv)) {
+      return rv;
     }
   }
 
-  if (IsQueryValid()) {
-    mRefSep = mSpec.FindChar('#', QueryStart());
+  if (queryEnd == end) {
+    return NS_OK;
   }
 
-  // Unlike the path or query, `mRef` also requires spaces to be escaped.
-  if (IsRefValid()) {
-    // NOTE: `NS_EscapeURLSpan` could theoretically OOM-fail, but there is no
-    // fallible version of `NS_EscapeURL` which won't do an unnecessary copy in
-    // the non-escaping case.
-    nsAutoCString escapedRef;
-    if (NS_EscapeURLSpan(Ref(), esc_OnlyNonASCII | esc_Spaces, escapedRef)) {
-      if (!mSpec.Replace(RefStart(), RefLen(), escapedRef, fallible)) {
-        return NS_ERROR_OUT_OF_MEMORY;
-      }
-    }
-  }
-
-  if (Scheme() != "javascript"_ns && !IsQueryValid() && !IsRefValid()) {
-    TrimTrailingCharactersFromPath();
-  }
-  return NS_OK;
+  return SetRef(Substring(queryEnd, end));
 }
 
 NS_IMETHODIMP
 nsSimpleURI::GetRef(nsACString& result) {
-  if (!IsRefValid()) {
+  if (!mIsRefValid) {
+    MOZ_ASSERT(mRef.IsEmpty(), "mIsRefValid/mRef invariant broken");
     result.Truncate();
   } else {
-    result = Ref();
+    result = mRef;
   }
 
   return NS_OK;
@@ -471,40 +474,26 @@ nsresult nsSimpleURI::SetRef(const nsACString& aRef) {
     return rv;
   }
 
-  if (ref.IsEmpty() && !IsRefValid()) {
-    return NS_OK;  // nothing to do
-  }
-
-  int32_t cutStart;
-  int32_t cutLength;
-  if (IsRefValid()) {
-    cutStart = mRefSep;
-    cutLength = RefEnd() - cutStart;
-  } else {
-    cutStart = mSpec.Length();
-    cutLength = 0;
-  }
-
-  nsCString prefix;
-  if (!ref.IsEmpty() && ref[0] != '#') {
-    // The replace includes the `#` character, so ensure it's present in the
-    // ref (unless we're removing the ref).
-    prefix = "#"_ns;
-  }
-  if (!mSpec.Replace(cutStart, cutLength, prefix + ref, fallible)) {
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
-
   if (ref.IsEmpty()) {
-    mRefSep = kNotFound;
-  } else {
-    mRefSep = cutStart;
-    MOZ_ASSERT(mSpec.CharAt(mRefSep) == '#');
+    // Empty string means to remove ref completely.
+    mIsRefValid = false;
+    mRef.Truncate();  // invariant: mRef should be empty when it's not valid
+
+    // Trim trailing invalid chars when ref and query are removed
+    if (mScheme != "javascript" && mRef.IsEmpty() && mQuery.IsEmpty()) {
+      TrimTrailingCharactersFromPath();
+    }
+
+    return NS_OK;
   }
 
-  // Trim trailing invalid chars when ref and query are removed
-  if (Scheme() != "javascript"_ns && !IsRefValid() && !IsQueryValid()) {
-    TrimTrailingCharactersFromPath();
+  mIsRefValid = true;
+
+  // Gracefully skip initial hash
+  if (ref[0] == '#') {
+    mRef = Substring(ref, 1);
+  } else {
+    mRef = ref;
   }
 
   return NS_OK;
@@ -540,11 +529,19 @@ nsresult nsSimpleURI::EqualsInternal(
 
 bool nsSimpleURI::EqualsInternal(nsSimpleURI* otherUri,
                                  RefHandlingEnum refHandlingMode) {
-  if (refHandlingMode != eHonorRef) {
-    return SpecIgnoringRef() == otherUri->SpecIgnoringRef();
+  bool result = (mScheme == otherUri->mScheme && mPath == otherUri->mPath);
+
+  if (result) {
+    result = (mIsQueryValid == otherUri->mIsQueryValid &&
+              (!mIsQueryValid || mQuery == otherUri->mQuery));
   }
 
-  return mSpec == otherUri->mSpec;
+  if (result && refHandlingMode == eHonorRef) {
+    result = (mIsRefValid == otherUri->mIsRefValid &&
+              (!mIsRefValid || mRef == otherUri->mRef));
+  }
+
+  return result;
 }
 
 NS_IMETHODIMP
@@ -555,25 +552,54 @@ nsSimpleURI::SchemeIs(const char* i_Scheme, bool* o_Equals) {
     return NS_OK;
   }
 
-  *o_Equals = Scheme().EqualsIgnoreCase(i_Scheme);
+  const char* this_scheme = mScheme.get();
+
+  // mScheme is guaranteed to be lower case.
+  if (*i_Scheme == *this_scheme || *i_Scheme == (*this_scheme - ('a' - 'A'))) {
+    *o_Equals = nsCRT::strcasecmp(this_scheme, i_Scheme) == 0;
+  } else {
+    *o_Equals = false;
+  }
+
   return NS_OK;
 }
 
-/* virtual */ already_AddRefed<nsSimpleURI> nsSimpleURI::StartClone() {
-  RefPtr<nsSimpleURI> url = new nsSimpleURI();
-  return url.forget();
+/* virtual */ nsSimpleURI* nsSimpleURI::StartClone(
+    nsSimpleURI::RefHandlingEnum refHandlingMode, const nsACString& newRef) {
+  nsSimpleURI* url = new nsSimpleURI();
+  SetRefOnClone(url, refHandlingMode, newRef);
+  return url;
+}
+
+/* virtual */
+void nsSimpleURI::SetRefOnClone(nsSimpleURI* url,
+                                nsSimpleURI::RefHandlingEnum refHandlingMode,
+                                const nsACString& newRef) {
+  if (refHandlingMode == eHonorRef) {
+    url->mRef = mRef;
+    url->mIsRefValid = mIsRefValid;
+  } else if (refHandlingMode == eReplaceRef) {
+    url->SetRef(newRef);
+  }
 }
 
 nsresult nsSimpleURI::Clone(nsIURI** result) {
-  RefPtr<nsSimpleURI> url = StartClone();
-  if (!url) {
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
+  return CloneInternal(eHonorRef, ""_ns, result);
+}
 
-  url->mSpec = mSpec;
-  url->mPathSep = mPathSep;
-  url->mQuerySep = mQuerySep;
-  url->mRefSep = mRefSep;
+nsresult nsSimpleURI::CloneInternal(
+    nsSimpleURI::RefHandlingEnum refHandlingMode, const nsACString& newRef,
+    nsIURI** result) {
+  RefPtr<nsSimpleURI> url = StartClone(refHandlingMode, newRef);
+  if (!url) return NS_ERROR_OUT_OF_MEMORY;
+
+  url->mScheme = mScheme;
+  url->mPath = mPath;
+
+  url->mIsQueryValid = mIsQueryValid;
+  if (url->mIsQueryValid) {
+    url->mQuery = mQuery;
+  }
 
   url.forget(result);
   return NS_OK;
@@ -644,7 +670,10 @@ nsSimpleURI::GetAsciiHost(nsACString& result) {
 //----------------------------------------------------------------------------
 
 size_t nsSimpleURI::SizeOfExcludingThis(MallocSizeOf aMallocSizeOf) const {
-  return mSpec.SizeOfExcludingThisIfUnshared(aMallocSizeOf);
+  return mScheme.SizeOfExcludingThisIfUnshared(aMallocSizeOf) +
+         mPath.SizeOfExcludingThisIfUnshared(aMallocSizeOf) +
+         mQuery.SizeOfExcludingThisIfUnshared(aMallocSizeOf) +
+         mRef.SizeOfExcludingThisIfUnshared(aMallocSizeOf);
 }
 
 size_t nsSimpleURI::SizeOfIncludingThis(MallocSizeOf aMallocSizeOf) const {
@@ -653,12 +682,12 @@ size_t nsSimpleURI::SizeOfIncludingThis(MallocSizeOf aMallocSizeOf) const {
 
 NS_IMETHODIMP
 nsSimpleURI::GetFilePath(nsACString& aFilePath) {
-  aFilePath = Path();
+  aFilePath = mPath;
   return NS_OK;
 }
 
 nsresult nsSimpleURI::SetFilePath(const nsACString& aFilePath) {
-  if (Path().IsEmpty() || Path().First() != '/') {
+  if (mPath.IsEmpty() || mPath.First() != '/') {
     // cannot-be-a-base
     return NS_ERROR_MALFORMED_URI;
   }
@@ -677,17 +706,18 @@ nsresult nsSimpleURI::SetFilePath(const nsACString& aFilePath) {
 
 NS_IMETHODIMP
 nsSimpleURI::GetQuery(nsACString& aQuery) {
-  if (!IsQueryValid()) {
+  if (!mIsQueryValid) {
+    MOZ_ASSERT(mQuery.IsEmpty(), "mIsQueryValid/mQuery invariant broken");
     aQuery.Truncate();
   } else {
-    aQuery = Query();
+    aQuery = mQuery;
   }
   return NS_OK;
 }
 
 NS_IMETHODIMP
 nsSimpleURI::GetHasQuery(bool* result) {
-  *result = IsQueryValid();
+  *result = mIsQueryValid;
   return NS_OK;
 }
 
@@ -702,49 +732,26 @@ nsresult nsSimpleURI::SetQuery(const nsACString& aQuery) {
     return rv;
   }
 
-  if (query.IsEmpty() && !IsQueryValid()) {
-    return NS_OK;  // nothing to do
-  }
-
-  int32_t cutStart;
-  int32_t cutLength;
-  if (IsQueryValid()) {
-    cutStart = mQuerySep;
-    cutLength = QueryEnd() - cutStart;
-  } else if (IsRefValid()) {
-    cutStart = mRefSep;
-    cutLength = 0;
-  } else {
-    cutStart = mSpec.Length();
-    cutLength = 0;
-  }
-
-  nsCString prefix;
-  if (!query.IsEmpty() && query[0] != '?') {
-    // The replace includes the `?` character, so ensure it's present in the
-    // query (unless we're removing the query).
-    prefix = "?"_ns;
-  }
-  if (!mSpec.Replace(cutStart, cutLength, prefix + query, fallible)) {
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
-
-  // Update `mQuerySep` and `mRefSep`.
   if (query.IsEmpty()) {
-    mQuerySep = kNotFound;
-  } else {
-    mQuerySep = cutStart;
-    MOZ_ASSERT(mSpec.CharAt(mQuerySep) == '?');
-  }
-  if (mRefSep != kNotFound) {
-    mRefSep -= cutLength;
-    mRefSep += prefix.Length() + query.Length();
-    MOZ_ASSERT(mSpec.CharAt(mRefSep) == '#');
+    // Empty string means to remove query completely.
+    mIsQueryValid = false;
+    mQuery.Truncate();  // invariant: mQuery should be empty when it's not valid
+
+    // Trim trailing invalid chars when ref and query are removed
+    if (mScheme != "javascript" && mRef.IsEmpty() && mQuery.IsEmpty()) {
+      TrimTrailingCharactersFromPath();
+    }
+
+    return NS_OK;
   }
 
-  // Trim trailing invalid chars when ref and query are removed
-  if (Scheme() != "javascript"_ns && !IsRefValid() && !IsQueryValid()) {
-    TrimTrailingCharactersFromPath();
+  mIsQueryValid = true;
+
+  // Gracefully skip initial question mark
+  if (query[0] == '?') {
+    mQuery = Substring(query, 1);
+  } else {
+    mQuery = query;
   }
 
   return NS_OK;
@@ -756,11 +763,8 @@ nsresult nsSimpleURI::SetQueryWithEncoding(const nsACString& aQuery,
 }
 
 void nsSimpleURI::TrimTrailingCharactersFromPath() {
-  MOZ_ASSERT(!IsQueryValid());
-  MOZ_ASSERT(!IsRefValid());
-
-  const auto* start = mSpec.BeginReading();
-  const auto* end = mSpec.EndReading();
+  const auto* start = mPath.BeginReading();
+  const auto* end = mPath.EndReading();
 
   auto charFilter = [](char c) { return static_cast<uint8_t>(c) > 0x20; };
   const auto* newEnd =
@@ -770,7 +774,7 @@ void nsSimpleURI::TrimTrailingCharactersFromPath() {
 
   auto trailCount = std::distance(newEnd, end);
   if (trailCount) {
-    mSpec.Truncate(mSpec.Length() - trailCount);
+    mPath.Truncate(mPath.Length() - trailCount);
   }
 }
 

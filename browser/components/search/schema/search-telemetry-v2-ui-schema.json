@@ -22,7 +22,6 @@
     "accountCookies",
     "signedInCookies",
     "isSPA",
-    "defaultPageQueryParam",
-    "subframes"
+    "defaultPageQueryParam"
   ]
 }

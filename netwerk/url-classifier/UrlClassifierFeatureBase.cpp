@@ -7,8 +7,6 @@
 #include "UrlClassifierFeatureBase.h"
 #include "Classifier.h"
 #include "mozilla/Preferences.h"
-#include "nsIUrlClassifierExceptionList.h"
-#include "nsIUrlClassifierExceptionListEntry.h"
 
 namespace mozilla {
 
@@ -108,10 +106,8 @@ void UrlClassifierFeatureBase::ShutdownPreferences() {
 }
 
 NS_IMETHODIMP
-UrlClassifierFeatureBase::OnExceptionListUpdate(
-    nsIUrlClassifierExceptionList* aList) {
-  mExceptionList = aList;
-
+UrlClassifierFeatureBase::OnExceptionListUpdate(const nsACString& aList) {
+  mExceptionHosts = aList;
   return NS_OK;
 }
 
@@ -167,25 +163,19 @@ UrlClassifierFeatureBase::HasHostInPreferences(
 }
 
 NS_IMETHODIMP
-UrlClassifierFeatureBase::GetExceptionList(
-    nsIUrlClassifierExceptionList** aList) {
-  NS_ENSURE_ARG_POINTER(aList);
-
-  *aList = mExceptionList;
-  NS_IF_ADDREF(*aList);
-
+UrlClassifierFeatureBase::GetExceptionHostList(nsACString& aList) {
+  aList = mExceptionHosts;
   return NS_OK;
 }
 
 NS_IMETHODIMP
-UrlClassifierFeatureAntiTrackingBase::GetExceptionList(
-    nsIUrlClassifierExceptionList** aList) {
+UrlClassifierFeatureAntiTrackingBase::GetExceptionHostList(nsACString& aList) {
   if (!StaticPrefs::privacy_antitracking_enableWebcompat()) {
-    *aList = nullptr;
+    aList.Truncate();
     return NS_OK;
   }
 
-  return UrlClassifierFeatureBase::GetExceptionList(aList);
+  return UrlClassifierFeatureBase::GetExceptionHostList(aList);
 }
 
 }  // namespace net

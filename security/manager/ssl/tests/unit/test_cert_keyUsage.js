@@ -22,16 +22,16 @@ const eeList = [
   "ee-keyCertSign-and-keyEncipherment",
 ];
 
-const caUsage = [Ci.nsIX509CertDB.verifyUsageTLSServerCA];
+const caUsage = [certificateUsageSSLCA];
 const allEEUsages = [
-  Ci.nsIX509CertDB.verifyUsageTLSClient,
-  Ci.nsIX509CertDB.verifyUsageTLSServer,
-  Ci.nsIX509CertDB.verifyUsageEmailSigner,
-  Ci.nsIX509CertDB.verifyUsageEmailRecipient,
+  certificateUsageSSLClient,
+  certificateUsageSSLServer,
+  certificateUsageEmailSigner,
+  certificateUsageEmailRecipient,
 ];
 const serverEEUsages = [
-  Ci.nsIX509CertDB.verifyUsageTLSServer,
-  Ci.nsIX509CertDB.verifyUsageEmailRecipient,
+  certificateUsageSSLServer,
+  certificateUsageEmailRecipient,
 ];
 
 const expectedUsagesMap = {

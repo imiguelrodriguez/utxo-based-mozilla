@@ -4,7 +4,7 @@
 "use strict";
 
 const { TabUnloader } = ChromeUtils.importESModule(
-  "moz-src:///browser/components/tabbrowser/TabUnloader.sys.mjs"
+  "resource:///modules/TabUnloader.sys.mjs"
 );
 
 async function refreshData() {

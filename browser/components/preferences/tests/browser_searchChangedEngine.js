@@ -8,7 +8,7 @@ const { SearchTestUtils } = ChromeUtils.importESModule(
   "resource://testing-common/SearchTestUtils.sys.mjs"
 );
 const { SearchUtils } = ChromeUtils.importESModule(
-  "moz-src:///toolkit/components/search/SearchUtils.sys.mjs"
+  "resource://gre/modules/SearchUtils.sys.mjs"
 );
 
 AddonTestUtils.initMochitest(this);
@@ -38,9 +38,7 @@ add_task(async function test_change_engine() {
     name: "Example",
     version: "1.0",
     keyword: "foo",
-    icons: {
-      16: "img123.png",
-    },
+    favicon_url: "img123.png",
   });
 
   let tree = doc.querySelector("#engineList");
@@ -73,9 +71,7 @@ add_task(async function test_change_engine() {
     name: "Example 2",
     version: "2.0",
     keyword: "bar",
-    icons: {
-      16: "img456.png",
-    },
+    favicon_url: "img456.png",
   });
   await updatedPromise;
 

@@ -119,45 +119,38 @@ NS_IMPL_ISUPPORTS(WebTransportReceiveStreamStats,
 
 }  // namespace
 
-NS_IMPL_ISUPPORTS(Http3WebTransportStream, nsIInputStreamCallback,
-                  nsIOutputStreamCallback)
+NS_IMPL_ISUPPORTS(Http3WebTransportStream, nsIInputStreamCallback)
 
 Http3WebTransportStream::Http3WebTransportStream(
     Http3Session* aSession, uint64_t aSessionId, WebTransportStreamType aType,
-    std::function<void(Result<RefPtr<WebTransportStreamBase>, nsresult>&&)>&&
+    std::function<void(Result<RefPtr<Http3WebTransportStream>, nsresult>&&)>&&
         aCallback)
-    : WebTransportStreamBase(aSessionId, std::move(aCallback)),
-      Http3StreamBase(new DummyWebTransportStreamTransaction(), aSession) {
+    : Http3StreamBase(new DummyWebTransportStreamTransaction(), aSession),
+      mSessionId(aSessionId),
+      mStreamType(aType),
+      mStreamRole(OUTGOING),
+      mStreamReadyCallback(std::move(aCallback)) {
   LOG(("Http3WebTransportStream outgoing ctor %p", this));
-  mStreamRole = OUTGOING;
-  mStreamType = aType;
 }
 
 Http3WebTransportStream::Http3WebTransportStream(Http3Session* aSession,
                                                  uint64_t aSessionId,
                                                  WebTransportStreamType aType,
                                                  uint64_t aStreamId)
-    : WebTransportStreamBase(aSessionId, nullptr),
-      Http3StreamBase(new DummyWebTransportStreamTransaction(), aSession) {
+    : Http3StreamBase(new DummyWebTransportStreamTransaction(), aSession),
+      mSessionId(aSessionId),
+      mStreamType(aType),
+      mStreamRole(INCOMING),
+      // WAITING_DATA indicates we are waiting
+      // Http3WebTransportStream::OnInputStreamReady to be called.
+      mSendState(WAITING_DATA),
+      mStreamReadyCallback(nullptr) {
   LOG(("Http3WebTransportStream incoming ctor %p", this));
   mStreamId = aStreamId;
-  mStreamRole = INCOMING;
-  mStreamType = aType;
-  // WAITING_DATA indicates we are waiting
-  // Http3WebTransportStream::OnInputStreamReady to be called.
-  mSendState = WAITING_DATA;
 }
 
 Http3WebTransportStream::~Http3WebTransportStream() {
   LOG(("Http3WebTransportStream dtor %p", this));
-}
-
-StreamId Http3WebTransportStream::WebTransportStreamId() const {
-  return StreamId::From(Http3StreamBase::StreamId());
-}
-
-uint64_t Http3WebTransportStream::GetStreamId() const {
-  return Http3StreamBase::StreamId();
 }
 
 nsresult Http3WebTransportStream::TryActivating() {
@@ -181,15 +174,59 @@ NS_IMETHODIMP Http3WebTransportStream::OnInputStreamReady(
   return NS_OK;
 }
 
-NS_IMETHODIMP
-Http3WebTransportStream::OnOutputStreamReady(nsIAsyncOutputStream* aOutStream) {
-  MOZ_ASSERT(OnSocketThread(), "not on socket thread");
-  if (!mSession) {
-    return NS_OK;
+nsresult Http3WebTransportStream::InitOutputPipe() {
+  nsCOMPtr<nsIAsyncOutputStream> out;
+  nsCOMPtr<nsIAsyncInputStream> in;
+  NS_NewPipe2(getter_AddRefs(in), getter_AddRefs(out), true, true,
+              nsIOService::gDefaultSegmentSize,
+              nsIOService::gDefaultSegmentCount);
+
+  {
+    MutexAutoLock lock(mMutex);
+    mSendStreamPipeIn = std::move(in);
+    mSendStreamPipeOut = std::move(out);
   }
 
-  mSession->ConnectSlowConsumer(this);
+  nsresult rv =
+      mSendStreamPipeIn->AsyncWait(this, 0, 0, gSocketTransportService);
+  if (NS_FAILED(rv)) {
+    return rv;
+  }
+
+  mSendState = WAITING_DATA;
   return NS_OK;
+}
+
+nsresult Http3WebTransportStream::InitInputPipe() {
+  nsCOMPtr<nsIAsyncOutputStream> out;
+  nsCOMPtr<nsIAsyncInputStream> in;
+  NS_NewPipe2(getter_AddRefs(in), getter_AddRefs(out), true, true,
+              nsIOService::gDefaultSegmentSize,
+              nsIOService::gDefaultSegmentCount);
+
+  {
+    MutexAutoLock lock(mMutex);
+    mReceiveStreamPipeIn = std::move(in);
+    mReceiveStreamPipeOut = std::move(out);
+  }
+
+  mRecvState = READING;
+  return NS_OK;
+}
+
+void Http3WebTransportStream::GetWriterAndReader(
+    nsIAsyncOutputStream** aOutOutputStream,
+    nsIAsyncInputStream** aOutInputStream) {
+  nsCOMPtr<nsIAsyncOutputStream> output;
+  nsCOMPtr<nsIAsyncInputStream> input;
+  {
+    MutexAutoLock lock(mMutex);
+    output = mSendStreamPipeOut;
+    input = mReceiveStreamPipeIn;
+  }
+
+  output.forget(aOutOutputStream);
+  input.forget(aOutInputStream);
 }
 
 already_AddRefed<nsIWebTransportSendStreamStats>
@@ -220,7 +257,7 @@ nsresult Http3WebTransportStream::OnReadSegment(const char* buf, uint32_t count,
   nsresult rv = NS_OK;
 
   switch (mSendState) {
-    case WAITING_TO_ACTIVATE: {
+    case WAITING_TO_ACTIVATE:
       rv = TryActivating();
       if (rv == NS_BASE_STREAM_WOULD_BLOCK) {
         LOG3(
@@ -240,14 +277,8 @@ nsresult Http3WebTransportStream::OnReadSegment(const char* buf, uint32_t count,
       }
 
       rv = InitOutputPipe();
-      if (NS_SUCCEEDED(rv)) {
-        mSendState = WAITING_DATA;
-        if (mStreamType == WebTransportStreamType::BiDi) {
-          rv = InitInputPipe();
-          if (NS_SUCCEEDED(rv)) {
-            mRecvState = READING;
-          }
-        }
+      if (NS_SUCCEEDED(rv) && mStreamType == WebTransportStreamType::BiDi) {
+        rv = InitInputPipe();
       }
       if (NS_FAILED(rv)) {
         LOG3(
@@ -261,10 +292,9 @@ nsresult Http3WebTransportStream::OnReadSegment(const char* buf, uint32_t count,
       }
 
       // Successfully activated.
-      RefPtr<WebTransportStreamBase> stream = this;
-      mStreamReadyCallback(stream);
+      mStreamReadyCallback(RefPtr{this});
       mStreamReadyCallback = nullptr;
-    } break;
+      break;
     case SENDING: {
       rv = mSession->SendRequestBody(mStreamId, buf, count, countRead);
       LOG3(
@@ -495,14 +525,7 @@ nsresult Http3WebTransportStream::WriteSegments() {
          static_cast<uint32_t>(mSocketInCondition), this));
     if (NS_FAILED(rv)) {
       if (rv == NS_BASE_STREAM_WOULD_BLOCK) {
-        nsCOMPtr<nsIEventTarget> target;
-        Unused << gHttpHandler->GetSocketThreadTarget(getter_AddRefs(target));
-        if (target) {
-          mReceiveStreamPipeOut->AsyncWait(this, 0, 0, target);
-          rv = NS_OK;
-        } else {
-          rv = NS_ERROR_UNEXPECTED;
-        }
+        rv = NS_OK;
       }
       if (rv == NS_BASE_STREAM_CLOSED) {
         mReceiveStreamPipeOut->Close();

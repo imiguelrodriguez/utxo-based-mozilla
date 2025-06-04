@@ -71,13 +71,13 @@ module:
 
 .. code:: JavaScript
 
-   ChromeUtils.importESModule("resource://testing-common/httpd.sys.mjs");
+   ChromeUtils.import("resource://testing-common/httpd.js");
 
 Once you've done that, you can create a new server as follows:
 
 .. code:: JavaScript
 
-   let server = new HttpServer(); // Or nsHttpServer() if you don't use ChromeUtils.importESModule.
+   let server = new HttpServer(); // Or nsHttpServer() if you don't use ChromeUtils.import.
 
    server.registerDirectory("/", nsILocalFileForBasePath);
 
@@ -112,7 +112,7 @@ because the error-dispatch mechanism doesn't currently accommodate doing
 so and partly because exposing errors in a real server could make it
 easier to exploit them. If you don't know why the server is acting a
 particular way, edit
-`httpd.sys.mjs <https://searchfox.org/mozilla-central/source/netwerk/test/httpserver/httpd.sys.mjs>`__
+`httpd.js <https://searchfox.org/mozilla-central/source/netwerk/test/httpserver/httpd.js>`__
 and change the value of ``DEBUG`` to ``true``. This will cause the
 server to print information about the processing of requests (and errors
 encountered doing so) to the console, and it's usually not difficult to

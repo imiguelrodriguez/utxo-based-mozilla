@@ -10,7 +10,7 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   AMBrowserExtensionsImport: "resource://gre/modules/AddonManager.sys.mjs",
   LoginHelper: "resource://gre/modules/LoginHelper.sys.mjs",
-  PlacesUIUtils: "moz-src:///browser/components/places/PlacesUIUtils.sys.mjs",
+  PlacesUIUtils: "resource:///modules/PlacesUIUtils.sys.mjs",
   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
   Sqlite: "resource://gre/modules/Sqlite.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
@@ -152,7 +152,7 @@ class MigrationUtils {
           "MigrationWizard:RequestState": { wantUntrusted: true },
           "MigrationWizard:BeginMigration": { wantUntrusted: true },
           "MigrationWizard:RequestSafariPermissions": { wantUntrusted: true },
-          "MigrationWizard:SelectManualPasswordFile": { wantUntrusted: true },
+          "MigrationWizard:SelectSafariPasswordFile": { wantUntrusted: true },
           "MigrationWizard:OpenAboutAddons": { wantUntrusted: true },
           "MigrationWizard:PermissionsNeeded": { wantUntrusted: true },
           "MigrationWizard:GetPermissions": { wantUntrusted: true },
@@ -608,7 +608,9 @@ class MigrationUtils {
     );
 
     let entrypoint = aOptions.entrypoint || this.MIGRATION_ENTRYPOINTS.UNKNOWN;
-    Glean.browserMigration.entryPointCategorical[entrypoint].add(1);
+    Services.telemetry
+      .getHistogramById("FX_MIGRATION_ENTRY_POINT_CATEGORICAL")
+      .add(entrypoint);
 
     let openStandaloneWindow = blocking => {
       let features = "dialog,centerscreen,resizable=no";
@@ -863,18 +865,6 @@ class MigrationUtils {
   }
 
   /**
-   * Called by MigrationWizardParent during a migration to indicate that a
-   * manual migration of logins occurred via import from a CSV / TSV file, and
-   * should be counted towards the total number of imported logins.
-   *
-   * @param {number} totalLogins
-   *   The number of logins imported manually from a CSV / TSV file.
-   */
-  notifyLoginsManuallyImported(totalLogins) {
-    this._importQuantities.logins += totalLogins;
-  }
-
-  /**
    * Iterates through the favicons, sniffs for a mime type,
    * and uses the mime type to properly import the favicon.
    *
@@ -1054,9 +1044,13 @@ class MigrationUtils {
       let url = pageInfo.url;
       if (url instanceof Ci.nsIURI) {
         url = pageInfo.url.spec;
+      } else if (typeof url != "string") {
+        pageInfo.url.href;
       }
 
-      if (!URL.canParse(url)) {
+      try {
+        new URL(url);
+      } catch (ex) {
         // This won't save and we won't need to 'undo' it, so ignore this URL.
         continue;
       }

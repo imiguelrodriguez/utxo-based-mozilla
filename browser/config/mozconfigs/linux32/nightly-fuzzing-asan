@@ -1,6 +1,8 @@
 . $topsrcdir/build/unix/mozconfig.linux32
 
-ac_add_options --enable-debug-symbols=-gline-tables-only
+# We still need to build with debug symbols
+ac_add_options --disable-debug
+ac_add_options --enable-optimize="-O2 -gline-tables-only"
 
 # Add-on signing is checked but not enforced
 MOZ_REQUIRE_SIGNING=

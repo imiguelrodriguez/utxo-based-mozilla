@@ -8,7 +8,7 @@
 "use strict";
 
 const { SearchSuggestionController } = ChromeUtils.importESModule(
-  "moz-src:///toolkit/components/search/SearchSuggestionController.sys.mjs"
+  "resource://gre/modules/SearchSuggestionController.sys.mjs"
 );
 
 const templateNormal = "https://example.com/?q=";
@@ -72,10 +72,12 @@ async function doSearch(
   templateUrl,
   inputText = "query"
 ) {
-  let popup = await searchInSearchbar(inputText, win);
+  await searchInSearchbar(inputText, win);
 
   Assert.ok(
-    popup.searchbarEngineName.getAttribute("value").includes(engineName),
+    win.BrowserSearch.searchBar.textbox.popup.searchbarEngineName
+      .getAttribute("value")
+      .includes(engineName),
     "Should have the correct engine name displayed in the bar"
   );
 
@@ -176,11 +178,11 @@ add_task(async function test_form_history_delete() {
   await FormHistoryTestUtils.clear("searchbar-history");
   await FormHistoryTestUtils.add("searchbar-history", ["first", "second"]);
 
-  let searchBar = document.getElementById("searchbar");
-  searchBar.focus();
-  searchBar.value = "";
+  let sb = BrowserSearch.searchBar;
+  sb.focus();
+  sb.value = "";
   let popupshown = BrowserTestUtils.waitForEvent(
-    searchBar.textbox.popup,
+    sb.textbox.popup,
     "popupshown"
   );
   EventUtils.synthesizeKey("KEY_ArrowDown");
@@ -256,9 +258,9 @@ add_task(async function test_searchbar_revert() {
 
   await doSearch(window, tab, "MozSearch1", templateNormal, "testQuery");
 
-  let searchBar = window.document.getElementById("searchbar");
+  let searchbar = window.BrowserSearch.searchBar;
   is(
-    searchBar.value,
+    searchbar.value,
     "testQuery",
     "Search value should be the the last search"
   );
@@ -266,34 +268,34 @@ add_task(async function test_searchbar_revert() {
   // focus search bar
   let promise = promiseEvent(searchPopup, "popupshown");
   info("Opening search panel");
-  searchBar.focus();
+  searchbar.focus();
   await promise;
 
-  searchBar.value = "aQuery";
-  searchBar.value = "anotherQuery";
+  searchbar.value = "aQuery";
+  searchbar.value = "anotherQuery";
 
   // close the panel using the escape key.
   promise = promiseEvent(searchPopup, "popuphidden");
   EventUtils.synthesizeKey("KEY_Escape");
   await promise;
 
-  is(searchBar.value, "anotherQuery", "The search value should be the same");
+  is(searchbar.value, "anotherQuery", "The search value should be the same");
   // revert the search bar value
   EventUtils.synthesizeKey("KEY_Escape");
   is(
-    searchBar.value,
+    searchbar.value,
     "testQuery",
     "The search value should have been reverted"
   );
 
   EventUtils.synthesizeKey("KEY_Escape");
-  is(searchBar.value, "testQuery", "The search value should be the same");
+  is(searchbar.value, "testQuery", "The search value should be the same");
 
   await doSearch(window, tab, "MozSearch1", templateNormal, "query");
 
-  is(searchBar.value, "query", "The search value should be query");
+  is(searchbar.value, "query", "The search value should be query");
   EventUtils.synthesizeKey("KEY_Escape");
-  is(searchBar.value, "query", "The search value should be the same");
+  is(searchbar.value, "query", "The search value should be the same");
 
   BrowserTestUtils.removeTab(tab);
 });

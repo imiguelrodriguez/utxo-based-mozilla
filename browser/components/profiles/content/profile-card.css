@@ -6,26 +6,31 @@
 
 :host {
   --avatar-size: 80px;
-  --profile-card-radius: var(--border-radius-large);
-  --profile-card-radius-inner: calc(var(--profile-card-radius) - var(--border-width));
 }
 
 .profile-card {
-  --card-padding: 0;
-  --card-border-radius: var(--profile-card-radius);
-
   height: 185px;
   width: 200px;
 
-  &:hover {
+  color: var(--button-text-color);
+  border: var(--button-border);
+  border-radius: var(--border-radius-medium);
+  background-color: var(--button-background-color);
+  box-shadow: var(--box-shadow-10);
+
+  /* The profile card acts like a button but we don't want the hover styles to
+   * apply to the card when we are hovering the child button elements. */
+  &:hover:not(:has(moz-button:hover)) {
     background-color: var(--button-background-color-hover);
-    border-color: var(--button-background-color-hover);
+    border-color: var(--button-border-color-hover);
     color: var(--button-text-color-hover);
   }
 
-  &:hover:active {
+  /* The profile card acts like a button but we don't want the active styles to
+   * apply to the card when we are active on the child button elements. */
+  &:hover:active:not(:has(moz-button:hover:active)) {
     background-color: var(--button-background-color-active);
-    border-color: var(--button-background-color-active);
+    border-color: var(--button-border-color-active);
     color: var(--button-text-color-active);
   }
 
@@ -35,29 +40,21 @@
   }
 }
 
-.new-profile-card {
-  border: var(--border-width) dashed var(--border-color-interactive);
-  background-color: transparent;
-  border-radius: var(--profile-card-radius);
-  box-shadow: none;
-
-  &:hover,
-  &:hover:active {
-    border-color: var(--icon-color);
-  }
+.new-profile-card.profile-card {
+  border: var(--border-width) dashed currentColor !important;
 
   .profile-background-image {
-    background-size: 80px;
+    background-size: 33%;
   }
 
   .profile-details {
-    border-top: var(--border-width) dashed var(--border-color-interactive);
+    border-top: var(--border-width) dashed currentColor;;
   }
 }
 
 .profile-background-container {
   position: relative;
-  width: 100%;
+  width: 200px;
   height: 136px;
 
   display: flex;
@@ -66,19 +63,20 @@
 }
 
 .profile-background-image {
+  position: absolute;
   width: 100%;
   height: 100%;
-  background-image: url("chrome://browser/content/profiles/assets/plus.svg");
-  background-size: cover;
+  background-image: url("chrome://global/skin/icons/plus.svg");
+  background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
   -moz-context-properties: fill, stroke;
-  fill: var(--icon-color);
-  border-radius: var(--profile-card-radius-inner) var(--profile-card-radius-inner) 0 0;
+  fill: currentColor;
+
+  border-radius: var(--border-radius-medium) var(--border-radius-medium) 0 0;
 }
 
 .profile-avatar {
-  position: absolute;
   width: var(--avatar-size);
   height: var(--avatar-size);
   z-index: 1;
@@ -93,7 +91,6 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 46px;
+  height: 49px;
   padding: 0 var(--space-large);
-  border-top: var(--border-width) solid var(--border-color-card);
 }

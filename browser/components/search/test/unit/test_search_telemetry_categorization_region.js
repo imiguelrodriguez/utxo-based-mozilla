@@ -8,8 +8,8 @@
 "use strict";
 
 ChromeUtils.defineESModuleGetters(this, {
-  SERPDomainToCategoriesMap:
-    "moz-src:///browser/components/search/SERPCategorization.sys.mjs",
+  SearchSERPDomainToCategoriesMap:
+    "resource:///modules/SearchSERPTelemetry.sys.mjs",
 });
 
 add_task(async function record_matches_region() {
@@ -108,7 +108,10 @@ add_task(async function record_matches_region() {
 
   for (let { title, record, expectedResult, region } of TESTS) {
     info(title);
-    let result = SERPDomainToCategoriesMap.recordMatchesRegion(record, region);
+    let result = SearchSERPDomainToCategoriesMap.recordMatchesRegion(
+      record,
+      region
+    );
     Assert.equal(result, expectedResult, "Result should match.");
   }
 });
@@ -211,7 +214,10 @@ add_task(async function find_records_for_region() {
 
   for (let { title, record, expectedResult, region } of TESTS) {
     info(title);
-    let result = SERPDomainToCategoriesMap.findRecordsForRegion(record, region);
+    let result = SearchSERPDomainToCategoriesMap.findRecordsForRegion(
+      record,
+      region
+    );
     Assert.deepEqual(result, expectedResult, "Result should match.");
   }
 });

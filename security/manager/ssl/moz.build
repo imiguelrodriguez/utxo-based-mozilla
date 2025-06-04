@@ -4,7 +4,16 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-DIRS += ["abridged_certs"]
+# osclientcerts is currently only implemented for Windows
+# osclientcerts transitively depends on winapi 0.2.8, which doesn't work with
+# AArch64
+if (CONFIG["OS_ARCH"] == "WINNT" and CONFIG["TARGET_CPU"] != "aarch64") or CONFIG[
+    "OS_ARCH"
+] == "Darwin":
+    DIRS += ["osclientcerts"]
+
+DIRS += ["ipcclientcerts"]
+DIRS += ["builtins"]
 
 TEST_DIRS += ["tests"]
 
@@ -76,7 +85,6 @@ EXPORTS += [
 ]
 
 EXPORTS.mozilla += [
-    "crypto_hash/crypto_hash_sha2.h",
     "PublicSSL.h",
 ]
 
@@ -159,8 +167,6 @@ if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
     ]
     CFLAGS += CONFIG["GLIB_CFLAGS"]
     CXXFLAGS += CONFIG["GLIB_CFLAGS"]
-    CFLAGS += CONFIG["MOZ_GTK3_CFLAGS"]
-    CXXFLAGS += CONFIG["MOZ_GTK3_CFLAGS"]
 
 if CONFIG["TARGET_KERNEL"] == "Darwin":
     UNIFIED_SOURCES += [
@@ -168,9 +174,14 @@ if CONFIG["TARGET_KERNEL"] == "Darwin":
         "OSReauthenticatorDarwin.mm",
     ]
     OS_LIBS += [
-        "-framework CoreFoundation",
         "-framework LocalAuthentication",
         "-framework Security",
+    ]
+
+if CONFIG["OS_ARCH"] == "WINNT":
+    OS_LIBS += ["credui"]
+    UNIFIED_SOURCES += [
+        "CredentialManagerSecret.cpp",
     ]
 
 IPDL_SOURCES += [
@@ -179,31 +190,6 @@ IPDL_SOURCES += [
     "PSMIPCTypes.ipdlh",
     "PVerifySSLServerCert.ipdl",
 ]
-
-# Required by OSClientCerts, IPCClientCerts and CredentialManagerSecret.
-if CONFIG["OS_ARCH"] == "WINNT":
-    OS_LIBS += [
-        "advapi32",
-        "bcrypt",
-        "credui",
-        "crypt32",
-        "kernel32",
-        "ncrypt",
-        "userenv",
-        "ws2_32",
-        "ntdll",
-    ]
-
-    UNIFIED_SOURCES += [
-        "CredentialManagerSecret.cpp",
-    ]
-    # Version string comparison is generally wrong, but by the time it would
-    # actually matter, either bug 1489995 would be fixed, or the build would
-    # require version >= 1.78.
-    if CONFIG["RUSTC_VERSION"] and CONFIG["RUSTC_VERSION"] >= "1.78.0":
-        OS_LIBS += [
-            "synchronization",
-        ]
 
 FINAL_LIBRARY = "xul"
 
@@ -214,7 +200,6 @@ LOCAL_INCLUDES += [
     "/netwerk/base",
     "/security/certverifier",
     "/third_party/rust/cose-c/include",
-    "/xpcom/base",
     "/xpcom/build",
 ]
 
@@ -226,8 +211,6 @@ GeneratedFile(
 
 DEFINES["SSL_DISABLE_DEPRECATED_CIPHER_SUITE_NAMES"] = "True"
 DEFINES["NSS_ENABLE_ECC"] = "True"
-if CONFIG["MOZ_SYSTEM_NSS"]:
-    DEFINES["MOZ_SYSTEM_NSS"] = True
 
 # mozpkix is linked statically from the in-tree sources independent of whether
 # system NSS is used or not.
@@ -260,10 +243,7 @@ headers_arrays_certs = [
     (
         "addons-public-intermediate.inc",
         "addonsPublicIntermediates",
-        [
-            "addons-public-intermediate.pem",
-            "addons-public-2018-intermediate.pem",
-        ],
+        ["addons-public-intermediate.pem"],
     ),
     ("addons-stage.inc", "addonsStageRoots", ["addons-stage.pem"]),
     (

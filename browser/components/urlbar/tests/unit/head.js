@@ -65,8 +65,6 @@ SearchTestUtils.init(this);
 const SUGGESTIONS_ENGINE_NAME = "Suggestions";
 const TAIL_SUGGESTIONS_ENGINE_NAME = "Tail Suggestions";
 
-const SEARCH_GLASS_ICON = "chrome://global/skin/icons/search-glass.svg";
-
 /**
  * Gets the database connection.  If the Places connection is invalid it will
  * try to create a new connection.
@@ -145,7 +143,7 @@ function promiseControllerNotification(
         get: (target, name) => {
           if (name == notification) {
             return (...args) => {
-              controller.removeListener(proxifiedObserver);
+              controller.removeQueryListener(proxifiedObserver);
               if (expected) {
                 resolve(args);
               } else {
@@ -157,7 +155,7 @@ function promiseControllerNotification(
         },
       }
     );
-    controller.addListener(proxifiedObserver);
+    controller.addQueryListener(proxifiedObserver);
   });
 }
 
@@ -330,33 +328,21 @@ function defaultRichSuggestionsFn(searchStr) {
   ];
 }
 
-async function addOpenPages(
-  uri,
-  count = 1,
-  userContextId = 0,
-  tabGroupId = null
-) {
+async function addOpenPages(uri, count = 1, userContextId = 0) {
   for (let i = 0; i < count; i++) {
     await UrlbarProviderOpenTabs.registerOpenTab(
       uri.spec,
       userContextId,
-      tabGroupId,
       false
     );
   }
 }
 
-async function removeOpenPages(
-  aUri,
-  aCount = 1,
-  aUserContextId = 0,
-  tabGroupId = null
-) {
+async function removeOpenPages(aUri, aCount = 1, aUserContextId = 0) {
   for (let i = 0; i < aCount; i++) {
     await UrlbarProviderOpenTabs.unregisterOpenTab(
       aUri.spec,
       aUserContextId,
-      tabGroupId,
       false
     );
   }
@@ -375,7 +361,6 @@ function testEngine_setup() {
 
     registerCleanupFunction(async () => {
       Services.prefs.clearUserPref("browser.urlbar.suggest.searches");
-      Services.prefs.clearUserPref("browser.urlbar.contextualSearch.enabled");
       Services.prefs.clearUserPref(
         "browser.search.separatePrivateDefault.ui.enabled"
       );
@@ -394,10 +379,6 @@ function testEngine_setup() {
       false
     );
     Services.prefs.setBoolPref("browser.urlbar.suggest.searches", false);
-    Services.prefs.setBoolPref(
-      "browser.urlbar.scotchBonnet.enableOverride",
-      false
-    );
   });
 }
 
@@ -526,6 +507,9 @@ function makeOmniboxResult(
     keyword: [keyword, UrlbarUtils.HIGHLIGHT.TYPED],
     icon: [UrlbarUtils.ICON.EXTENSION],
   };
+  if (!heuristic) {
+    payload.blockL10n = { id: "urlbar-result-menu-dismiss-firefox-suggest" };
+  }
   let result = new UrlbarResult(
     UrlbarUtils.RESULT_TYPE.OMNIBOX,
     UrlbarUtils.RESULT_SOURCE.ADDON,
@@ -550,14 +534,12 @@ function makeOmniboxResult(
  * @param {string} [options.iconUri]
  *   A URI for the page icon.
  * @param {number} [options.userContextId]
- *   An id of the userContext in which the tab is located.
- * @param {string} [options.tabGroup]
- *   An id of the tab group in which the tab is located.
+ *   A id of the userContext in which the tab is located.
  * @returns {UrlbarResult}
  */
 function makeTabSwitchResult(
   queryContext,
-  { uri, title, iconUri, userContextId, tabGroup }
+  { uri, title, iconUri, userContextId }
 ) {
   return new UrlbarResult(
     UrlbarUtils.RESULT_TYPE.TAB_SWITCH,
@@ -568,7 +550,6 @@ function makeTabSwitchResult(
       // Check against undefined so consumers can pass in the empty string.
       icon: typeof iconUri != "undefined" ? iconUri : `page-icon:${uri}`,
       userContextId: [userContextId || 0],
-      tabGroup: [tabGroup || null],
     })
   );
 }
@@ -916,30 +897,6 @@ function makeVisitResult(
 }
 
 /**
- * Creates a UrlbarResult for a calculator result.
- *
- * @param {UrlbarQueryContext} queryContext
- *   The context that this result will be displayed in.
- * @param {object} options
- *   Options for the result.
- * @param {string} options.value
- *   The value of the calculator result.
- * @returns {UrlbarResult}
- */
-function makeCalculatorResult(queryContext, { value }) {
-  const result = new UrlbarResult(
-    UrlbarUtils.RESULT_TYPE.DYNAMIC,
-    UrlbarUtils.RESULT_SOURCE.OTHER_LOCAL,
-    {
-      value,
-      input: queryContext.searchString,
-      dynamicType: "calculator",
-    }
-  );
-  return result;
-}
-
-/**
  * Checks that the results returned by a UrlbarController match those in
  * the param `matches`.
  *
@@ -1044,25 +1001,9 @@ async function check_results({
     suggestedIndex: { optional: true },
     isSuggestedIndexRelativeToGroup: { optional: true, map: v => !!v },
     exposureTelemetry: { optional: true },
-    isRichSuggestion: { optional: true },
-    richSuggestionIconVariation: { optional: true },
   };
 
-  // Payload properties to conditionally check. Properties not specified here
-  // will always be checked.
-  //
-  // ignore:
-  //   Always ignore the property.
-  // optional:
-  //   Ignore the property if it's not in the expected result.
-  let conditionalPayloadProperties = {
-    lastVisit: { optional: true },
-    // `suggestionObject` is only used for dismissing Suggest Rust results, and
-    // important properties in this object are reflected in the top-level
-    // payload object, so ignore it. There are Suggest tests specifically for
-    // dismissals that indirectly test the important aspects of this property.
-    suggestionObject: { ignore: true },
-  };
+  let optionalPayloadProperties = new Set(["lastVisit"]);
 
   for (let i = 0; i < matches.length; i++) {
     let actual = context.results[i];
@@ -1076,7 +1017,7 @@ async function check_results({
     );
 
     for (let [key, { optional, map }] of Object.entries(propertiesToCheck)) {
-      if (!optional || expected[key] !== undefined) {
+      if (!optional || expected.hasOwnProperty(key)) {
         map ??= v => v;
         Assert.equal(
           map(actual[key]),
@@ -1086,41 +1027,13 @@ async function check_results({
       }
     }
 
-    if (
-      actual.type == UrlbarUtils.RESULT_TYPE.SEARCH &&
-      actual.source == UrlbarUtils.RESULT_SOURCE.SEARCH &&
-      actual.providerName == "HeuristicFallback"
-    ) {
-      expected.payload.icon = SEARCH_GLASS_ICON;
-    }
-
-    if (actual.payload?.url) {
-      try {
-        const payloadUrlProtocol = new URL(actual.payload.url).protocol;
-        if (
-          !UrlbarUtils.PROTOCOLS_WITH_ICONS.includes(payloadUrlProtocol) &&
-          actual.source != UrlbarUtils.RESULT_SOURCE.OTHER_LOCAL
-        ) {
-          expected.payload.icon = UrlbarUtils.ICON.DEFAULT;
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-
     if (expected.payload) {
-      let expectedKeys = new Set(Object.keys(expected.payload));
-      let actualKeys = new Set(Object.keys(actual.payload));
+      let expectedEntries = new Set(Object.keys(expected.payload));
+      let actualEntries = new Set(Object.keys(actual.payload)).difference(
+        optionalPayloadProperties
+      );
 
-      for (let key of actualKeys.union(expectedKeys)) {
-        let condition = conditionalPayloadProperties[key];
-        if (
-          condition?.ignore ||
-          (condition?.optional && !expected.hasOwnProperty(key))
-        ) {
-          continue;
-        }
-
+      for (let key of actualEntries.union(expectedEntries)) {
         Assert.deepEqual(
           actual.payload[key],
           expected.payload[key],

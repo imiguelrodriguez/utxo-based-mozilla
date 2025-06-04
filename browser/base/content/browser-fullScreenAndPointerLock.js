@@ -149,11 +149,11 @@ var PointerlockFsWarning = {
     this._timeoutShow.cancel();
     // Reset state of the warning box
     this._state = "hidden";
-    this._doHide();
     // Reset state of the text so we don't persist or retranslate it.
     this._element
       .querySelector(".pointerlockfswarning-domain-text")
       .removeAttribute("data-l10n-id");
+    this._element.hidden = true;
     // Remove all event listeners
     this._element.removeEventListener("transitionend", this);
     this._element.removeEventListener("transitioncancel", this);
@@ -186,14 +186,6 @@ var PointerlockFsWarning = {
     }
     return "hiding";
   },
-
-  _doHide() {
-    try {
-      this._element.hidePopover();
-    } catch (e) {}
-    this._element.hidden = true;
-  },
-
   set _state(newState) {
     let currentState = this._state;
     if (currentState == newState) {
@@ -203,12 +195,24 @@ var PointerlockFsWarning = {
       this._lastState = currentState;
       this._element.removeAttribute(currentState);
     }
-    if (currentState == "hidden") {
-      this._element.showPopover();
-    }
-    // hidden is dealt with on transitionend or close(), see _doHide().
     if (newState != "hidden") {
-      this._element.setAttribute(newState, "");
+      if (currentState != "hidden") {
+        this._element.setAttribute(newState, "");
+      } else {
+        // When the previous state is hidden, the display was none,
+        // thus no box was constructed. We need to wait for the new
+        // display value taking effect first, otherwise, there won't
+        // be any transition. Since requestAnimationFrame callback is
+        // generally triggered before any style flush and layout, we
+        // should wait for the second animation frame.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (this._element) {
+              this._element.setAttribute(newState, "");
+            }
+          });
+        });
+      }
     }
   },
 
@@ -249,7 +253,7 @@ var PointerlockFsWarning = {
       case "transitionend":
       case "transitioncancel": {
         if (this._state == "hiding") {
-          this._doHide();
+          this._element.hidden = true;
         }
         if (this._state == "onscreen") {
           window.dispatchEvent(new CustomEvent("FullscreenWarningOnScreen"));
@@ -301,11 +305,6 @@ var FullScreen = {
       "permissions.fullscreen.allowed"
     );
 
-    let notificationExitButton = document.getElementById(
-      "fullscreen-exit-button"
-    );
-    notificationExitButton.addEventListener("click", this.exitDomFullScreen);
-
     // Called when the Firefox window go into fullscreen.
     addEventListener("fullscreen", this, true);
 
@@ -315,7 +314,6 @@ var FullScreen = {
     // the content.
     addEventListener("willenterfullscreen", this, true);
     addEventListener("willexitfullscreen", this, true);
-    addEventListener("MacFullscreenMenubarRevealUpdate", this, true);
 
     if (window.fullScreen) {
       this.toggle();
@@ -356,7 +354,6 @@ var FullScreen = {
       // Make sure the menu items are adjusted.
       document.getElementById("enterFullScreenItem").hidden = enterFS;
       document.getElementById("exitFullScreenItem").hidden = !enterFS;
-      this.shiftMacToolbarDown(0);
     }
 
     let fstoggler = this.fullScreenToggler;
@@ -385,7 +382,7 @@ var FullScreen = {
       document.addEventListener("keypress", this._keyToggleCallback);
       document.addEventListener("popupshown", this._setPopupOpen);
       document.addEventListener("popuphidden", this._setPopupOpen);
-      gURLBar.controller.addListener(this);
+      gURLBar.controller.addQueryListener(this);
 
       // In DOM fullscreen mode, we hide toolbars with CSS
       if (!document.fullscreenElement) {
@@ -401,46 +398,9 @@ var FullScreen = {
   },
 
   exitDomFullScreen() {
-    // Don't use `this` here. It does not reliably refer to this object.
     if (document.fullscreen) {
       document.exitFullscreen();
     }
-  },
-
-  _currentToolbarShift: 0,
-
-  /**
-   * Shifts the browser toolbar down when it is moused over on macOS in
-   * fullscreen.
-   * @param {number} shiftSize
-   *   A distance, in pixels, by which to shift the browser toolbar down.
-   */
-  shiftMacToolbarDown(shiftSize) {
-    if (typeof shiftSize !== "number") {
-      console.error("Tried to shift the toolbar by a non-numeric distance.");
-      return;
-    }
-
-    // shiftSize is sent from Cocoa widget code as a very precise double. We
-    // don't need that kind of precision in our CSS.
-    shiftSize = shiftSize.toFixed(2);
-    gNavToolbox.classList.toggle("fullscreen-with-menubar", shiftSize > 0);
-
-    let transform = shiftSize > 0 ? `translateY(${shiftSize}px)` : "";
-    gNavToolbox.style.transform = transform;
-    gURLBar.textbox.style.transform = gURLBar.textbox.hasAttribute("breakout")
-      ? transform
-      : "";
-    if (shiftSize > 0) {
-      // If the mouse tracking missed our fullScreenToggler, then the toolbox
-      // might not have been shown before the menubar is animated down. Make
-      // sure it is shown now.
-      if (!this.fullScreenToggler.hidden) {
-        this.showNavToolbox();
-      }
-    }
-
-    this._currentToolbarShift = shiftSize;
   },
 
   handleEvent(event) {
@@ -453,9 +413,6 @@ var FullScreen = {
         break;
       case "fullscreen":
         this.toggle();
-        break;
-      case "MacFullscreenMenubarRevealUpdate":
-        this.shiftMacToolbarDown(event.detail);
         break;
     }
   },
@@ -525,7 +482,7 @@ var FullScreen = {
         // If there is no appropriate actor to send the message we have
         // no way to complete the transition and should abort by exiting
         // fullscreen.
-        this._abortEnterFullscreen(aActor);
+        this._abortEnterFullscreen();
         return;
       }
       // Record that the actor is waiting for its child to enter
@@ -552,7 +509,7 @@ var FullScreen = {
       // full-screen was made. Cancel full-screen.
       Services.focus.activeWindow != window
     ) {
-      this._abortEnterFullscreen(aActor);
+      this._abortEnterFullscreen();
       return;
     }
 
@@ -598,7 +555,7 @@ var FullScreen = {
       document.removeEventListener("keypress", this._keyToggleCallback);
       document.removeEventListener("popupshown", this._setPopupOpen);
       document.removeEventListener("popuphidden", this._setPopupOpen);
-      gURLBar.controller.removeListener(this);
+      gURLBar.controller.removeQueryListener(this);
     }
   },
 
@@ -670,18 +627,17 @@ var FullScreen = {
     return needToWaitForChildExit;
   },
 
-  _abortEnterFullscreen(aActor) {
+  _abortEnterFullscreen() {
     // This function is called synchronously in fullscreen change, so
     // we have to avoid calling exitFullscreen synchronously here.
     //
     // This could reject if we're not currently in fullscreen
     // so just ignore rejection.
     setTimeout(() => document.exitFullscreen().catch(() => {}), 0);
-    if (aActor.timerId) {
+    if (TelemetryStopwatch.running("FULLSCREEN_CHANGE_MS")) {
       // Cancel the stopwatch for any fullscreen change to avoid
       // errors if it is started again.
-      Glean.fullscreen.change.cancel(aActor.timerId);
-      aActor.timerId = null;
+      TelemetryStopwatch.cancel("FULLSCREEN_CHANGE_MS");
     }
   },
 

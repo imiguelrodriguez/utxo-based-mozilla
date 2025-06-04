@@ -373,8 +373,9 @@ Bookmarks.prototype = {
   },
 
   async _migrateFolder(aSourceFolder, aDestFolderGuid) {
-    let { bookmarks, favicons } =
-      await this._getBookmarksInFolder(aSourceFolder);
+    let { bookmarks, favicons } = await this._getBookmarksInFolder(
+      aSourceFolder
+    );
     if (!bookmarks.length) {
       return;
     }
@@ -638,11 +639,13 @@ WindowsVaultFormPasswords.prototype = {
           }
           let url =
             item.contents.pResourceElement.contents.itemValue.readString();
-          let realURL = URL.parse(url);
-          if (
-            !realURL ||
-            !["http:", "https:", "ftp:"].includes(realURL.protocol)
-          ) {
+          let realURL;
+          try {
+            realURL = Services.io.newURI(url);
+          } catch (ex) {
+            /* leave realURL as null */
+          }
+          if (!realURL || !["http", "https", "ftp"].includes(realURL.scheme)) {
             // Ignore items for non-URLs or URLs that aren't HTTP(S)/FTP
             continue;
           }
@@ -688,7 +691,7 @@ WindowsVaultFormPasswords.prototype = {
           logins.push({
             username,
             password,
-            origin: realURL.URI.prePath,
+            origin: realURL.prePath,
             timeCreated: creation,
           });
 

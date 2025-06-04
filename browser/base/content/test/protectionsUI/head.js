@@ -101,9 +101,7 @@ async function openProtectionsPanelWithKeyNav() {
   // This will trigger the focus event for the shield icon for pre-fetching
   // the tracker count.
   EventUtils.synthesizeKey("KEY_Tab", { shiftKey: true });
-  is(document.activeElement.id, "urlbar-searchmode-switcher");
-  EventUtils.synthesizeKey("KEY_ArrowRight");
-  EventUtils.synthesizeKey("KEY_Enter");
+  EventUtils.synthesizeKey("KEY_Enter", {});
 
   await popupShownPromise;
 }

@@ -25,6 +25,7 @@ import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
+  AddonManager: "resource://gre/modules/AddonManager.sys.mjs",
   BrowserUsageTelemetry: "resource:///modules/BrowserUsageTelemetry.sys.mjs",
   DragPositionManager: "resource:///modules/DragPositionManager.sys.mjs",
   URILoadingHelper: "resource:///modules/URILoadingHelper.sys.mjs",
@@ -95,249 +96,118 @@ function unregisterGlobalTab() {
   gTab = null;
 }
 
-/**
- * This class manages the lifetime of the CustomizeMode UI in a single browser
- * window. There is one instance of CustomizeMode per browser window.
- */
-export class CustomizeMode {
-  constructor(aWindow) {
-    this.#window = aWindow;
-    this.#document = aWindow.document;
-    this.#browser = aWindow.gBrowser;
-    this.areas = new Set();
+export function CustomizeMode(aWindow) {
+  this.window = aWindow;
+  this.document = aWindow.document;
+  this.browser = aWindow.gBrowser;
+  this.areas = new Set();
 
-    this.#translationObserver = new aWindow.MutationObserver(mutations =>
-      this.#onTranslations(mutations)
+  this._translationObserver = new aWindow.MutationObserver(mutations =>
+    this._onTranslations(mutations)
+  );
+  this._ensureCustomizationPanels();
+
+  let content = this.$("customization-content-container");
+  if (!content) {
+    this.window.MozXULElement.insertFTLIfNeeded("browser/customizeMode.ftl");
+    let container = this.$("customization-container");
+    container.replaceChild(
+      this.window.MozXULElement.parseXULToFragment(container.firstChild.data),
+      container.lastChild
     );
-    this.#ensureCustomizationPanels();
+  }
+  // There are two palettes - there's the palette that can be overlayed with
+  // toolbar items in browser.xhtml. This is invisible, and never seen by the
+  // user. Then there's the visible palette, which gets populated and displayed
+  // to the user when in customizing mode.
+  this.visiblePalette = this.$(kPaletteId);
+  this.pongArena = this.$("customization-pong-arena");
 
-    let content = this.$("customization-content-container");
-    if (!content) {
-      this.#window.MozXULElement.insertFTLIfNeeded("browser/customizeMode.ftl");
-      let container = this.$("customization-container");
-      container.replaceChild(
-        this.#window.MozXULElement.parseXULToFragment(
-          container.firstChild.data
-        ),
-        container.lastChild
-      );
-    }
-
-    this.#attachEventListeners();
-
-    // There are two palettes - there's the palette that can be overlayed with
-    // toolbar items in browser.xhtml. This is invisible, and never seen by the
-    // user. Then there's the visible palette, which gets populated and displayed
-    // to the user when in customizing mode.
-    this.visiblePalette = this.$(kPaletteId);
-    this.pongArena = this.$("customization-pong-arena");
-
-    if (this.#canDrawInTitlebar()) {
-      this.#updateTitlebarCheckbox();
-      Services.prefs.addObserver(kDrawInTitlebarPref, this);
-    } else {
-      this.$("customization-titlebar-visibility-checkbox").hidden = true;
-    }
-
-    // Observe pref changes to the bookmarks toolbar visibility,
-    // since we won't get a toolbarvisibilitychange event if the
-    // toolbar is changing from 'newtab' to 'always' in Customize mode
-    // since the toolbar is shown with the 'newtab' setting.
-    Services.prefs.addObserver(kBookmarksToolbarPref, this);
-
-    this.#window.addEventListener("unload", this);
+  if (this._canDrawInTitlebar()) {
+    this._updateTitlebarCheckbox();
+    Services.prefs.addObserver(kDrawInTitlebarPref, this);
+  } else {
+    this.$("customization-titlebar-visibility-checkbox").hidden = true;
   }
 
-  /**
-   * True if CustomizeMode is in the process of being transitioned into or out
-   * of.
-   *
-   * @type {boolean}
-   */
-  #transitioning = false;
+  // Observe pref changes to the bookmarks toolbar visibility,
+  // since we won't get a toolbarvisibilitychange event if the
+  // toolbar is changing from 'newtab' to 'always' in Customize mode
+  // since the toolbar is shown with the 'newtab' setting.
+  Services.prefs.addObserver(kBookmarksToolbarPref, this);
 
-  /**
-   * A reference to the top-level browser window that this instance of
-   * CustomizeMode is configured to use.
-   *
-   * @type {DOMWindow}
-   */
-  #window = null;
+  this.window.addEventListener("unload", this);
+}
 
-  /**
-   * A reference to the top-level browser window document that this instance of
-   * CustomizeMode is configured to use.
-   *
-   * @type {Document}
-   */
-  #document = null;
+CustomizeMode.prototype = {
+  _changed: false,
+  _transitioning: false,
+  window: null,
+  document: null,
+  // areas is used to cache the customizable areas when in customization mode.
+  areas: null,
+  // When in customizing mode, we swap out the reference to the invisible
+  // palette in gNavToolbox.palette for our visiblePalette. This way, for the
+  // customizing browser window, when widgets are removed from customizable
+  // areas and added to the palette, they're added to the visible palette.
+  // _stowedPalette is a reference to the old invisible palette so we can
+  // restore gNavToolbox.palette to its original state after exiting
+  // customization mode.
+  _stowedPalette: null,
+  _dragOverItem: null,
+  _customizing: false,
+  _skipSourceNodeCheck: null,
+  _mainViewContext: null,
 
-  /**
-   * A reference to the Tabbrowser instance that belongs to the top-level
-   * browser window that CustomizeMode is configured to use.
-   *
-   * @type {Tabbrowser}
-   */
-  #browser = null;
-
-  /**
-   * An array of customize target DOM nodes that this instance of CustomizeMode
-   * can be used to manipulate. It is assumed that when targets are in this
-   * Set, that they have drag / drop listeners attached and that their
-   * customizable children have been wrapped as toolbarpaletteitems.
-   *
-   * @type {null|Set<DOMNode>}
-   */
-  areas = null;
-
-  /**
-   * When in customizing mode, we swap out the reference to the invisible
-   * palette in gNavToolbox.palette for our visiblePalette. This way, for the
-   * customizing browser window, when widgets are removed from customizable
-   * areas and added to the palette, they're added to the visible palette.
-   * #stowedPalette is a reference to the old invisible palette so we can
-   * restore gNavToolbox.palette to its original state after exiting
-   * customization mode.
-   *
-   * @type {null|DOMNode}
-   */
-  #stowedPalette = null;
-
-  /**
-   * If a drag and drop operation is underway for a customizable toolbar item,
-   * this member is set to the current item being dragged over.
-   *
-   * @type {null|DOMNode}
-   */
-  #dragOverItem = null;
-
-  /**
-   * True if we're in the state of customizing this browser window.
-   *
-   * @type {boolean}
-   */
-  #customizing = false;
-
-  /**
-   * True if we're synthesizing drag and drop in customize mode for automated
-   * tests and want to skip the checks that ensure that the source of the
-   * drag events was this top-level browser window. This is controllable via
-   * `browser.uiCustomization.skipSourceNodeCheck`.
-   *
-   * @type {boolean}
-   */
-  #skipSourceNodeCheck = false;
-
-  /**
-   * These are the commands we continue to leave enabled while in customize
-   * mode. All other commands are disabled, and we remove the disabled attribute
-   * when leaving customize mode.
-   *
-   * @type {Set<string>}
-   */
-  #enabledCommands = new Set([
+  // These are the commands we continue to leave enabled while in customize mode.
+  // All other commands are disabled, and we remove the disabled attribute when
+  // leaving customize mode.
+  _enabledCommands: new Set([
     "cmd_newNavigator",
     "cmd_newNavigatorTab",
     "cmd_newNavigatorTabNoEvent",
     "cmd_close",
     "cmd_closeWindow",
-    "cmd_maximizeWindow",
-    "cmd_minimizeWindow",
-    "cmd_restoreWindow",
     "cmd_quitApplication",
     "View:FullScreen",
     "Browser:NextTab",
     "Browser:PrevTab",
     "Browser:NewUserContextTab",
     "Tools:PrivateBrowsing",
+    "minimizeWindow",
     "zoomWindow",
-  ]);
+  ]),
 
-  /**
-   * A MutationObserver used to hear about Fluent localization occurring for
-   * customizable items.
-   *
-   * @type {MutationObserver|null}
-   */
-  #translationObserver = null;
+  get _handler() {
+    return this.window.CustomizationHandler;
+  },
 
-  /**
-   * A description of the size of a customizable item were it to be placed in a
-   * particular customizable area.
-   *
-   * @typedef {object} ItemSizeForArea
-   * @property {number} width
-   *   The width of the customizable item when placed in a certain area.
-   * @property {number} height
-   *   The height of the customizable item when placed in a certain area.
-   */
-
-  /**
-   * A WeakMap mapping dragged customizable items to a WeakMap of areas that
-   * the item could be dragged into. That mapping maps to ItemSizeForArea
-   * objects that describe the width and height of the item were it to be
-   * dropped and placed within that area (since certain areas will encourage
-   * items to expand or contract).
-   *
-   * @type {WeakMap<DOMNode, WeakMap<DOMNode, DragSizeForArea>>|null}
-   */
-  #dragSizeMap = null;
-
-  /**
-   * If this is set to true, this means that the user enabled the downloads
-   * button auto-hide feature while the button was in the palette. If so, then
-   * on exiting mode, the button is moved to its default position in the
-   * navigation toolbar.
-   */
-  #moveDownloadsButtonToNavBar = false;
-
-  /**
-   * Returns the CustomizationHandler browser window global object. See
-   * browser-customization.js.
-   *
-   * @type {object}
-   */
-  get #handler() {
-    return this.#window.CustomizationHandler;
-  }
-
-  /**
-   * Does cleanup of any listeners or observers when the browser window
-   * that this CustomizeMode instance is configured to use unloads.
-   */
-  #uninit() {
-    if (this.#canDrawInTitlebar()) {
+  uninit() {
+    if (this._canDrawInTitlebar()) {
       Services.prefs.removeObserver(kDrawInTitlebarPref, this);
     }
     Services.prefs.removeObserver(kBookmarksToolbarPref, this);
-  }
+  },
 
-  /**
-   * This is a shortcut for this.#document.getElementById.
-   *
-   * @param {string} id
-   *   The DOM ID to return a result for.
-   * @returns {DOMNode|null}
-   */
   $(id) {
-    return this.#document.getElementById(id);
-  }
+    return this.document.getElementById(id);
+  },
 
-  /**
-   * Sets the fake tab element that will be associated with being in
-   * customize mode. Customize mode looks similar to a "special kind of tab",
-   * and when that tab is closed, we exit customize mode. When that tab is
-   * switched to, we enter customize mode. If that tab is restored in the
-   * foreground, we enter customize mode.
-   *
-   * This method assigns the special <xul:tab> that will represent customize
-   * mode for this window, and sets up the relevant listeners to it. The
-   * tab will have a "customizemode" attribute set to "true" on it, as well as
-   * a special favicon.
-   *
-   * @param {MozTabbrowserTab} aTab
-   *   The tab to act as the tab representation of customize mode.
-   */
+  toggle() {
+    if (
+      this._handler.isEnteringCustomizeMode ||
+      this._handler.isExitingCustomizeMode
+    ) {
+      this._wantToBeInCustomizeMode = !this._wantToBeInCustomizeMode;
+      return;
+    }
+    if (this._customizing) {
+      this.exit();
+    } else {
+      this.enter();
+    }
+  },
+
   setTab(aTab) {
     if (gTab == aTab) {
       return;
@@ -369,29 +239,12 @@ export class CustomizeMode {
     if (gTab.selected) {
       win.gCustomizeMode.enter();
     }
-  }
+  },
 
-  /**
-   * Kicks off the process of entering customize mode for the window that this
-   * CustomizeMode instance was constructed with. If this window happens to be
-   * a popup window or web app window, the opener window will enter customize mode.
-   *
-   * Entering customize mode is a multistep asynchronous operation, but this
-   * method returns immediately while this operation is underway. A
-   * `customizationready` custom event is dispatched on the gNavToolbox when
-   * this asynchronous process has completed.
-   *
-   * This method will return early if customize mode is already active in this
-   * window.
-   */
   enter() {
-    if (
-      !this.#window.toolbar.visible ||
-      this.#window.document.documentElement.hasAttribute("taskbartab")
-    ) {
-      let w = lazy.URILoadingHelper.getTargetWindow(this.#window, {
+    if (!this.window.toolbar.visible) {
+      let w = lazy.URILoadingHelper.getTargetWindow(this.window, {
         skipPopups: true,
-        skipTaskbarTabs: true,
       });
       if (w) {
         w.gCustomizeMode.enter();
@@ -399,24 +252,23 @@ export class CustomizeMode {
       }
       let obs = () => {
         Services.obs.removeObserver(obs, "browser-delayed-startup-finished");
-        w = lazy.URILoadingHelper.getTargetWindow(this.#window, {
+        w = lazy.URILoadingHelper.getTargetWindow(this.window, {
           skipPopups: true,
-          skipTaskbarTabs: true,
         });
         w.gCustomizeMode.enter();
       };
       Services.obs.addObserver(obs, "browser-delayed-startup-finished");
-      this.#window.openTrustedLinkIn("about:newtab", "window");
+      this.window.openTrustedLinkIn("about:newtab", "window");
       return;
     }
     this._wantToBeInCustomizeMode = true;
 
-    if (this.#customizing || this.#handler.isEnteringCustomizeMode) {
+    if (this._customizing || this._handler.isEnteringCustomizeMode) {
       return;
     }
 
     // Exiting; want to re-enter once we've done that.
-    if (this.#handler.isExitingCustomizeMode) {
+    if (this._handler.isExitingCustomizeMode) {
       lazy.log.debug(
         "Attempted to enter while we're in the middle of exiting. " +
           "We'll exit after we've entered"
@@ -426,7 +278,7 @@ export class CustomizeMode {
 
     if (!gTab) {
       this.setTab(
-        this.#browser.addTab("about:blank", {
+        this.browser.addTab("about:blank", {
           inBackground: false,
           forceNotRemote: true,
           skipAnimation: true,
@@ -443,14 +295,14 @@ export class CustomizeMode {
       return;
     }
     gTab.ownerGlobal.focus();
-    if (gTab.ownerDocument != this.#document) {
+    if (gTab.ownerDocument != this.document) {
       return;
     }
 
-    let window = this.#window;
-    let document = this.#document;
+    let window = this.window;
+    let document = this.document;
 
-    this.#handler.isEnteringCustomizeMode = true;
+    this._handler.isEnteringCustomizeMode = true;
 
     // Always disable the reset button at the start of customize mode, it'll be re-enabled
     // if necessary when we finish entering:
@@ -459,10 +311,10 @@ export class CustomizeMode {
 
     (async () => {
       // We shouldn't start customize mode until after browser-delayed-startup has finished:
-      if (!this.#window.gBrowserInit.delayedStartupFinished) {
+      if (!this.window.gBrowserInit.delayedStartupFinished) {
         await new Promise(resolve => {
           let delayedStartupObserver = aSubject => {
-            if (aSubject == this.#window) {
+            if (aSubject == this.window) {
               Services.obs.removeObserver(
                 delayedStartupObserver,
                 "browser-delayed-startup-finished"
@@ -479,7 +331,7 @@ export class CustomizeMode {
       }
 
       CustomizableUI.dispatchToolboxEvent("beforecustomization", {}, window);
-      CustomizableUI.notifyStartCustomizing(this.#window);
+      CustomizableUI.notifyStartCustomizing(this.window);
 
       // Add a keypress listener to the document so that we can quickly exit
       // customization mode when pressing ESC.
@@ -499,16 +351,16 @@ export class CustomizeMode {
       window.PanelUI.menuButton.disabled = true;
       document.getElementById("nav-bar-overflow-button").disabled = true;
 
-      this.#transitioning = true;
+      this._transitioning = true;
 
       let customizer = document.getElementById("customization-container");
       let browser = document.getElementById("browser");
       browser.hidden = true;
       customizer.hidden = false;
 
-      this.#wrapAreaItemsSync(CustomizableUI.AREA_TABSTRIP);
+      this._wrapToolbarItemSync(CustomizableUI.AREA_TABSTRIP);
 
-      this.#document.documentElement.toggleAttribute("customizing", true);
+      this.document.documentElement.toggleAttribute("customizing", true);
 
       let customizableToolbars = document.querySelectorAll(
         "toolbar[customizable=true]:not([autohide=true], [collapsed=true])"
@@ -517,31 +369,31 @@ export class CustomizeMode {
         toolbar.toggleAttribute("customizing", true);
       }
 
-      this.#updateOverflowPanelArrowOffset();
+      this._updateOverflowPanelArrowOffset();
 
       // Let everybody in this window know that we're about to customize.
       CustomizableUI.dispatchToolboxEvent("customizationstarting", {}, window);
 
-      await this.#wrapAllAreaItems();
-      this.#populatePalette();
+      await this._wrapToolbarItems();
+      this.populatePalette();
 
-      this.#setupPaletteDragging();
+      this._setupPaletteDragging();
 
       window.gNavToolbox.addEventListener("toolbarvisibilitychange", this);
 
-      this.#updateResetButton();
-      this.#updateUndoResetButton();
-      this.#updateTouchBarButton();
-      this.#updateDensityMenu();
+      this._updateResetButton();
+      this._updateUndoResetButton();
+      this._updateTouchBarButton();
+      this._updateDensityMenu();
 
-      this.#skipSourceNodeCheck =
+      this._skipSourceNodeCheck =
         Services.prefs.getPrefType(kSkipSourceNodePref) ==
           Ci.nsIPrefBranch.PREF_BOOL &&
         Services.prefs.getBoolPref(kSkipSourceNodePref);
 
       CustomizableUI.addListener(this);
-      this.#customizing = true;
-      this.#transitioning = false;
+      this._customizing = true;
+      this._transitioning = false;
 
       // Show the palette now that the transition has finished.
       this.visiblePalette.hidden = false;
@@ -551,11 +403,13 @@ export class CustomizeMode {
         this.visiblePalette.clientTop;
         this.visiblePalette.setAttribute("showing", "true");
       }, 0);
-      this.#updateEmptyPaletteNotice();
+      this._updateEmptyPaletteNotice();
 
-      this.#setupDownloadAutoHideToggle();
+      lazy.AddonManager.addAddonListener(this);
 
-      this.#handler.isEnteringCustomizeMode = false;
+      this._setupDownloadAutoHideToggle();
+
+      this._handler.isEnteringCustomizeMode = false;
 
       CustomizableUI.dispatchToolboxEvent("customizationready", {}, window);
 
@@ -564,30 +418,21 @@ export class CustomizeMode {
       }
     })().catch(e => {
       lazy.log.error("Error entering customize mode", e);
-      this.#handler.isEnteringCustomizeMode = false;
+      this._handler.isEnteringCustomizeMode = false;
       // Exit customize mode to ensure proper clean-up when entering failed.
       this.exit();
     });
-  }
+  },
 
-  /**
-   * Exits customize mode, if we happen to be in it. This is a no-op if we
-   * are not in customize mode.
-   *
-   * This is a multi-step asynchronous operation, but this method returns
-   * synchronously after the operation begins. An `aftercustomization`
-   * custom event is dispatched on the gNavToolbox once the operation has
-   * completed.
-   */
   exit() {
     this._wantToBeInCustomizeMode = false;
 
-    if (!this.#customizing || this.#handler.isExitingCustomizeMode) {
+    if (!this._customizing || this._handler.isExitingCustomizeMode) {
       return;
     }
 
     // Entering; want to exit once we've done that.
-    if (this.#handler.isEnteringCustomizeMode) {
+    if (this._handler.isEnteringCustomizeMode) {
       lazy.log.debug(
         "Attempted to exit while we're in the middle of entering. " +
           "We'll exit after we've entered"
@@ -603,38 +448,39 @@ export class CustomizeMode {
       return;
     }
 
-    this.#handler.isExitingCustomizeMode = true;
+    this._handler.isExitingCustomizeMode = true;
 
-    this.#translationObserver.disconnect();
+    this._translationObserver.disconnect();
 
-    this.#teardownDownloadAutoHideToggle();
+    this._teardownDownloadAutoHideToggle();
 
+    lazy.AddonManager.removeAddonListener(this);
     CustomizableUI.removeListener(this);
 
-    let window = this.#window;
-    let document = this.#document;
+    let window = this.window;
+    let document = this.document;
 
     document.removeEventListener("keypress", this);
 
-    this.#togglePong(false);
+    this.togglePong(false);
 
     // Disable the reset and undo reset buttons while transitioning:
     let resetButton = this.$("customization-reset-button");
     let undoResetButton = this.$("customization-undo-reset-button");
     undoResetButton.hidden = resetButton.disabled = true;
 
-    this.#transitioning = true;
+    this._transitioning = true;
 
-    this.#depopulatePalette();
+    this._depopulatePalette();
 
-    // We need to set this.#customizing to false and remove the `customizing`
+    // We need to set this._customizing to false and remove the `customizing`
     // attribute before removing the tab or else
     // XULBrowserWindow.onLocationChange might think that we're still in
     // customization mode and need to exit it for a second time.
-    this.#customizing = false;
+    this._customizing = false;
     document.documentElement.removeAttribute("customizing");
 
-    if (this.#browser.selectedTab == gTab) {
+    if (this.browser.selectedTab == gTab) {
       closeGlobalTab();
     }
 
@@ -645,10 +491,10 @@ export class CustomizeMode {
 
     window.gNavToolbox.removeEventListener("toolbarvisibilitychange", this);
 
-    this.#teardownPaletteDragging();
+    this._teardownPaletteDragging();
 
     (async () => {
-      await this.#unwrapAllAreaItems();
+      await this._unwrapToolbarItems();
 
       // And drop all area references.
       this.areas.clear();
@@ -673,11 +519,12 @@ export class CustomizeMode {
         toolbar.removeAttribute("customizing");
       }
 
-      this.#maybeMoveDownloadsButtonToNavBar();
+      this._maybeMoveDownloadsButtonToNavBar();
 
       delete this._lastLightweightTheme;
-      this.#transitioning = false;
-      this.#handler.isExitingCustomizeMode = false;
+      this._changed = false;
+      this._transitioning = false;
+      this._handler.isExitingCustomizeMode = false;
       CustomizableUI.dispatchToolboxEvent("aftercustomization", {}, window);
       CustomizableUI.notifyEndCustomizing(window);
 
@@ -686,38 +533,33 @@ export class CustomizeMode {
       }
     })().catch(e => {
       lazy.log.error("Error exiting customize mode", e);
-      this.#handler.isExitingCustomizeMode = false;
+      this._handler.isExitingCustomizeMode = false;
     });
-  }
+  },
 
   /**
    * The overflow panel in customize mode should have its arrow pointing
    * at the overflow button. In order to do this correctly, we pass the
    * distance between the inside of window and the middle of the button
    * to the customize mode markup in which the arrow and panel are placed.
-   *
-   * The returned Promise resolves once the offset has been set on the panel
-   * wrapper.
-   *
-   * @returns {Promise<undefined>}
    */
-  async #updateOverflowPanelArrowOffset() {
+  async _updateOverflowPanelArrowOffset() {
     let currentDensity =
-      this.#document.documentElement.getAttribute("uidensity");
-    let offset = await this.#window.promiseDocumentFlushed(() => {
+      this.document.documentElement.getAttribute("uidensity");
+    let offset = await this.window.promiseDocumentFlushed(() => {
       let overflowButton = this.$("nav-bar-overflow-button");
       let buttonRect = overflowButton.getBoundingClientRect();
       let endDistance;
-      if (this.#window.RTL_UI) {
+      if (this.window.RTL_UI) {
         endDistance = buttonRect.left;
       } else {
-        endDistance = this.#window.innerWidth - buttonRect.right;
+        endDistance = this.window.innerWidth - buttonRect.right;
       }
       return endDistance + buttonRect.width / 2;
     });
     if (
-      !this.#document ||
-      currentDensity != this.#document.documentElement.getAttribute("uidensity")
+      !this.document ||
+      currentDensity != this.document.documentElement.getAttribute("uidensity")
     ) {
       return;
     }
@@ -725,20 +567,10 @@ export class CustomizeMode {
       "--panel-arrow-offset",
       offset + "px"
     );
-  }
+  },
 
-  /**
-   * Given some DOM node, attempts to resolve to the relevant child or overflow
-   * target node that can have customizable items placed within it. It may
-   * resolve to  aNode itself, if aNode can have customizable items placed
-   * directly within it. If the node does not appear to have such a child, this
-   * method will return `null`.
-   *
-   * @param {DOMNode} aNode
-   * @returns {null|DOMNode}
-   */
-  #getCustomizableChildForNode(aNode) {
-    // NB: adjusted from #getCustomizableParent to keep that method fast
+  _getCustomizableChildForNode(aNode) {
+    // NB: adjusted from _getCustomizableParent to keep that method fast
     // (it's used during drags), and avoid multiple DOM loops
     let areas = CustomizableUI.areas;
     // Caching this length is important because otherwise we'll also iterate
@@ -767,28 +599,11 @@ export class CustomizeMode {
       aNode = parent;
     }
     return null;
-  }
+  },
 
-  /**
-   * Kicks off an animation for aNode that causes it to scale down and become
-   * transparent before being removed from a toolbar. This can be seen when
-   * using the context menu to remove an item from a toolbar.
-   *
-   * For nodes that are within the overflow panel, aren't
-   * toolbaritem / toolbarbuttons, or is the hidden downloads button, this
-   * returns `null` immediately and no animation is performed. If reduced
-   * motion is enabled, this returns `null` immediately and no animation is
-   * performed.
-   *
-   * @param {DOMNode} aNode
-   *   The node to be removed from the toolbar.
-   * @returns {null|Promise<DOMNode>}
-   *   Returns `null` if no animation is going to occur, or the DOMNode that
-   *   the animation was performed on after the animation has completed.
-   */
-  #promiseWidgetAnimationOut(aNode) {
+  _promiseWidgetAnimationOut(aNode) {
     if (
-      this.#window.gReduceMotion ||
+      this.window.gReduceMotion ||
       aNode.getAttribute("cui-anchorid") == "nav-bar-overflow-button" ||
       (aNode.tagName != "toolbaritem" && aNode.tagName != "toolbarbutton") ||
       (aNode.id == "downloads-button" && aNode.hidden)
@@ -830,8 +645,8 @@ export class CustomizeMode {
 
       // Wait until the next frame before setting the class to ensure
       // we do start the animation.
-      this.#window.requestAnimationFrame(() => {
-        this.#window.requestAnimationFrame(() => {
+      this.window.requestAnimationFrame(() => {
+        this.window.requestAnimationFrame(() => {
           animationNode.classList.add("animate-out");
           animationNode.ownerGlobal.gNavToolbox.addEventListener(
             "customizationending",
@@ -844,27 +659,14 @@ export class CustomizeMode {
         });
       });
     });
-  }
+  },
 
-  /**
-   * Moves a customizable item to the end of the navbar. This is used primarily
-   * by the toolbar item context menus regardless of whether or not we're in
-   * customize mode. If this item is within a toolbar, this may kick off an
-   * animation that shrinks the item icon and causes it to become transparent
-   * before the move occurs. The returned Promise resolves once the animation
-   * and the move has completed.
-   *
-   * @param {DOMNode} aNode
-   *   The node to be moved to the end of the navbar area.
-   * @returns {Promise<undefined>}
-   *   Resolves once the move has completed.
-   */
   async addToToolbar(aNode) {
-    aNode = this.#getCustomizableChildForNode(aNode);
+    aNode = this._getCustomizableChildForNode(aNode);
     if (aNode.localName == "toolbarpaletteitem" && aNode.firstElementChild) {
       aNode = aNode.firstElementChild;
     }
-    let widgetAnimationPromise = this.#promiseWidgetAnimationOut(aNode);
+    let widgetAnimationPromise = this._promiseWidgetAnimationOut(aNode);
     let animationNode;
     if (widgetAnimationPromise) {
       animationNode = await widgetAnimationPromise;
@@ -885,56 +687,29 @@ export class CustomizeMode {
       widgetToAdd,
       CustomizableUI.AREA_NAVBAR
     );
-    if (!this.#customizing) {
+    if (!this._customizing) {
       CustomizableUI.dispatchToolboxEvent("customizationchange");
     }
 
     // If the user explicitly moves this item, turn off autohide.
     if (aNode.id == "downloads-button") {
       Services.prefs.setBoolPref(kDownloadAutoHidePref, false);
-      if (this.#customizing) {
-        this.#showDownloadsAutoHidePanel();
+      if (this._customizing) {
+        this._showDownloadsAutoHidePanel();
       }
     }
 
     if (animationNode) {
       animationNode.classList.remove("animate-out");
     }
-  }
+  },
 
-  /**
-   * Pins a customizable widget to the overflow panel. This is used by the
-   * toolbar item context menus regardless of whether or not we're in customize
-   * mode. It is also on the widget context menu within the overflow panel when
-   * the widget is placed there temporarily during a toolbar overflow. If this
-   * item is within a toolbar, this may kick off an* animation that shrinks the
-   * item icon and causes it to become transparent before the move occurs. The
-   * returned Promise resolves once the animation and the move has completed.
-   *
-   * @param {DOMNode} aNode
-   *   The node to be moved to the overflow panel.
-   * @param {string} aReason
-   *   A string to describe why the item is being moved to the overflow panel.
-   *   This is passed along to BrowserUsageTelemetry.recordWidgetChange, and
-   *   is dash-delimited.
-   *
-   *   Examples:
-   *
-   *   "toolbar-context-menu": the reason is that the user chose to do this via
-   *     the toolbar context menu.
-   *
-   *   "panelitem-context": the reason is that the user chose to do this via
-   *     the overflow panel item context menu when the item was moved there
-   *     temporarily during a toolbar overflow.
-   * @returns {Promise<undefined>}
-   *   Resolves once the move has completed.
-   */
   async addToPanel(aNode, aReason) {
-    aNode = this.#getCustomizableChildForNode(aNode);
+    aNode = this._getCustomizableChildForNode(aNode);
     if (aNode.localName == "toolbarpaletteitem" && aNode.firstElementChild) {
       aNode = aNode.firstElementChild;
     }
-    let widgetAnimationPromise = this.#promiseWidgetAnimationOut(aNode);
+    let widgetAnimationPromise = this._promiseWidgetAnimationOut(aNode);
     let animationNode;
     if (widgetAnimationPromise) {
       animationNode = await widgetAnimationPromise;
@@ -943,22 +718,22 @@ export class CustomizeMode {
     let panel = CustomizableUI.AREA_FIXED_OVERFLOW_PANEL;
     CustomizableUI.addWidgetToArea(aNode.id, panel);
     lazy.BrowserUsageTelemetry.recordWidgetChange(aNode.id, panel, aReason);
-    if (!this.#customizing) {
+    if (!this._customizing) {
       CustomizableUI.dispatchToolboxEvent("customizationchange");
     }
 
     // If the user explicitly moves this item, turn off autohide.
     if (aNode.id == "downloads-button") {
       Services.prefs.setBoolPref(kDownloadAutoHidePref, false);
-      if (this.#customizing) {
-        this.#showDownloadsAutoHidePanel();
+      if (this._customizing) {
+        this._showDownloadsAutoHidePanel();
       }
     }
 
     if (animationNode) {
       animationNode.classList.remove("animate-out");
     }
-    if (!this.#window.gReduceMotion) {
+    if (!this.window.gReduceMotion) {
       let overflowButton = this.$("nav-bar-overflow-button");
       overflowButton.setAttribute("animate", "true");
       overflowButton.addEventListener(
@@ -971,42 +746,14 @@ export class CustomizeMode {
         }
       );
     }
-  }
+  },
 
-  /**
-   * Removes a customizable item from its area and puts it in the palette. This
-   * is used by the toolbar item context menus regardless of whether or not
-   * we're in customize mode. It is also on the widget context menu within the
-   * overflow panel when the widget is placed there temporarily during a toolbar
-   * overflow. If this item is within a toolbar, this may kick off an animation
-   * that shrinks the item icon and causes it to become transparent before the
-   * removal occurs. The returned Promise resolves once the animation and the
-   * removal has completed.
-   *
-   * @param {DOMNode} aNode
-   *   The node to be removed and placed into the palette.
-   * @param {string} aReason
-   *   A string to describe why the item is being removed.
-   *   This is passed along to BrowserUsageTelemetry.recordWidgetChange, and
-   *   is dash-delimited.
-   *
-   *   Examples:
-   *
-   *   "toolbar-context-menu": the reason is that the user chose to do this via
-   *     the toolbar context menu.
-   *
-   *   "panelitem-context": the reason is that the user chose to do this via
-   *     the overflow panel item context menu when the item was moved there
-   *     temporarily during a toolbar overflow.
-   * @returns {Promise<undefined>}
-   *   Resolves once the removal has completed.
-   */
   async removeFromArea(aNode, aReason) {
-    aNode = this.#getCustomizableChildForNode(aNode);
+    aNode = this._getCustomizableChildForNode(aNode);
     if (aNode.localName == "toolbarpaletteitem" && aNode.firstElementChild) {
       aNode = aNode.firstElementChild;
     }
-    let widgetAnimationPromise = this.#promiseWidgetAnimationOut(aNode);
+    let widgetAnimationPromise = this._promiseWidgetAnimationOut(aNode);
     let animationNode;
     if (widgetAnimationPromise) {
       animationNode = await widgetAnimationPromise;
@@ -1014,36 +761,30 @@ export class CustomizeMode {
 
     CustomizableUI.removeWidgetFromArea(aNode.id);
     lazy.BrowserUsageTelemetry.recordWidgetChange(aNode.id, null, aReason);
-    if (!this.#customizing) {
+    if (!this._customizing) {
       CustomizableUI.dispatchToolboxEvent("customizationchange");
     }
 
     // If the user explicitly removes this item, turn off autohide.
     if (aNode.id == "downloads-button") {
       Services.prefs.setBoolPref(kDownloadAutoHidePref, false);
-      if (this.#customizing) {
-        this.#showDownloadsAutoHidePanel();
+      if (this._customizing) {
+        this._showDownloadsAutoHidePanel();
       }
     }
     if (animationNode) {
       animationNode.classList.remove("animate-out");
     }
-  }
+  },
 
-  /**
-   * Populates the visible palette seen in the content area when entering
-   * customize mode. This moves items from the normal "hidden" palette that
-   * belongs to the toolbox, and then temporarily overrides the toolbox
-   * with the visible palette until we exit customize mode.
-   */
-  #populatePalette() {
-    let fragment = this.#document.createDocumentFragment();
-    let toolboxPalette = this.#window.gNavToolbox.palette;
+  populatePalette() {
+    let fragment = this.document.createDocumentFragment();
+    let toolboxPalette = this.window.gNavToolbox.palette;
 
     try {
       let unusedWidgets = CustomizableUI.getUnusedWidgets(toolboxPalette);
       for (let widget of unusedWidgets) {
-        let paletteItem = this.#makePaletteItem(widget);
+        let paletteItem = this.makePaletteItem(widget, "palette");
         if (!paletteItem) {
           continue;
         }
@@ -1052,33 +793,29 @@ export class CustomizeMode {
 
       let flexSpace = CustomizableUI.createSpecialWidget(
         "spring",
-        this.#document
+        this.document
       );
       fragment.appendChild(this.wrapToolbarItem(flexSpace, "palette"));
 
       this.visiblePalette.appendChild(fragment);
-      this.#stowedPalette = this.#window.gNavToolbox.palette;
-      this.#window.gNavToolbox.palette = this.visiblePalette;
+      this._stowedPalette = this.window.gNavToolbox.palette;
+      this.window.gNavToolbox.palette = this.visiblePalette;
 
       // Now that the palette items are all here, disable all commands.
       // We do this here rather than directly in `enter` because we
       // need to do/undo this when we're called from reset(), too.
-      this.#updateCommandsDisabledState(true);
+      this._updateCommandsDisabledState(true);
     } catch (ex) {
       lazy.log.error(ex);
     }
-  }
+  },
 
-  /**
-   * For a given widget, finds the associated node within this window and then
-   * creates / updates a toolbarpaletteitem that will wrap that node to make
-   * drag and drop operations on that node work while in customize mode.
-   *
-   * @param {WidgetGroupWrapper|XULWidgetGroupWrapper} aWidget
-   * @returns {DOMNode}
-   */
-  #makePaletteItem(aWidget) {
-    let widgetNode = aWidget.forWindow(this.#window).node;
+  // XXXunf Maybe this should use -moz-element instead of wrapping the node?
+  //       Would ensure no weird interactions/event handling from original node,
+  //       and makes it possible to put this in a lazy-loaded iframe/real tab
+  //       while still getting rid of the need for overlays.
+  makePaletteItem(aWidget, aPlace) {
+    let widgetNode = aWidget.forWindow(this.window).node;
     if (!widgetNode) {
       lazy.log.error(
         "Widget with id " + aWidget.id + " does not return a valid node"
@@ -1090,20 +827,14 @@ export class CustomizeMode {
       return null;
     }
 
-    let wrapper = this.createOrUpdateWrapper(widgetNode, "palette");
+    let wrapper = this.createOrUpdateWrapper(widgetNode, aPlace);
     wrapper.appendChild(widgetNode);
     return wrapper;
-  }
+  },
 
-  /**
-   * Unwraps and moves items from the visible palette back to the hidden palette
-   * when exiting customize mode. This also reassigns the toolbox's palette
-   * property to point back at the default hidden palette, as this was
-   * overridden to be the visible palette in #populatePalette.
-   */
-  #depopulatePalette() {
+  _depopulatePalette() {
     // Quick, undo the command disabling before we depopulate completely:
-    this.#updateCommandsDisabledState(false);
+    this._updateCommandsDisabledState(false);
 
     this.visiblePalette.hidden = true;
     let paletteChild = this.visiblePalette.firstElementChild;
@@ -1120,32 +851,18 @@ export class CustomizeMode {
         //       WeakMaps), and there's the question of what behavior
         //       wrappers should have if consumers keep hold of them.
         let unwrappedPaletteItem = this.unwrapToolbarItem(paletteChild);
-        this.#stowedPalette.appendChild(unwrappedPaletteItem);
+        this._stowedPalette.appendChild(unwrappedPaletteItem);
       }
 
       paletteChild = nextChild;
     }
     this.visiblePalette.hidden = false;
-    this.#window.gNavToolbox.palette = this.#stowedPalette;
-  }
+    this.window.gNavToolbox.palette = this._stowedPalette;
+  },
 
-  /**
-   * For all <command> elements in the window document that have no ID, or
-   * are not in the #enabledCommands set, puts them in the "disabled" state if
-   * `shouldBeDisabled` is true. For any command that was already disabled, adds
-   * a "wasdisabled" attribute to the command.
-   *
-   * If `shouldBeDisabled` is false, removes the "wasdisabled" attribute from
-   * any command nodes that have them, and for those that don't, removes the
-   * "disabled" attribute.
-   *
-   * @param {boolean} shouldBeDisabled
-   *   True if all <command> elements not in #enabledCommands should be
-   *   disabled. False otherwise.
-   */
-  #updateCommandsDisabledState(shouldBeDisabled) {
-    for (let command of this.#document.querySelectorAll("command")) {
-      if (!command.id || !this.#enabledCommands.has(command.id)) {
+  _updateCommandsDisabledState(shouldBeDisabled) {
+    for (let command of this.document.querySelectorAll("command")) {
+      if (!command.id || !this._enabledCommands.has(command.id)) {
         if (shouldBeDisabled) {
           if (command.getAttribute("disabled") != "true") {
             command.setAttribute("disabled", true);
@@ -1159,19 +876,9 @@ export class CustomizeMode {
         }
       }
     }
-  }
+  },
 
-  /**
-   * Checks if the passed in DOM node is one that can represent a
-   * customizable widget.
-   *
-   * @param {DOMNode} aNode
-   *   The node to check to see if it's a customizable widget node.
-   * @returns {boolean}
-   *   `true` if the passed in DOM node is a type that can be used for
-   *   customizable widgets.
-   */
-  #isCustomizableItem(aNode) {
+  isCustomizableItem(aNode) {
     return (
       aNode.localName == "toolbarbutton" ||
       aNode.localName == "toolbaritem" ||
@@ -1179,60 +886,23 @@ export class CustomizeMode {
       aNode.localName == "toolbarspring" ||
       aNode.localName == "toolbarspacer"
     );
-  }
+  },
 
-  /**
-   * Checks if the passed in DOM node is a toolbarpaletteitem wrapper.
-   *
-   * @param {DOMNode} aNode
-   *   The node to check for being wrapped.
-   * @returns {boolean}
-   *   `true` if the passed in DOM node is a toolbarpaletteitem, meaning
-   *   that it was wrapped via createOrUpdateWrapper.
-   */
   isWrappedToolbarItem(aNode) {
     return aNode.localName == "toolbarpaletteitem";
-  }
+  },
 
-  /**
-   * Queues a function for the main thread to execute soon that will wrap
-   * aNode in a toolbarpaletteitem (or update the wrapper if it already exists).
-   *
-   * @param {DOMNode} aNode
-   *   The node to wrap in a toolbarpaletteitem.
-   * @param {string} aPlace
-   *   The string to set as the "place" attribute on the node when it is
-   *   wrapped. This is expected to be one of the strings returned by
-   *   CustomizableUI.getPlaceForItem.
-   * @returns {Promise<DOMNode>}
-   *   Resolves with the wrapper node, or the node itself if the node is not
-   *   a customizable item.
-   */
-  #deferredWrapToolbarItem(aNode, aPlace) {
+  deferredWrapToolbarItem(aNode, aPlace) {
     return new Promise(resolve => {
-      Services.tm.dispatchToMainThread(() => {
+      dispatchFunction(() => {
         let wrapper = this.wrapToolbarItem(aNode, aPlace);
         resolve(wrapper);
       });
     });
-  }
+  },
 
-  /**
-   * Creates or updates a wrapping toolbarpaletteitem around aNode, presuming
-   * the node is a customizable item.
-   *
-   * @param {DOMNode} aNode
-   *   The node to wrap, or update the wrapper for.
-   * @param {string} aPlace
-   *   The string to set as the "place" attribute on the node when it is
-   *   wrapped. This is expected to be one of the strings returned by
-   *   CustomizableUI.getPlaceForItem.
-   * @returns {DOMNode}
-   *   The toolbarbpaletteitem wrapper, in the event that aNode is a
-   *   customizable item. Otherwise, returns aNode.
-   */
   wrapToolbarItem(aNode, aPlace) {
-    if (!this.#isCustomizableItem(aNode)) {
+    if (!this.isCustomizableItem(aNode)) {
       return aNode;
     }
     let wrapper = this.createOrUpdateWrapper(aNode, aPlace);
@@ -1247,25 +917,13 @@ export class CustomizeMode {
     }
     wrapper.appendChild(aNode);
     return wrapper;
-  }
+  },
 
   /**
-   * Helper to set the title and tooltiptext on a toolbarpaletteitem wrapper
-   * based on the wrapped node - either by reading the label/title attributes
-   * of aNode, or (in the event of delayed Fluent localization) setting up a
-   * mutation observer on aNode such that when the label and/or title do
-   * get set, we re-enter #updateWrapperLabel to update the toolbarpaletteitem.
-   *
-   * @param {DOMNode} aNode
-   *   The wrapped customizable item to update the wrapper for.
-   * @param {boolean} aIsUpdate
-   *   True if the node already has a pre-existing wrapper that is being
-   *   updated rather than created.
-   * @param {DOMNode} [aWrapper=aNode.parentElement]
-   *   The toolbarpaletteitem wrapper, in the event that it's not the
-   *   immediate ancestor of aNode for some reason.
+   * Helper to set the label, either directly or to set up the translation
+   * observer so we can set the label once it's available.
    */
-  #updateWrapperLabel(aNode, aIsUpdate, aWrapper = aNode.parentElement) {
+  _updateWrapperLabel(aNode, aIsUpdate, aWrapper = aNode.parentElement) {
     if (aNode.hasAttribute("label")) {
       aWrapper.setAttribute("title", aNode.getAttribute("label"));
       aWrapper.setAttribute("tooltiptext", aNode.getAttribute("label"));
@@ -1273,49 +931,28 @@ export class CustomizeMode {
       aWrapper.setAttribute("title", aNode.getAttribute("title"));
       aWrapper.setAttribute("tooltiptext", aNode.getAttribute("title"));
     } else if (aNode.hasAttribute("data-l10n-id") && !aIsUpdate) {
-      this.#translationObserver.observe(aNode, {
+      this._translationObserver.observe(aNode, {
         attributes: true,
         attributeFilter: ["label", "title"],
       });
     }
-  }
+  },
 
   /**
-   * Called when a node without a label or title has those attributes updated.
-   *
-   * @param {MutationRecord[]} aMutations
-   *   The list of mutations for the label/title attributes of the nodes that
-   *   had neither of those attributes set when wrapping them.
+   * Called when a node without a label or title is updated.
    */
-  #onTranslations(aMutations) {
+  _onTranslations(aMutations) {
     for (let mut of aMutations) {
       let { target } = mut;
       if (
         target.parentElement?.localName == "toolbarpaletteitem" &&
         (target.hasAttribute("label") || mut.target.hasAttribute("title"))
       ) {
-        this.#updateWrapperLabel(target, true);
+        this._updateWrapperLabel(target, true);
       }
     }
-  }
+  },
 
-  /**
-   * Creates or updates a toolbarpaletteitem to wrap a customizable item. This
-   * wrapper makes it possible to click and drag these customizable items around
-   * in the DOM without the underlying item having its event handlers invoked.
-   *
-   * @param {DOMNode} aNode
-   *   The node to create or update the toolbarpaletteitem wrapper for.
-   * @param {string} aPlace
-   *   The string to set as the "place" attribute on the node when it is
-   *   wrapped. This is expected to be one of the strings returned by
-   *   CustomizableUI.getPlaceForItem.
-   * @param {boolean} aIsUpdate
-   *   True if it is expected that aNode is already wrapped and that we're
-   *   updating the wrapper rather than creating it.
-   * @returns {DOMNode}
-   *   Returns the created or updated toolbarpaletteitem wrapper.
-   */
   createOrUpdateWrapper(aNode, aPlace, aIsUpdate) {
     let wrapper;
     if (
@@ -1326,7 +963,7 @@ export class CustomizeMode {
       wrapper = aNode.parentNode;
       aPlace = wrapper.getAttribute("place");
     } else {
-      wrapper = this.#document.createXULElement("toolbarpaletteitem");
+      wrapper = this.document.createXULElement("toolbarpaletteitem");
       // "place" is used to show the label when it's sitting in the palette.
       wrapper.setAttribute("place", aPlace);
     }
@@ -1360,7 +997,7 @@ export class CustomizeMode {
       wrapper.setAttribute("id", "wrapper-" + aNode.getAttribute("id"));
     }
 
-    this.#updateWrapperLabel(aNode, aIsUpdate, wrapper);
+    this._updateWrapperLabel(aNode, aIsUpdate, wrapper);
 
     if (aNode.hasAttribute("flex")) {
       wrapper.setAttribute("flex", aNode.getAttribute("flex"));
@@ -1409,21 +1046,11 @@ export class CustomizeMode {
     }
 
     return wrapper;
-  }
+  },
 
-  /**
-   * Queues a function for the main thread to execute soon that will unwrap
-   * the node wrapped with aWrapper, which should be a toolbarpaletteitem.
-   *
-   * @param {DOMNode} aWrapper
-   *   The toolbarpaletteitem wrapper around a node to unwrap.
-   * @returns {Promise<DOMNode|null>}
-   *   Resolves with the unwrapped node, or null in the event that some
-   *   problem occurred while unwrapping (which will be logged).
-   */
-  #deferredUnwrapToolbarItem(aWrapper) {
+  deferredUnwrapToolbarItem(aWrapper) {
     return new Promise(resolve => {
-      Services.tm.dispatchToMainThread(() => {
+      dispatchFunction(() => {
         let item = null;
         try {
           item = this.unwrapToolbarItem(aWrapper);
@@ -1433,19 +1060,8 @@ export class CustomizeMode {
         resolve(item);
       });
     });
-  }
+  },
 
-  /**
-   * Unwraps a customizable item wrapped with a toolbarpaletteitem. If the
-   * passed in aWrapper is not a toolbarpaletteitem, this just returns
-   * aWrapper.
-   *
-   * @param {DOMNode} aWrapper
-   *   The toolbarpaletteitem wrapper around a node to be unwrapped.
-   * @returns {DOMNode|null}
-   *   Returns the unwrapped customizable item, or null if something went wrong
-   *   while unwrapping.
-   */
   unwrapToolbarItem(aWrapper) {
     if (aWrapper.nodeName != "toolbarpaletteitem") {
       return aWrapper;
@@ -1500,35 +1116,18 @@ export class CustomizeMode {
       aWrapper.parentNode.replaceChild(toolbarItem, aWrapper);
     }
     return toolbarItem;
-  }
+  },
 
-  /**
-   * For a given area, iterates the children within its customize target,
-   * and asynchronously wraps each customizable child in a
-   * toolbarpaletteitem. This also adds drag and drop handlers to the
-   * customize target for the area.
-   *
-   * @param {string} aArea
-   *   The ID of the area to wrap the children for in the window that this
-   *   CustomizeMode was instantiated for.
-   * @returns {Promise<DOMNode|null>}
-   *   Resolves with the customize target DOMNode for aArea for the window that
-   *   this CustomizeMode was instantiated for - or null if the customize target
-   *   cannot be found or is unknown to CustomizeMode.
-   */
-  async #wrapAreaItems(aArea) {
-    let target = CustomizableUI.getCustomizeTargetForArea(aArea, this.#window);
+  async _wrapToolbarItem(aArea) {
+    let target = CustomizableUI.getCustomizeTargetForArea(aArea, this.window);
     if (!target || this.areas.has(target)) {
       return null;
     }
 
-    this.#addCustomizeTargetDragAndDropHandlers(target);
+    this._addDragHandlers(target);
     for (let child of target.children) {
-      if (
-        this.#isCustomizableItem(child) &&
-        !this.isWrappedToolbarItem(child)
-      ) {
-        await this.#deferredWrapToolbarItem(
+      if (this.isCustomizableItem(child) && !this.isWrappedToolbarItem(child)) {
+        await this.deferredWrapToolbarItem(
           child,
           CustomizableUI.getPlaceForItem(child)
         ).catch(lazy.log.error);
@@ -1536,31 +1135,19 @@ export class CustomizeMode {
     }
     this.areas.add(target);
     return target;
-  }
+  },
 
-  /**
-   * A synchronous version of #wrapAreaItems that will wrap all of the
-   * customizable children of aArea's customize target in toolbarpaletteitems.
-   *
-   * @param {string} aArea
-   *   The ID of the area to wrap the children for in the window that this
-   *   CustomizeMode was instantiated for.
-   * @returns {DOMNode|null}
-   *   Returns the customize target DOMNode for aArea for the window that
-   *   this CustomizeMode was instantiated for - or null if the customize target
-   *   cannot be found or is unknown to CustomizeMode.
-   */
-  #wrapAreaItemsSync(aArea) {
-    let target = CustomizableUI.getCustomizeTargetForArea(aArea, this.#window);
+  _wrapToolbarItemSync(aArea) {
+    let target = CustomizableUI.getCustomizeTargetForArea(aArea, this.window);
     if (!target || this.areas.has(target)) {
       return null;
     }
 
-    this.#addCustomizeTargetDragAndDropHandlers(target);
+    this._addDragHandlers(target);
     try {
       for (let child of target.children) {
         if (
-          this.#isCustomizableItem(child) &&
+          this.isCustomizableItem(child) &&
           !this.isWrappedToolbarItem(child)
         ) {
           this.wrapToolbarItem(child, CustomizableUI.getPlaceForItem(child));
@@ -1572,31 +1159,15 @@ export class CustomizeMode {
 
     this.areas.add(target);
     return target;
-  }
+  },
 
-  /**
-   * Iterates all areas and asynchronously wraps their customize target children
-   * with toolbarpaletteitems in the window that this CustomizeMode was
-   * constructed for.
-   *
-   * @returns {Promise<undefined>}
-   *   Resolves when wrapping has completed.
-   */
-  async #wrapAllAreaItems() {
+  async _wrapToolbarItems() {
     for (let area of CustomizableUI.areas) {
-      await this.#wrapAreaItems(area);
+      await this._wrapToolbarItem(area);
     }
-  }
+  },
 
-  /**
-   * Adds capturing drag and drop handlers for some customize target for some
-   * customizable area. These handlers delegate event handling to the
-   * handleEvent method.
-   *
-   * @param {DOMNode} aTarget
-   *   The customize target node to add drag and drop handlers for.
-   */
-  #addCustomizeTargetDragAndDropHandlers(aTarget) {
+  _addDragHandlers(aTarget) {
     // Allow dropping on the padding of the arrow panel.
     if (aTarget.id == CustomizableUI.AREA_FIXED_OVERFLOW_PANEL) {
       aTarget = this.$("customization-panelHolder");
@@ -1606,31 +1177,17 @@ export class CustomizeMode {
     aTarget.addEventListener("dragleave", this, true);
     aTarget.addEventListener("drop", this, true);
     aTarget.addEventListener("dragend", this, true);
-  }
+  },
 
-  /**
-   * Iterates all of the customizable item children of a customize target within
-   * a particular area, and attempts to wrap them in toolbarpaletteitems.
-   *
-   * @param {DOMNode} target
-   *   The customize target for some customizable area.
-   */
-  #wrapItemsInArea(target) {
+  _wrapItemsInArea(target) {
     for (let child of target.children) {
-      if (this.#isCustomizableItem(child)) {
+      if (this.isCustomizableItem(child)) {
         this.wrapToolbarItem(child, CustomizableUI.getPlaceForItem(child));
       }
     }
-  }
+  },
 
-  /**
-   * Removes capturing drag and drop handlers for some customize target for some
-   * customizable area added via #addCustomizeTargetDragAndDropHandlers.
-   *
-   * @param {DOMNode} aTarget
-   *   The customize target node to remove drag and drop handlers for.
-   */
-  #removeCustomizeTargetDragAndDropHandlers(aTarget) {
+  _removeDragHandlers(aTarget) {
     // Remove handler from different target if it was added to
     // allow dropping on the padding of the arrow panel.
     if (aTarget.id == CustomizableUI.AREA_FIXED_OVERFLOW_PANEL) {
@@ -1641,157 +1198,98 @@ export class CustomizeMode {
     aTarget.removeEventListener("dragleave", this, true);
     aTarget.removeEventListener("drop", this, true);
     aTarget.removeEventListener("dragend", this, true);
-  }
+  },
 
-  /**
-   * Iterates all of the customizable item children of a customize target within
-   * a particular area that have been wrapped in toolbarpaletteitems, and
-   * attemps to unwrap them.
-   *
-   * @param {DOMNode} target
-   *   The customize target for some customizable area.
-   */
-  #unwrapItemsInArea(target) {
+  _unwrapItemsInArea(target) {
     for (let toolbarItem of target.children) {
       if (this.isWrappedToolbarItem(toolbarItem)) {
         this.unwrapToolbarItem(toolbarItem);
       }
     }
-  }
+  },
 
-  /**
-   * Iterates all areas and asynchronously unwraps their customize target
-   * children that had been previously wrapped in toolbarpaletteitems in the
-   * window that this CustomizeMode was constructed for. This also removes
-   * the drag and drop handlers for each area.
-   *
-   * @returns {Promise<undefined>}
-   *   Resolves when unwrapping has completed.
-   */
-  #unwrapAllAreaItems() {
+  _unwrapToolbarItems() {
     return (async () => {
       for (let target of this.areas) {
         for (let toolbarItem of target.children) {
           if (this.isWrappedToolbarItem(toolbarItem)) {
-            await this.#deferredUnwrapToolbarItem(toolbarItem);
+            await this.deferredUnwrapToolbarItem(toolbarItem);
           }
         }
-        this.#removeCustomizeTargetDragAndDropHandlers(target);
+        this._removeDragHandlers(target);
       }
       this.areas.clear();
     })().catch(lazy.log.error);
-  }
+  },
 
-  /**
-   * Resets the customization state of the browser across all windows to the
-   * default settings.
-   *
-   * @returns {Promise<undefined>}
-   *   Resolves once resetting the customization state has completed.
-   */
   reset() {
     this.resetting = true;
     // Disable the reset button temporarily while resetting:
     let btn = this.$("customization-reset-button");
     btn.disabled = true;
     return (async () => {
-      this.#depopulatePalette();
-      await this.#unwrapAllAreaItems();
+      this._depopulatePalette();
+      await this._unwrapToolbarItems();
 
       CustomizableUI.reset();
 
-      await this.#wrapAllAreaItems();
-      this.#populatePalette();
+      await this._wrapToolbarItems();
+      this.populatePalette();
 
-      this.#updateResetButton();
-      this.#updateUndoResetButton();
-      this.#updateEmptyPaletteNotice();
-      this.#moveDownloadsButtonToNavBar = false;
+      this._updateResetButton();
+      this._updateUndoResetButton();
+      this._updateEmptyPaletteNotice();
+      this._moveDownloadsButtonToNavBar = false;
       this.resetting = false;
       if (!this._wantToBeInCustomizeMode) {
         this.exit();
       }
     })().catch(lazy.log.error);
-  }
+  },
 
-  /**
-   * Reverts a reset operation back to the prior customization state.
-   *
-   * @see CustomizeMode.reset()
-   * @returns {Promise<undefined>}
-   */
   undoReset() {
     this.resetting = true;
 
     return (async () => {
-      this.#depopulatePalette();
-      await this.#unwrapAllAreaItems();
+      this._depopulatePalette();
+      await this._unwrapToolbarItems();
 
       CustomizableUI.undoReset();
 
-      await this.#wrapAllAreaItems();
-      this.#populatePalette();
+      await this._wrapToolbarItems();
+      this.populatePalette();
 
-      this.#updateResetButton();
-      this.#updateUndoResetButton();
-      this.#updateEmptyPaletteNotice();
-      this.#moveDownloadsButtonToNavBar = false;
+      this._updateResetButton();
+      this._updateUndoResetButton();
+      this._updateEmptyPaletteNotice();
+      this._moveDownloadsButtonToNavBar = false;
       this.resetting = false;
     })().catch(lazy.log.error);
-  }
+  },
 
-  /**
-   * Handler for toolbarvisibilitychange events that fire within the window
-   * that this CustomizeMode was constructed for.
-   *
-   * @param {CustomEvent} aEvent
-   *   The toolbarvisibilitychange event that was fired.
-   */
-  #onToolbarVisibilityChange(aEvent) {
+  _onToolbarVisibilityChange(aEvent) {
     let toolbar = aEvent.target;
     toolbar.toggleAttribute(
       "customizing",
       aEvent.detail.visible && toolbar.getAttribute("customizable") == "true"
     );
-    this.#onUIChange();
-  }
+    this._onUIChange();
+  },
 
-  /**
-   * The callback called by CustomizableUI when a widget moves.
-   */
   onWidgetMoved() {
-    this.#onUIChange();
-  }
+    this._onUIChange();
+  },
 
-  /**
-   * The callback called by CustomizableUI when a widget is added to an area.
-   */
   onWidgetAdded() {
-    this.#onUIChange();
-  }
+    this._onUIChange();
+  },
 
-  /**
-   * The callback called by CustomizableUI when a widget is removed from an
-   * area.
-   */
   onWidgetRemoved() {
-    this.#onUIChange();
-  }
+    this._onUIChange();
+  },
 
-  /**
-   * The callback called by CustomizableUI *before* a widget's DOM node is acted
-   * upon by CustomizableUI (to add, move or remove it).
-   *
-   * @param {Element} aNodeToChange
-   *   The DOM node being acted upon.
-   * @param {Element|null} aSecondaryNode
-   *   The DOM node (if any) before which a widget will be inserted.
-   * @param {Element} aContainer
-   *   The *actual* DOM container for the widget (could be an overflow panel in
-   *   case of an overflowable toolbar).
-   */
   onWidgetBeforeDOMChange(aNodeToChange, aSecondaryNode, aContainer) {
-    if (aContainer.ownerGlobal != this.#window || this.resetting) {
+    if (aContainer.ownerGlobal != this.window || this.resetting) {
       return;
     }
     // If we get called for widgets that aren't in the window yet, they might not have
@@ -1802,22 +1300,10 @@ export class CustomizeMode {
     if (aSecondaryNode) {
       this.unwrapToolbarItem(aSecondaryNode.parentNode);
     }
-  }
+  },
 
-  /**
-   * The callback called by CustomizableUI *after* a widget's DOM node is acted
-   * upon by CustomizableUI (to add, move or remove it).
-   *
-   * @param {Element} aNodeToChange
-   *   The DOM node that was acted upon.
-   * @param {Element|null} aSecondaryNode
-   *   The DOM node (if any) that the widget was inserted before.
-   * @param {Element} aContainer
-   *   The *actual* DOM container for the widget (could be an overflow panel in
-   *   case of an overflowable toolbar).
-   */
   onWidgetAfterDOMChange(aNodeToChange, aSecondaryNode, aContainer) {
-    if (aContainer.ownerGlobal != this.#window || this.resetting) {
+    if (aContainer.ownerGlobal != this.window || this.resetting) {
       return;
     }
     // If the node is still attached to the container, wrap it again:
@@ -1831,45 +1317,25 @@ export class CustomizeMode {
       // If not, it got removed.
 
       // If an API-based widget is removed while customizing, append it to the palette.
-      // The #applyDrop code itself will take care of positioning it correctly, if
+      // The _applyDrop code itself will take care of positioning it correctly, if
       // applicable. We need the code to be here so removing widgets using CustomizableUI's
       // API also does the right thing (and adds it to the palette)
       let widgetId = aNodeToChange.id;
       let widget = CustomizableUI.getWidget(widgetId);
       if (widget.provider == CustomizableUI.PROVIDER_API) {
-        let paletteItem = this.#makePaletteItem(widget);
+        let paletteItem = this.makePaletteItem(widget, "palette");
         this.visiblePalette.appendChild(paletteItem);
       }
     }
-  }
+  },
 
-  /**
-   * The callback called by CustomizableUI when a widget is destroyed. Only
-   * fired for API-based widgets.
-   *
-   * @param {string} aWidgetId
-   *   The ID of the widget that was destroyed.
-   */
   onWidgetDestroyed(aWidgetId) {
     let wrapper = this.$("wrapper-" + aWidgetId);
     if (wrapper) {
       wrapper.remove();
     }
-  }
+  },
 
-  /**
-   * The callback called by CustomizableUI after a widget with id aWidgetId has
-   * been created, and has been added to either its default area or the area in
-   * which it was placed previously. If the widget has no default area and/or it
-   * has never been placed anywhere, aArea may be null. Only fired for API-based
-   * widgets.
-   *
-   * @param {string} aWidgetId
-   *   The ID of the widget that was just created.
-   * @param {string|null} aArea
-   *   The ID of the area that the widget was placed in, or null if it is
-   *   now in the customization palette.
-   */
   onWidgetAfterCreation(aWidgetId, aArea) {
     // If the node was added to an area, we would have gotten an onWidgetAdded notification,
     // plus associated DOM change notifications, so only do stuff for the palette:
@@ -1879,91 +1345,51 @@ export class CustomizeMode {
         this.wrapToolbarItem(widgetNode, "palette");
       } else {
         let widget = CustomizableUI.getWidget(aWidgetId);
-        this.visiblePalette.appendChild(this.#makePaletteItem(widget));
+        this.visiblePalette.appendChild(
+          this.makePaletteItem(widget, "palette")
+        );
       }
     }
-  }
+  },
 
-  /**
-   * Called by CustomizableUI after an area node is first built when it is
-   * registered.
-   *
-   * @param {string} aArea
-   *   The ID for the area that was just registered.
-   * @param {DOMNode} aContainer
-   *   The DOM node for the customizable area.
-   */
   onAreaNodeRegistered(aArea, aContainer) {
-    if (aContainer.ownerDocument == this.#document) {
-      this.#wrapItemsInArea(aContainer);
-      this.#addCustomizeTargetDragAndDropHandlers(aContainer);
+    if (aContainer.ownerDocument == this.document) {
+      this._wrapItemsInArea(aContainer);
+      this._addDragHandlers(aContainer);
       this.areas.add(aContainer);
     }
-  }
+  },
 
-  /**
-   * Called by CustomizableUI after an area node is unregistered and no longer
-   * available in this window.
-   *
-   * @param {string} aArea
-   *   The ID for the area that was just registered.
-   * @param {DOMNode} aContainer
-   *   The DOM node for the customizable area.
-   * @param {string} aReason
-   *   One of the CustomizableUI.REASON_* constants to describe the reason
-   *   that the area was unregistered for.
-   */
   onAreaNodeUnregistered(aArea, aContainer, aReason) {
     if (
-      aContainer.ownerDocument == this.#document &&
+      aContainer.ownerDocument == this.document &&
       aReason == CustomizableUI.REASON_AREA_UNREGISTERED
     ) {
-      this.#unwrapItemsInArea(aContainer);
-      this.#removeCustomizeTargetDragAndDropHandlers(aContainer);
+      this._unwrapItemsInArea(aContainer);
+      this._removeDragHandlers(aContainer);
       this.areas.delete(aContainer);
     }
-  }
+  },
 
-  /**
-   * Opens about:addons in a new tab, showing the themes list.
-   */
-  #openAddonsManagerThemes() {
-    this.#window.BrowserAddonUI.openAddonsMgr("addons://list/theme");
-  }
+  openAddonsManagerThemes() {
+    this.window.BrowserAddonUI.openAddonsMgr("addons://list/theme");
+  },
 
-  /**
-   * Temporarily updates the density of the browser UI to suit the passed in
-   * mode. This is used to preview the density of the browser while the user
-   * hovers the various density options, and is reset when the user stops
-   * hovering the options.
-   *
-   * @param {number|null} mode
-   *   One of the density mode constants from gUIDensity - for example,
-   *   gUIDensity.MODE_TOUCH.
-   */
-  #previewUIDensity(mode) {
-    this.#window.gUIDensity.update(mode);
-    this.#updateOverflowPanelArrowOffset();
-  }
+  getMoreThemes(aEvent) {
+    aEvent.target.parentNode.parentNode.hidePopup();
+    let getMoreURL = Services.urlFormatter.formatURLPref(
+      "lightweightThemes.getMoreURL"
+    );
+    this.window.openTrustedLinkIn(getMoreURL, "tab");
+  },
 
-  /**
-   * Resets the current UI density to the currently configured density. This
-   * is used after temporarily previewing a density.
-   */
-  #resetUIDensity() {
-    this.#window.gUIDensity.update();
-    this.#updateOverflowPanelArrowOffset();
-  }
+  updateUIDensity(mode) {
+    this.window.gUIDensity.update(mode);
+    this._updateOverflowPanelArrowOffset();
+  },
 
-  /**
-   * Sets a UI density mode as the configured density.
-   *
-   * @param {number|null} mode
-   *   One of the density mode constants from gUIDensity - for example,
-   *   gUIDensity.MODE_TOUCH.
-   */
   setUIDensity(mode) {
-    let win = this.#window;
+    let win = this.window;
     let gUIDensity = win.gUIDensity;
     let currentDensity = gUIDensity.getCurrentDensity();
     let panel = win.document.getElementById("customization-uidensity-menu");
@@ -1976,17 +1402,18 @@ export class CustomizeMode {
       Services.prefs.setBoolPref(gUIDensity.autoTouchModePref, false);
     }
 
-    this.#onUIChange();
+    this._onUIChange();
     panel.hidePopup();
-    this.#updateOverflowPanelArrowOffset();
-  }
+    this._updateOverflowPanelArrowOffset();
+  },
 
-  /**
-   * Updates the state of the UI density menupopup to correctly reflect the
-   * current configured density and to list the available alternative densities.
-   */
-  #onUIDensityMenuShowing() {
-    let win = this.#window;
+  resetUIDensity() {
+    this.window.gUIDensity.update();
+    this._updateOverflowPanelArrowOffset();
+  },
+
+  onUIDensityMenuShowing() {
+    let win = this.window;
     let doc = win.document;
     let gUIDensity = win.gUIDensity;
     let currentDensity = gUIDensity.getCurrentDensity();
@@ -2061,43 +1488,27 @@ export class CustomizeMode {
         checkbox.removeAttribute("checked");
       }
     }
-  }
+  },
 
-  /**
-   * Sets "automatic" touch mode to enabled or disabled. Automatic touch mode
-   * means that touch density is used automatically if the device has switched
-   * into a tablet mode.
-   *
-   * @param {boolean} checked
-   *   True if automatic touch mode should be enabled.
-   */
-  #updateAutoTouchMode(checked) {
+  updateAutoTouchMode(checked) {
     Services.prefs.setBoolPref("browser.touchmode.auto", checked);
     // Re-render the menu items since the active mode might have
     // change because of this.
-    this.#onUIDensityMenuShowing();
-    this.#onUIChange();
-  }
+    this.onUIDensityMenuShowing();
+    this._onUIChange();
+  },
 
-  /**
-   * Called anytime the UI configuration has changed in such a way that we need
-   * to update the state and appearance of customize mode.
-   */
-  #onUIChange() {
+  _onUIChange() {
+    this._changed = true;
     if (!this.resetting) {
-      this.#updateResetButton();
-      this.#updateUndoResetButton();
-      this.#updateEmptyPaletteNotice();
+      this._updateResetButton();
+      this._updateUndoResetButton();
+      this._updateEmptyPaletteNotice();
     }
     CustomizableUI.dispatchToolboxEvent("customizationchange");
-  }
+  },
 
-  /**
-   * Handles updating the state of customize mode if the palette has been
-   * emptied such that only the special "spring" element remains (as this
-   * cannot be removed from the palette).
-   */
-  #updateEmptyPaletteNotice() {
+  _updateEmptyPaletteNotice() {
     let paletteItems =
       this.visiblePalette.getElementsByTagName("toolbarpaletteitem");
     let whimsyButton = this.$("whimsy-button");
@@ -2108,34 +1519,22 @@ export class CustomizeMode {
     ) {
       whimsyButton.hidden = false;
     } else {
-      this.#togglePong(false);
+      this.togglePong(false);
       whimsyButton.hidden = true;
     }
-  }
+  },
 
-  /**
-   * Updates the enabled / disabled state of the Restore Defaults button based
-   * on whether or not we're already in the default state.
-   */
-  #updateResetButton() {
+  _updateResetButton() {
     let btn = this.$("customization-reset-button");
     btn.disabled = CustomizableUI.inDefaultState;
-  }
+  },
 
-  /**
-   * Updates the hidden / visible state of the "undo reset" button based on
-   * whether or not we've just performed a reset that can be undone.
-   */
-  #updateUndoResetButton() {
+  _updateUndoResetButton() {
     let undoResetButton = this.$("customization-undo-reset-button");
     undoResetButton.hidden = !CustomizableUI.canUndoReset;
-  }
+  },
 
-  /**
-   * On macOS, if a touch bar is available on the device, updates the
-   * hidden / visible state of the Customize Touch Bar button and spacer.
-   */
-  #updateTouchBarButton() {
+  _updateTouchBarButton() {
     if (AppConstants.platform != "macosx") {
       return;
     }
@@ -2145,60 +1544,47 @@ export class CustomizeMode {
     let isTouchBarInitialized = lazy.gTouchBarUpdater.isTouchBarInitialized();
     touchBarButton.hidden = !isTouchBarInitialized;
     touchBarSpacer.hidden = !isTouchBarInitialized;
-  }
+  },
 
-  /**
-   * Updates the hidden / visible state of the UI density button.
-   */
-  #updateDensityMenu() {
+  _updateDensityMenu() {
     // If we're entering Customize Mode, and we're using compact mode,
     // then show the button after that.
-    let gUIDensity = this.#window.gUIDensity;
+    let gUIDensity = this.window.gUIDensity;
     if (gUIDensity.getCurrentDensity().mode == gUIDensity.MODE_COMPACT) {
       Services.prefs.setBoolPref(kCompactModeShowPref, true);
     }
 
-    let button = this.#document.getElementById(
-      "customization-uidensity-button"
-    );
+    let button = this.document.getElementById("customization-uidensity-button");
     button.hidden =
       !Services.prefs.getBoolPref(kCompactModeShowPref) &&
       !button.querySelector("#customization-uidensity-menuitem-touch");
-  }
+  },
 
-  /**
-   * Generic event handler used throughout most of the Customize Mode UI. This
-   * is mainly used to dispatch events to more specific handlers based on the
-   * event type.
-   *
-   * @param {Event} aEvent
-   *   The event being handled.
-   */
   handleEvent(aEvent) {
     switch (aEvent.type) {
       case "toolbarvisibilitychange":
-        this.#onToolbarVisibilityChange(aEvent);
+        this._onToolbarVisibilityChange(aEvent);
         break;
       case "dragstart":
-        this.#onDragStart(aEvent);
+        this._onDragStart(aEvent);
         break;
       case "dragover":
-        this.#onDragOver(aEvent);
+        this._onDragOver(aEvent);
         break;
       case "drop":
-        this.#onDragDrop(aEvent);
+        this._onDragDrop(aEvent);
         break;
       case "dragleave":
-        this.#onDragLeave(aEvent);
+        this._onDragLeave(aEvent);
         break;
       case "dragend":
-        this.#onDragEnd(aEvent);
+        this._onDragEnd(aEvent);
         break;
       case "mousedown":
-        this.#onMouseDown(aEvent);
+        this._onMouseDown(aEvent);
         break;
       case "mouseup":
-        this.#onMouseUp(aEvent);
+        this._onMouseUp(aEvent);
         break;
       case "keypress":
         if (aEvent.keyCode == aEvent.DOM_VK_ESCAPE) {
@@ -2206,23 +1592,22 @@ export class CustomizeMode {
         }
         break;
       case "unload":
-        this.#uninit();
+        this.uninit();
         break;
     }
-  }
+  },
 
   /**
-   * Sets up the dragover/drop handlers on the visible palette. We handle
-   * dragover/drop on the outer palette separately to avoid overlap with other
-   * drag/drop handlers.
+   * We handle dragover/drop on the outer palette separately
+   * to avoid overlap with other drag/drop handlers.
    */
-  #setupPaletteDragging() {
-    this.#addCustomizeTargetDragAndDropHandlers(this.visiblePalette);
+  _setupPaletteDragging() {
+    this._addDragHandlers(this.visiblePalette);
 
     this.paletteDragHandler = aEvent => {
       let originalTarget = aEvent.originalTarget;
       if (
-        this.#isUnwantedDragDrop(aEvent) ||
+        this._isUnwantedDragDrop(aEvent) ||
         this.visiblePalette.contains(originalTarget) ||
         this.$("customization-panelHolder").contains(originalTarget)
       ) {
@@ -2230,9 +1615,9 @@ export class CustomizeMode {
       }
       // We have a dragover/drop on the palette.
       if (aEvent.type == "dragover") {
-        this.#onDragOver(aEvent, this.visiblePalette);
+        this._onDragOver(aEvent, this.visiblePalette);
       } else {
-        this.#onDragDrop(aEvent, this.visiblePalette);
+        this._onDragDrop(aEvent, this.visiblePalette);
       }
     };
     let contentContainer = this.$("customization-content-container");
@@ -2242,15 +1627,11 @@ export class CustomizeMode {
       true
     );
     contentContainer.addEventListener("drop", this.paletteDragHandler, true);
-  }
+  },
 
-  /**
-   * Tears down the dragover/drop handlers on the visible palette added by
-   * #setupPaletteDragging.
-   */
-  #teardownPaletteDragging() {
+  _teardownPaletteDragging() {
     lazy.DragPositionManager.stop();
-    this.#removeCustomizeTargetDragAndDropHandlers(this.visiblePalette);
+    this._removeDragHandlers(this.visiblePalette);
 
     let contentContainer = this.$("customization-content-container");
     contentContainer.removeEventListener(
@@ -2260,185 +1641,48 @@ export class CustomizeMode {
     );
     contentContainer.removeEventListener("drop", this.paletteDragHandler, true);
     delete this.paletteDragHandler;
-  }
+  },
 
-  /**
-   * Implements nsIObserver. This is mainly to observe for preference changes.
-   *
-   * @param {nsISupports} aSubject
-   *   The nsISupports subject for the notification topic that is being
-   *   observed.
-   * @param {string} aTopic
-   *   The notification topic that is being observed.
-   */
   observe(aSubject, aTopic) {
     switch (aTopic) {
       case "nsPref:changed":
-        this.#updateResetButton();
-        this.#updateUndoResetButton();
-        if (this.#canDrawInTitlebar()) {
-          this.#updateTitlebarCheckbox();
+        this._updateResetButton();
+        this._updateUndoResetButton();
+        if (this._canDrawInTitlebar()) {
+          this._updateTitlebarCheckbox();
         }
         break;
     }
-  }
+  },
 
-  /**
-   * Returns true if the current platform and configuration allows us to draw in
-   * the window titlebar.
-   *
-   * @returns {boolean}
-   */
-  #canDrawInTitlebar() {
-    return this.#window.CustomTitlebar.systemSupported;
-  }
+  async onInstalled(addon) {
+    await this.onEnabled(addon);
+  },
 
-  /**
-   * De-lazifies the customization panel and the menupopup / panel template
-   * holding various DOM nodes for customize mode. These things are lazily
-   * added to the DOM to avoid polluting the browser window DOM with things
-   * that only Customize Mode cares about.
-   */
-  #ensureCustomizationPanels() {
+  async onEnabled(addon) {
+    if (addon.type != "theme") {
+      return;
+    }
+
+    if (this._nextThemeChangeUserTriggered) {
+      this._onUIChange();
+    }
+    this._nextThemeChangeUserTriggered = false;
+  },
+
+  _canDrawInTitlebar() {
+    return this.window.TabsInTitlebar.systemSupported;
+  },
+
+  _ensureCustomizationPanels() {
     let template = this.$("customizationPanel");
     template.replaceWith(template.content);
 
     let wrapper = this.$("customModeWrapper");
     wrapper.replaceWith(wrapper.content);
-  }
+  },
 
-  /**
-   * Adds event listeners for all of the interactive elements in the window that
-   * this Customize Mode instance was constructed with.
-   */
-  #attachEventListeners() {
-    let container = this.$("customization-container");
-
-    container.addEventListener("command", event => {
-      switch (event.target.id) {
-        case "customization-titlebar-visibility-checkbox":
-          // NB: because command fires after click, by the time we've fired, the checkbox binding
-          //     will already have switched the button's state, so this is correct:
-          this.#toggleTitlebar(event.target.checked);
-          break;
-        case "customization-uidensity-menuitem-compact":
-        case "customization-uidensity-menuitem-normal":
-        case "customization-uidensity-menuitem-touch":
-          this.setUIDensity(event.target.mode);
-          break;
-        case "customization-uidensity-autotouchmode-checkbox":
-          this.#updateAutoTouchMode(event.target.checked);
-          break;
-        case "whimsy-button":
-          this.#togglePong(event.target.checked);
-          break;
-        case "customization-touchbar-button":
-          this.#customizeTouchBar();
-          break;
-        case "customization-undo-reset-button":
-          this.undoReset();
-          break;
-        case "customization-reset-button":
-          this.reset();
-          break;
-        case "customization-done-button":
-          this.exit();
-          break;
-      }
-    });
-
-    container.addEventListener("popupshowing", event => {
-      switch (event.target.id) {
-        case "customization-toolbar-menu":
-          this.#window.ToolbarContextMenu.onViewToolbarsPopupShowing(event);
-          break;
-        case "customization-uidensity-menu":
-          this.#onUIDensityMenuShowing();
-          break;
-      }
-    });
-
-    let updateDensity = event => {
-      switch (event.target.id) {
-        case "customization-uidensity-menuitem-compact":
-        case "customization-uidensity-menuitem-normal":
-        case "customization-uidensity-menuitem-touch":
-          this.#previewUIDensity(event.target.mode);
-      }
-    };
-    let densityMenu = this.#document.getElementById(
-      "customization-uidensity-menu"
-    );
-    densityMenu.addEventListener("focus", updateDensity);
-    densityMenu.addEventListener("mouseover", updateDensity);
-
-    let resetDensity = event => {
-      switch (event.target.id) {
-        case "customization-uidensity-menuitem-compact":
-        case "customization-uidensity-menuitem-normal":
-        case "customization-uidensity-menuitem-touch":
-          this.#resetUIDensity();
-      }
-    };
-    densityMenu.addEventListener("blur", resetDensity);
-    densityMenu.addEventListener("mouseout", resetDensity);
-
-    this.$("customization-lwtheme-link").addEventListener("click", () => {
-      this.#openAddonsManagerThemes();
-    });
-
-    this.$(kPaletteItemContextMenu).addEventListener("popupshowing", event => {
-      this.#onPaletteContextMenuShowing(event);
-    });
-
-    this.$(kPaletteItemContextMenu).addEventListener("command", event => {
-      switch (event.target.id) {
-        case "customizationPaletteItemContextMenuAddToToolbar":
-          this.addToToolbar(
-            event.target.parentNode.triggerNode,
-            "palette-context"
-          );
-          break;
-        case "customizationPaletteItemContextMenuAddToPanel":
-          this.addToPanel(
-            event.target.parentNode.triggerNode,
-            "palette-context"
-          );
-          break;
-      }
-    });
-
-    let autohidePanel = this.$(kDownloadAutohidePanelId);
-    autohidePanel.addEventListener("popupshown", event => {
-      this._downloadPanelAutoHideTimeout = this.#window.setTimeout(
-        () => event.target.hidePopup(),
-        4000
-      );
-    });
-    autohidePanel.addEventListener("mouseover", () => {
-      this.#window.clearTimeout(this._downloadPanelAutoHideTimeout);
-    });
-    autohidePanel.addEventListener("mouseout", event => {
-      this._downloadPanelAutoHideTimeout = this.#window.setTimeout(
-        () => event.target.hidePopup(),
-        2000
-      );
-    });
-    autohidePanel.addEventListener("popuphidden", () => {
-      this.#window.clearTimeout(this._downloadPanelAutoHideTimeout);
-    });
-
-    this.$(kDownloadAutohideCheckboxId).addEventListener("command", event => {
-      this.#onDownloadsAutoHideChange(event);
-    });
-  }
-
-  /**
-   * Updates the checked / unchecked state of the Titlebar checkbox, to
-   * reflect whether or not we're currently configured to show the native
-   * titlebar or not.
-   */
-  #updateTitlebarCheckbox() {
+  _updateTitlebarCheckbox() {
     let drawInTitlebar = Services.appinfo.drawInTitlebar;
     let checkbox = this.$("customization-titlebar-visibility-checkbox");
     // Drawing in the titlebar means 'hiding' the titlebar.
@@ -2449,41 +1693,18 @@ export class CustomizeMode {
     } else {
       checkbox.setAttribute("checked", "true");
     }
-  }
+  },
 
-  /**
-   * Configures whether or not we should show the native titlebar.
-   *
-   * @param {boolean} aShouldShowTitlebar
-   *   True if we should show the native titlebar. False to draw the browser
-   *   UI into the titlebar instead.
-   */
-  #toggleTitlebar(aShouldShowTitlebar) {
+  toggleTitlebar(aShouldShowTitlebar) {
     // Drawing in the titlebar means not showing the titlebar, hence the negation:
     Services.prefs.setIntPref(kDrawInTitlebarPref, !aShouldShowTitlebar);
-  }
+  },
 
-  /**
-   * A convenient shortcut to calling getBoundsWithoutFlushing on this windows'
-   * nsIDOMWindowUtils.
-   *
-   * @param {DOMNode} element
-   *   An element for which to try to get the bounding client rect, but without
-   *   flushing styles or layout.
-   * @returns {DOMRect}
-   */
-  #getBoundsWithoutFlushing(element) {
-    return this.#window.windowUtils.getBoundsWithoutFlushing(element);
-  }
+  _getBoundsWithoutFlushing(element) {
+    return this.window.windowUtils.getBoundsWithoutFlushing(element);
+  },
 
-  /**
-   * Handles the dragstart event on any customizable item in one of the
-   * customizable areas.
-   *
-   * @param {DragEvent} aEvent
-   *   The dragstart event being handled.
-   */
-  #onDragStart(aEvent) {
+  _onDragStart(aEvent) {
     __dumpDragData(aEvent);
     let item = aEvent.target;
     while (item && item.localName != "toolbarpaletteitem") {
@@ -2506,7 +1727,7 @@ export class CustomizeMode {
     dt.mozSetDataAt(kDragDataTypePrefix + documentId, draggedItem.id, 0);
     dt.effectAllowed = "move";
 
-    let itemRect = this.#getBoundsWithoutFlushing(draggedItem);
+    let itemRect = this._getBoundsWithoutFlushing(draggedItem);
     let itemCenter = {
       x: itemRect.left + itemRect.width / 2,
       y: itemRect.top + itemRect.height / 2,
@@ -2518,7 +1739,7 @@ export class CustomizeMode {
 
     let toolbarParent = draggedItem.closest("toolbar");
     if (toolbarParent) {
-      let toolbarRect = this.#getBoundsWithoutFlushing(toolbarParent);
+      let toolbarRect = this._getBoundsWithoutFlushing(toolbarParent);
       toolbarParent.style.minHeight = toolbarRect.height + "px";
     }
 
@@ -2530,51 +1751,42 @@ export class CustomizeMode {
       // For automated tests, we sometimes start exiting customization mode
       // before this fires, which leaves us with placeholders inserted after
       // we've exited. So we need to check that we are indeed customizing.
-      if (this.#customizing && !this.#transitioning) {
+      if (this._customizing && !this._transitioning) {
         item.hidden = true;
-        lazy.DragPositionManager.start(this.#window);
+        lazy.DragPositionManager.start(this.window);
         let canUsePrevSibling =
           placeForItem == "toolbar" || placeForItem == "panel";
         if (item.nextElementSibling) {
-          this.#setDragActive(
+          this._setDragActive(
             item.nextElementSibling,
             "before",
             draggedItem.id,
             placeForItem
           );
-          this.#dragOverItem = item.nextElementSibling;
+          this._dragOverItem = item.nextElementSibling;
         } else if (canUsePrevSibling && item.previousElementSibling) {
-          this.#setDragActive(
+          this._setDragActive(
             item.previousElementSibling,
             "after",
             draggedItem.id,
             placeForItem
           );
-          this.#dragOverItem = item.previousElementSibling;
+          this._dragOverItem = item.previousElementSibling;
         }
-        let currentArea = this.#getCustomizableParent(item);
+        let currentArea = this._getCustomizableParent(item);
         currentArea.setAttribute("draggingover", "true");
       }
       this._initializeDragAfterMove = null;
-      this.#window.clearTimeout(this._dragInitializeTimeout);
+      this.window.clearTimeout(this._dragInitializeTimeout);
     };
-    this._dragInitializeTimeout = this.#window.setTimeout(
+    this._dragInitializeTimeout = this.window.setTimeout(
       this._initializeDragAfterMove,
       0
     );
-  }
+  },
 
-  /**
-   * Handles the dragover event for any customizable area.
-   *
-   * @param {DragEvent} aEvent
-   *   The dragover event being handled.
-   * @param {DOMNode} [aOverrideTarget=undefined]
-   *   Optional argument that allows callers to override the dragover target to
-   *   be something other than the dragover event current target.
-   */
-  #onDragOver(aEvent, aOverrideTarget) {
-    if (this.#isUnwantedDragDrop(aEvent)) {
+  _onDragOver(aEvent, aOverrideTarget) {
+    if (this._isUnwantedDragDrop(aEvent)) {
       return;
     }
     if (this._initializeDragAfterMove) {
@@ -2594,10 +1806,10 @@ export class CustomizeMode {
       0
     );
     let draggedWrapper = document.getElementById("wrapper-" + draggedItemId);
-    let targetArea = this.#getCustomizableParent(
+    let targetArea = this._getCustomizableParent(
       aOverrideTarget || aEvent.currentTarget
     );
-    let originArea = this.#getCustomizableParent(draggedWrapper);
+    let originArea = this._getCustomizableParent(draggedWrapper);
 
     // Do nothing if the target or origin are not customizable.
     if (!targetArea || !originArea) {
@@ -2618,7 +1830,7 @@ export class CustomizeMode {
     }
 
     let targetAreaType = CustomizableUI.getPlaceForItem(targetArea);
-    let targetNode = this.#getDragOverNode(
+    let targetNode = this._getDragOverNode(
       aEvent,
       targetArea,
       targetAreaType,
@@ -2633,7 +1845,7 @@ export class CustomizeMode {
       // they're attempting to append a child to that target.
       dragOverItem =
         (targetAreaType == "toolbar"
-          ? this.#findVisiblePreviousSiblingNode(targetNode.lastElementChild)
+          ? this._findVisiblePreviousSiblingNode(targetNode.lastElementChild)
           : targetNode.lastElementChild) || targetNode;
       dragValue = "after";
     } else {
@@ -2645,17 +1857,17 @@ export class CustomizeMode {
       if (position == -1) {
         dragOverItem =
           targetAreaType == "toolbar"
-            ? this.#findVisiblePreviousSiblingNode(targetNode.lastElementChild)
+            ? this._findVisiblePreviousSiblingNode(targetNode.lastElementChild)
             : targetNode.lastElementChild;
         dragValue = "after";
       } else {
         dragOverItem = targetParent.children[position];
         if (targetAreaType == "toolbar") {
           // Check if the aDraggedItem is hovered past the first half of dragOverItem
-          let itemRect = this.#getBoundsWithoutFlushing(dragOverItem);
+          let itemRect = this._getBoundsWithoutFlushing(dragOverItem);
           let dropTargetCenter = itemRect.left + itemRect.width / 2;
           let existingDir = dragOverItem.getAttribute("dragover");
-          let dirFactor = this.#window.RTL_UI ? -1 : 1;
+          let dirFactor = this.window.RTL_UI ? -1 : 1;
           if (existingDir == "before") {
             dropTargetCenter +=
               ((parseInt(dragOverItem.style.borderInlineStartWidth) || 0) / 2) *
@@ -2665,12 +1877,12 @@ export class CustomizeMode {
               ((parseInt(dragOverItem.style.borderInlineEndWidth) || 0) / 2) *
               dirFactor;
           }
-          let before = this.#window.RTL_UI
+          let before = this.window.RTL_UI
             ? aEvent.clientX > dropTargetCenter
             : aEvent.clientX < dropTargetCenter;
           dragValue = before ? "before" : "after";
         } else if (targetAreaType == "panel") {
-          let itemRect = this.#getBoundsWithoutFlushing(dragOverItem);
+          let itemRect = this._getBoundsWithoutFlushing(dragOverItem);
           let dropTargetCenter = itemRect.top + itemRect.height / 2;
           let existingDir = dragOverItem.getAttribute("dragover");
           if (existingDir == "before") {
@@ -2687,49 +1899,40 @@ export class CustomizeMode {
       }
     }
 
-    if (this.#dragOverItem && dragOverItem != this.#dragOverItem) {
-      this.#cancelDragActive(this.#dragOverItem, dragOverItem);
+    if (this._dragOverItem && dragOverItem != this._dragOverItem) {
+      this._cancelDragActive(this._dragOverItem, dragOverItem);
     }
 
     if (
-      dragOverItem != this.#dragOverItem ||
+      dragOverItem != this._dragOverItem ||
       dragValue != dragOverItem.getAttribute("dragover")
     ) {
       if (dragOverItem != CustomizableUI.getCustomizationTarget(targetArea)) {
-        this.#setDragActive(
+        this._setDragActive(
           dragOverItem,
           dragValue,
           draggedItemId,
           targetAreaType
         );
       }
-      this.#dragOverItem = dragOverItem;
+      this._dragOverItem = dragOverItem;
       targetArea.setAttribute("draggingover", "true");
     }
 
     aEvent.preventDefault();
     aEvent.stopPropagation();
-  }
+  },
 
-  /**
-   * Handles the drop event on any customizable area.
-   *
-   * @param {DragEvent} aEvent
-   *   The drop event being handled.
-   * @param {DOMNode} [aOverrideTarget=undefined]
-   *   Optional argument that allows callers to override the drop target to
-   *   be something other than the drop event current target.
-   */
-  #onDragDrop(aEvent, aOverrideTarget) {
-    if (this.#isUnwantedDragDrop(aEvent)) {
+  _onDragDrop(aEvent, aOverrideTarget) {
+    if (this._isUnwantedDragDrop(aEvent)) {
       return;
     }
 
     __dumpDragData(aEvent);
     this._initializeDragAfterMove = null;
-    this.#window.clearTimeout(this._dragInitializeTimeout);
+    this.window.clearTimeout(this._dragInitializeTimeout);
 
-    let targetArea = this.#getCustomizableParent(
+    let targetArea = this._getCustomizableParent(
       aOverrideTarget || aEvent.currentTarget
     );
     let document = aEvent.target.ownerDocument;
@@ -2739,15 +1942,15 @@ export class CustomizeMode {
       0
     );
     let draggedWrapper = document.getElementById("wrapper-" + draggedItemId);
-    let originArea = this.#getCustomizableParent(draggedWrapper);
-    if (this.#dragSizeMap) {
-      this.#dragSizeMap = new WeakMap();
+    let originArea = this._getCustomizableParent(draggedWrapper);
+    if (this._dragSizeMap) {
+      this._dragSizeMap = new WeakMap();
     }
     // Do nothing if the target area or origin area are not customizable.
     if (!targetArea || !originArea) {
       return;
     }
-    let targetNode = this.#dragOverItem;
+    let targetNode = this._dragOverItem;
     let dropDir = targetNode.getAttribute("dragover");
     // Need to insert *after* this node if we promised the user that:
     if (targetNode != targetArea && dropDir == "after") {
@@ -2761,10 +1964,10 @@ export class CustomizeMode {
       targetNode = targetNode.firstElementChild;
     }
 
-    this.#cancelDragActive(this.#dragOverItem, null, true);
+    this._cancelDragActive(this._dragOverItem, null, true);
 
     try {
-      this.#applyDrop(
+      this._applyDrop(
         aEvent,
         targetArea,
         originArea,
@@ -2778,28 +1981,13 @@ export class CustomizeMode {
     // If the user explicitly moves this item, turn off autohide.
     if (draggedItemId == "downloads-button") {
       Services.prefs.setBoolPref(kDownloadAutoHidePref, false);
-      this.#showDownloadsAutoHidePanel();
+      this._showDownloadsAutoHidePanel();
     }
-  }
+  },
 
-  /**
-   * A helper method for #onDragDrop that applies the changes to the browser
-   * UI from the drop event on either a customizable item, or an area.
-   *
-   * @param {DragEvent} aEvent
-   *   The drop event being handled.
-   * @param {DOMNode} aTargetArea
-   *   The target area node being dropped on.
-   * @param {DOMNode} aOriginArea
-   *   The origin area node that the dropped item originally came from.
-   * @param {string} aDroppedItemId
-   *   The ID value of the customizable item being dropped.
-   * @param {DOMNode} aTargetNode
-   *   The customizable item (or area) node being dropped on.
-   */
-  #applyDrop(aEvent, aTargetArea, aOriginArea, aDroppedItemId, aTargetNode) {
+  _applyDrop(aEvent, aTargetArea, aOriginArea, aDraggedItemId, aTargetNode) {
     let document = aEvent.target.ownerDocument;
-    let draggedItem = document.getElementById(aDroppedItemId);
+    let draggedItem = document.getElementById(aDraggedItemId);
     draggedItem.hidden = false;
     draggedItem.removeAttribute("mousedown");
 
@@ -2814,7 +2002,7 @@ export class CustomizeMode {
       return;
     }
 
-    if (!CustomizableUI.canWidgetMoveToArea(aDroppedItemId, aTargetArea.id)) {
+    if (!CustomizableUI.canWidgetMoveToArea(aDraggedItemId, aTargetArea.id)) {
       return;
     }
 
@@ -2822,18 +2010,18 @@ export class CustomizeMode {
     if (aTargetArea.id == kPaletteId) {
       // Did we drag from outside the palette?
       if (aOriginArea.id !== kPaletteId) {
-        if (!CustomizableUI.isWidgetRemovable(aDroppedItemId)) {
+        if (!CustomizableUI.isWidgetRemovable(aDraggedItemId)) {
           return;
         }
 
-        CustomizableUI.removeWidgetFromArea(aDroppedItemId, "drag");
+        CustomizableUI.removeWidgetFromArea(aDraggedItemId, "drag");
         lazy.BrowserUsageTelemetry.recordWidgetChange(
-          aDroppedItemId,
+          aDraggedItemId,
           null,
           "drag"
         );
         // Special widgets are removed outright, we can return here:
-        if (CustomizableUI.isSpecialWidget(aDroppedItemId)) {
+        if (CustomizableUI.isSpecialWidget(aDraggedItemId)) {
           return;
         }
       }
@@ -2846,7 +2034,7 @@ export class CustomizeMode {
         // The items in the palette are wrapped, so we need the target node's parent here:
         this.visiblePalette.insertBefore(draggedItem, aTargetNode.parentNode);
       }
-      this.#onDragEnd(aEvent);
+      this._onDragEnd(aEvent);
       return;
     }
 
@@ -2873,10 +2061,10 @@ export class CustomizeMode {
 
     // Force creating a new spacer/spring/separator if dragging from the palette
     if (
-      CustomizableUI.isSpecialWidget(aDroppedItemId) &&
+      CustomizableUI.isSpecialWidget(aDraggedItemId) &&
       aOriginArea.id == kPaletteId
     ) {
-      aDroppedItemId = aDroppedItemId.match(
+      aDraggedItemId = aDraggedItemId.match(
         /^customizableui-special-(spring|spacer|separator)/
       )[1];
     }
@@ -2884,13 +2072,13 @@ export class CustomizeMode {
     // Is the target the customization area itself? If so, we just add the
     // widget to the end of the area.
     if (aTargetNode == areaCustomizationTarget) {
-      CustomizableUI.addWidgetToArea(aDroppedItemId, aTargetArea.id);
+      CustomizableUI.addWidgetToArea(aDraggedItemId, aTargetArea.id);
       lazy.BrowserUsageTelemetry.recordWidgetChange(
-        aDroppedItemId,
+        aDraggedItemId,
         aTargetArea.id,
         "drag"
       );
-      this.#onDragEnd(aEvent);
+      this._onDragEnd(aEvent);
       return;
     }
 
@@ -2937,22 +2125,22 @@ export class CustomizeMode {
     // the possibility that the target is the customization palette, we know
     // that the widget is moving within a customizable area.
     if (aTargetArea == aOriginArea) {
-      CustomizableUI.moveWidgetWithinArea(aDroppedItemId, position);
+      CustomizableUI.moveWidgetWithinArea(aDraggedItemId, position);
       lazy.BrowserUsageTelemetry.recordWidgetChange(
-        aDroppedItemId,
+        aDraggedItemId,
         aTargetArea.id,
         "drag"
       );
     } else {
-      CustomizableUI.addWidgetToArea(aDroppedItemId, aTargetArea.id, position);
+      CustomizableUI.addWidgetToArea(aDraggedItemId, aTargetArea.id, position);
       lazy.BrowserUsageTelemetry.recordWidgetChange(
-        aDroppedItemId,
+        aDraggedItemId,
         aTargetArea.id,
         "drag"
       );
     }
 
-    this.#onDragEnd(aEvent);
+    this._onDragEnd(aEvent);
 
     // If we dropped onto a skipintoolbarset item, manually correct the drop location:
     if (aTargetNode != itemForPlacement) {
@@ -2960,16 +2148,10 @@ export class CustomizeMode {
       let container = draggedWrapper.parentNode;
       container.insertBefore(draggedWrapper, aTargetNode.parentNode);
     }
-  }
+  },
 
-  /**
-   * Handles the dragleave event on any customizable item or area.
-   *
-   * @param {DragEvent} aEvent
-   *   The dragleave event being handled.
-   */
-  #onDragLeave(aEvent) {
-    if (this.#isUnwantedDragDrop(aEvent)) {
+  _onDragLeave(aEvent) {
+    if (this._isUnwantedDragDrop(aEvent)) {
       return;
     }
 
@@ -2980,30 +2162,24 @@ export class CustomizeMode {
     // We don't care about dragleave events fired on descendants of the area,
     // so we check that the event's target is the same as the area to which the listener
     // was attached.
-    if (this.#dragOverItem && aEvent.target == aEvent.currentTarget) {
-      this.#cancelDragActive(this.#dragOverItem);
-      this.#dragOverItem = null;
+    if (this._dragOverItem && aEvent.target == aEvent.currentTarget) {
+      this._cancelDragActive(this._dragOverItem);
+      this._dragOverItem = null;
     }
-  }
+  },
 
   /**
-   * Handles the dragleave event on any customizable item being dragged.
+   * To workaround bug 460801 we manually forward the drop event here when dragend wouldn't be fired.
    *
-   * @param {DragEvent} aEvent
-   *   The dragleave event being handled.
+   * Note that that means that this function may be called multiple times by a single drag operation.
    */
-  #onDragEnd(aEvent) {
-    // To workaround bug 460801 we manually forward the drop event here when
-    // dragend wouldn't be fired.
-    //
-    // Note that that means that this function may be called multiple times by a
-    // single drag operation.
-    if (this.#isUnwantedDragDrop(aEvent)) {
+  _onDragEnd(aEvent) {
+    if (this._isUnwantedDragDrop(aEvent)) {
       return;
     }
     this._initializeDragAfterMove = null;
-    this.#window.clearTimeout(this._dragInitializeTimeout);
-    __dumpDragData(aEvent, "#onDragEnd");
+    this.window.clearTimeout(this._dragInitializeTimeout);
+    __dumpDragData(aEvent, "_onDragEnd");
 
     let document = aEvent.target.ownerDocument;
     document.documentElement.removeAttribute("customizing-movingItem");
@@ -3032,31 +2208,21 @@ export class CustomizeMode {
       }
     }
 
-    if (this.#dragOverItem) {
-      this.#cancelDragActive(this.#dragOverItem);
-      this.#dragOverItem = null;
+    if (this._dragOverItem) {
+      this._cancelDragActive(this._dragOverItem);
+      this._dragOverItem = null;
     }
     lazy.DragPositionManager.stop();
-  }
+  },
 
-  /**
-   * True if the drag/drop event comes from a source other than one of our
-   * browser windows. This check can be overridden for testing by setting
-   * `browser.uiCustomization.skipSourceNodeCheck` to `true`.
-   *
-   * @param {DragEvent} aEvent
-   *   A drag/drop event.
-   * @returns {boolean}
-   *   True if the event should be ignored.
-   */
-  #isUnwantedDragDrop(aEvent) {
+  _isUnwantedDragDrop(aEvent) {
     // The synthesized events for tests generated by synthesizePlainDragAndDrop
     // and synthesizeDrop in mochitests are used only for testing whether the
     // right data is being put into the dataTransfer. Neither cause a real drop
     // to occur, so they don't set the source node. There isn't a means of
     // testing real drag and drops, so this pref skips the check but it should
     // only be set by test code.
-    if (this.#skipSourceNodeCheck) {
+    if (this._skipSourceNodeCheck) {
       return false;
     }
 
@@ -3065,57 +2231,36 @@ export class CustomizeMode {
     let mozSourceNode = aEvent.dataTransfer.mozSourceNode;
     // mozSourceNode is null in the dragStart event handler or if
     // the drag event originated in an external application.
-    return !mozSourceNode || mozSourceNode.ownerGlobal != this.#window;
-  }
+    return !mozSourceNode || mozSourceNode.ownerGlobal != this.window;
+  },
 
-  /**
-   * Handles applying drag preview effects to a customizable item or area while
-   * a drag and drop operation is underway.
-   *
-   * @param {DOMNode} aDraggedOverItem
-   *   A customizable item being dragged over within a customizable area, or
-   *   a customizable area node.
-   * @param {string} aValue
-   *   A string to set as the "dragover" attribute on the dragged item to
-   *   indicate which direction (before or after) the placeholder for the
-   *   drag operation should go relative to aItem. This is either the
-   *   string "before" or the string "after".
-   * @param {string} aDraggedItemId
-   *   The ID of the customizable item being dragged.
-   * @param {string} aPlace
-   *   The place string associated with the customizable area being dragged
-   *   over. This is expected to be one of the strings returned by
-   *   CustomizableUI.getPlaceForItem.
-   */
-  #setDragActive(aDraggedOverItem, aValue, aDraggedItemId, aPlace) {
-    if (!aDraggedOverItem) {
+  _setDragActive(aItem, aValue, aDraggedItemId, aAreaType) {
+    if (!aItem) {
       return;
     }
 
-    if (aDraggedOverItem.getAttribute("dragover") != aValue) {
-      aDraggedOverItem.setAttribute("dragover", aValue);
+    if (aItem.getAttribute("dragover") != aValue) {
+      aItem.setAttribute("dragover", aValue);
 
-      let window = aDraggedOverItem.ownerGlobal;
+      let window = aItem.ownerGlobal;
       let draggedItem = window.document.getElementById(aDraggedItemId);
-      if (aPlace == "palette") {
-        // We mostly delegate the complexity of grid placeholder effects to
-        // DragPositionManager by way of #setGridDragActive.
-        this.#setGridDragActive(aDraggedOverItem, draggedItem, aValue);
+      if (aAreaType == "palette") {
+        this._setGridDragActive(aItem, draggedItem, aValue);
       } else {
-        let targetArea = this.#getCustomizableParent(aDraggedOverItem);
+        let targetArea = this._getCustomizableParent(aItem);
         let makeSpaceImmediately = false;
         if (!gDraggingInToolbars.has(targetArea.id)) {
           gDraggingInToolbars.add(targetArea.id);
           let draggedWrapper = this.$("wrapper-" + aDraggedItemId);
-          let originArea = this.#getCustomizableParent(draggedWrapper);
+          let originArea = this._getCustomizableParent(draggedWrapper);
           makeSpaceImmediately = originArea == targetArea;
         }
-        let propertyToMeasure = aPlace == "toolbar" ? "width" : "height";
+        let propertyToMeasure = aAreaType == "toolbar" ? "width" : "height";
         // Calculate width/height of the item when it'd be dropped in this position.
-        let borderWidth = this.#getDragItemSize(aDraggedOverItem, draggedItem)[
+        let borderWidth = this._getDragItemSize(aItem, draggedItem)[
           propertyToMeasure
         ];
-        let layoutSide = aPlace == "toolbar" ? "Inline" : "Block";
+        let layoutSide = aAreaType == "toolbar" ? "Inline" : "Block";
         let prop, otherProp;
         if (aValue == "before") {
           prop = "border" + layoutSide + "StartWidth";
@@ -3125,63 +2270,47 @@ export class CustomizeMode {
           otherProp = "border-" + layoutSide.toLowerCase() + "-start-width";
         }
         if (makeSpaceImmediately) {
-          aDraggedOverItem.setAttribute("notransition", "true");
+          aItem.setAttribute("notransition", "true");
         }
-        aDraggedOverItem.style[prop] = borderWidth + "px";
-        aDraggedOverItem.style.removeProperty(otherProp);
+        aItem.style[prop] = borderWidth + "px";
+        aItem.style.removeProperty(otherProp);
         if (makeSpaceImmediately) {
           // Force a layout flush:
-          aDraggedOverItem.getBoundingClientRect();
-          aDraggedOverItem.removeAttribute("notransition");
+          aItem.getBoundingClientRect();
+          aItem.removeAttribute("notransition");
         }
       }
     }
-  }
-
-  /**
-   * Reverts drag preview effects applied via #setDragActive from a customizable
-   * item or area when a drag and drop operation ends.
-   *
-   * @param {DOMNode} aDraggedOverItem
-   *   The customizable item or area that was being dragged over.
-   * @param {DOMNode} aNextDraggedOverItem
-   *   If non-null, this is the customizable item or area that is being
-   *   dragged over now instead of aDraggedOverItem.
-   * @param {boolean} aNoTransition
-   *   True if the reversion of the drag preview effect should occur without
-   *   a transition (for example, on a drop).
-   */
-  #cancelDragActive(aDraggedOverItem, aNextDraggedOverItem, aNoTransition) {
-    let currentArea = this.#getCustomizableParent(aDraggedOverItem);
+  },
+  _cancelDragActive(aItem, aNextItem, aNoTransition) {
+    let currentArea = this._getCustomizableParent(aItem);
     if (!currentArea) {
       return;
     }
-    let nextArea = aNextDraggedOverItem
-      ? this.#getCustomizableParent(aNextDraggedOverItem)
-      : null;
+    let nextArea = aNextItem ? this._getCustomizableParent(aNextItem) : null;
     if (currentArea != nextArea) {
       currentArea.removeAttribute("draggingover");
     }
     let areaType = CustomizableUI.getAreaType(currentArea.id);
     if (areaType) {
       if (aNoTransition) {
-        aDraggedOverItem.setAttribute("notransition", "true");
+        aItem.setAttribute("notransition", "true");
       }
-      aDraggedOverItem.removeAttribute("dragover");
+      aItem.removeAttribute("dragover");
       // Remove all property values in the case that the end padding
       // had been set.
-      aDraggedOverItem.style.removeProperty("border-inline-start-width");
-      aDraggedOverItem.style.removeProperty("border-inline-end-width");
-      aDraggedOverItem.style.removeProperty("border-block-start-width");
-      aDraggedOverItem.style.removeProperty("border-block-end-width");
+      aItem.style.removeProperty("border-inline-start-width");
+      aItem.style.removeProperty("border-inline-end-width");
+      aItem.style.removeProperty("border-block-start-width");
+      aItem.style.removeProperty("border-block-end-width");
       if (aNoTransition) {
         // Force a layout flush:
-        aDraggedOverItem.getBoundingClientRect();
-        aDraggedOverItem.removeAttribute("notransition");
+        aItem.getBoundingClientRect();
+        aItem.removeAttribute("notransition");
       }
     } else {
-      aDraggedOverItem.removeAttribute("dragover");
-      if (aNextDraggedOverItem) {
+      aItem.removeAttribute("dragover");
+      if (aNextItem) {
         if (nextArea == currentArea) {
           // No need to do anything if we're still dragging in this area:
           return;
@@ -3192,54 +2321,34 @@ export class CustomizeMode {
         lazy.DragPositionManager.getManagerForArea(currentArea);
       positionManager.clearPlaceholders(currentArea, aNoTransition);
     }
-  }
+  },
 
-  /**
-   * Handles applying drag preview effects to the customization palette grid.
-   *
-   * @param {DOMNode} aDragOverNode
-   *   A customizable item being dragged over within the palette, or
-   *   the palette node itself.
-   * @param {DOMNode} aDraggedItem
-   *   The customizable item being dragged.
-   */
-  #setGridDragActive(aDragOverNode, aDraggedItem) {
-    let targetArea = this.#getCustomizableParent(aDragOverNode);
+  _setGridDragActive(aDragOverNode, aDraggedItem) {
+    let targetArea = this._getCustomizableParent(aDragOverNode);
     let draggedWrapper = this.$("wrapper-" + aDraggedItem.id);
-    let originArea = this.#getCustomizableParent(draggedWrapper);
+    let originArea = this._getCustomizableParent(draggedWrapper);
     let positionManager =
       lazy.DragPositionManager.getManagerForArea(targetArea);
-    let draggedSize = this.#getDragItemSize(aDragOverNode, aDraggedItem);
+    let draggedSize = this._getDragItemSize(aDragOverNode, aDraggedItem);
     positionManager.insertPlaceholder(
       targetArea,
       aDragOverNode,
       draggedSize,
       originArea == targetArea
     );
-  }
+  },
 
-  /**
-   * Given a customizable item being dragged, and a DOMNode being dragged over,
-   * returns the size of the dragged item were it to be placed within the area
-   * associated with aDragOverNode.
-   *
-   * @param {DOMNode} aDragOverNode
-   *   The node currently being dragged over.
-   * @param {DOMNode} aDraggedItem
-   *   The customizable item node currently being dragged.
-   * @returns {ItemSizeForArea}
-   */
-  #getDragItemSize(aDragOverNode, aDraggedItem) {
+  _getDragItemSize(aDragOverNode, aDraggedItem) {
     // Cache it good, cache it real good.
-    if (!this.#dragSizeMap) {
-      this.#dragSizeMap = new WeakMap();
+    if (!this._dragSizeMap) {
+      this._dragSizeMap = new WeakMap();
     }
-    if (!this.#dragSizeMap.has(aDraggedItem)) {
-      this.#dragSizeMap.set(aDraggedItem, new WeakMap());
+    if (!this._dragSizeMap.has(aDraggedItem)) {
+      this._dragSizeMap.set(aDraggedItem, new WeakMap());
     }
-    let itemMap = this.#dragSizeMap.get(aDraggedItem);
-    let targetArea = this.#getCustomizableParent(aDragOverNode);
-    let currentArea = this.#getCustomizableParent(aDraggedItem);
+    let itemMap = this._dragSizeMap.get(aDraggedItem);
+    let targetArea = this._getCustomizableParent(aDragOverNode);
+    let currentArea = this._getCustomizableParent(aDraggedItem);
     // Return the size for this target from cache, if it exists.
     let size = itemMap.get(targetArea);
     if (size) {
@@ -3293,19 +2402,9 @@ export class CustomizeMode {
       aDraggedItem.parentNode.hidden = true;
     }
     return size;
-  }
+  },
 
-  /**
-   * Walks the ancestry of a DOMNode element and finds the first customizable
-   * area node in that ancestry, or null if no such customizable area node
-   * can be found.
-   *
-   * @param {DOMNode} aElement
-   *   The DOMNode for which to find the customizable area parent.
-   * @returns {DOMNode}
-   *   The customizable area parent of aElement.
-   */
-  #getCustomizableParent(aElement) {
+  _getCustomizableParent(aElement) {
     if (aElement) {
       // Deal with drag/drop on the padding of the panel.
       let containingPanelHolder = aElement.closest(
@@ -3321,31 +2420,9 @@ export class CustomizeMode {
     let areas = CustomizableUI.areas;
     areas.push(kPaletteId);
     return aElement.closest(areas.map(a => "#" + CSS.escape(a)).join(","));
-  }
+  },
 
-  /**
-   * During a drag operation of a customizable item over a customizable area,
-   * returns the node within that customizable area that the item is being
-   * dragged over.
-   *
-   * @param {DragEvent} aEvent
-   *   The dragover event being handled.
-   * @param {DOMNode} aAreaElement
-   *   The customizable area element that we should consider the dragover
-   *   operation to be occurring on. This might actually be different from the
-   *   target of the dragover event if we've retargeted the drag (see bug
-   *   1396423 for an example of where we retarget a dragover area to the
-   *   palette rather than the overflow panel).
-   * @param {string} aPlace
-   *   The place string associated with the customizable area being dragged
-   *   over. This is expected to be one of the strings returned by
-   *   CustomizableUI.getPlaceForItem.
-   * @returns {DOMNode}
-   *   The node within aAreaElement that we should assume the dragged item is
-   *   being dragged over. If we cannot resolve this to a target, this falls
-   *   back to just being the aEvent.target.
-   */
-  #getDragOverNode(aEvent, aAreaElement, aPlace) {
+  _getDragOverNode(aEvent, aAreaElement, aAreaType) {
     let expectedParent =
       CustomizableUI.getCustomizationTarget(aAreaElement) || aAreaElement;
     if (!expectedParent.contains(aEvent.target)) {
@@ -3358,12 +2435,12 @@ export class CustomizeMode {
 
     // Ensure this is within the container
     let boundsContainer = expectedParent;
-    let bounds = this.#getBoundsWithoutFlushing(boundsContainer);
+    let bounds = this._getBoundsWithoutFlushing(boundsContainer);
     dragX = Math.min(bounds.right, Math.max(dragX, bounds.left));
     dragY = Math.min(bounds.bottom, Math.max(dragY, bounds.top));
 
     let targetNode;
-    if (aPlace == "toolbar" || aPlace == "panel") {
+    if (aAreaType == "toolbar" || aAreaType == "panel") {
       targetNode = aAreaElement.ownerDocument.elementFromPoint(dragX, dragY);
       while (targetNode && targetNode.parentNode != expectedParent) {
         targetNode = targetNode.parentNode;
@@ -3378,66 +2455,35 @@ export class CustomizeMode {
       targetNode = positionManager.find(aAreaElement, dragX, dragY);
     }
     return targetNode || aEvent.target;
-  }
+  },
 
-  /**
-   * Handler for mousedown events in the customize mode UI for the primary
-   * button. If the mousedown event is being fired on a customizable item, it
-   * will have a "mousedown" attribute set to "true" on it. A
-   * "customizing-movingItem" attribute is also set to "true" on the
-   * document element.
-   *
-   * @param {MouseEvent} aEvent
-   *   The mousedown event being handled.
-   */
-  #onMouseDown(aEvent) {
-    lazy.log.debug("#onMouseDown");
+  _onMouseDown(aEvent) {
+    lazy.log.debug("_onMouseDown");
     if (aEvent.button != 0) {
       return;
     }
     let doc = aEvent.target.ownerDocument;
     doc.documentElement.setAttribute("customizing-movingItem", true);
-    let item = this.#getWrapper(aEvent.target);
+    let item = this._getWrapper(aEvent.target);
     if (item) {
       item.toggleAttribute("mousedown", true);
     }
-  }
+  },
 
-  /**
-   * Handler for mouseup events in the customize mode UI for the primary
-   * button. If the mouseup event is being fired on a customizable item, it
-   * will have the "mousedown" attribute added in #onMouseDown removed. This
-   * will also remove the "customizing-movingItem" attribute on the document
-   * element.
-   *
-   * @param {MouseEvent} aEvent
-   *   The mouseup event being handled.
-   */
-  #onMouseUp(aEvent) {
-    lazy.log.debug("#onMouseUp");
+  _onMouseUp(aEvent) {
+    lazy.log.debug("_onMouseUp");
     if (aEvent.button != 0) {
       return;
     }
     let doc = aEvent.target.ownerDocument;
     doc.documentElement.removeAttribute("customizing-movingItem");
-    let item = this.#getWrapper(aEvent.target);
+    let item = this._getWrapper(aEvent.target);
     if (item) {
       item.removeAttribute("mousedown");
     }
-  }
+  },
 
-  /**
-   * Given a customizable item (or one of its descendants), returns the
-   * toolbarpaletteitem wrapper node ancestor. If no such wrapper can be found,
-   * this returns null.
-   *
-   * @param {DOMNode} aElement
-   *   The customizable item node (or one of its descendants) to get the
-   *   toolbarpaletteitem wrapper node ancestor for.
-   * @returns {DOMNode|null}
-   *   The toolbarpaletteitem wrapper node, or null if one cannot be found.
-   */
-  #getWrapper(aElement) {
+  _getWrapper(aElement) {
     while (aElement && aElement.localName != "toolbarpaletteitem") {
       if (aElement.localName == "toolbar") {
         return null;
@@ -3445,24 +2491,9 @@ export class CustomizeMode {
       aElement = aElement.parentNode;
     }
     return aElement;
-  }
+  },
 
-  /**
-   * Given some toolbarpaletteitem wrapper, walks the prior sibling elements
-   * until it finds one that either isn't a toolbarpaletteitem, or doesn't have
-   * it's first element hidden. Returns null if no such prior sibling element
-   * can be found.
-   *
-   * @param {DOMNode} aReferenceNode
-   *   The toolbarpaletteitem node to check the prior siblings for visibilty.
-   *   If aReferenceNode is not a toolbarpaletteitem, this just returns the
-   *   aReferenceNode immediately.
-   * @returns {DOMNode|null}
-   *   The first prior sibling with a visible first element child, or the
-   *   first non-toolbarpaletteitem prior sibling, or null if no such item can
-   *   be found.
-   */
-  #findVisiblePreviousSiblingNode(aReferenceNode) {
+  _findVisiblePreviousSiblingNode(aReferenceNode) {
     while (
       aReferenceNode &&
       aReferenceNode.localName == "toolbarpaletteitem" &&
@@ -3471,31 +2502,16 @@ export class CustomizeMode {
       aReferenceNode = aReferenceNode.previousElementSibling;
     }
     return aReferenceNode;
-  }
+  },
 
-  /**
-   * The popupshowing event handler for the context menu on the customization
-   * palette.
-   *
-   * @param {WidgetMouseEvent} event
-   *   The popupshowing event being fired for the context menu.
-   */
-  #onPaletteContextMenuShowing(event) {
+  onPaletteContextMenuShowing(event) {
     let isFlexibleSpace = event.target.triggerNode.id.includes(
       "wrapper-customizableui-special-spring"
     );
     event.target.querySelector(".customize-context-addToPanel").disabled =
       isFlexibleSpace;
-  }
+  },
 
-  /**
-   * The popupshowing event handler for the context menu for items in the
-   * overflow panel while in customize mode. This is currently public due to
-   * bug 1378427 (also see bug 1747945).
-   *
-   * @param {WidgetMouseEvent} event
-   *   The popupshowing event being fired for the context menu.
-   */
   onPanelContextMenuShowing(event) {
     let inPermanentArea = !!event.target.triggerNode.closest(
       "#widget-overflow-fixed-list"
@@ -3513,61 +2529,38 @@ export class CustomizeMode {
       el.setAttribute("data-l10n-id", el.getAttribute("data-lazy-l10n-id"));
       el.removeAttribute("data-lazy-l10n-id");
     });
-  }
+  },
 
-  /**
-   * A window click event handler that checks to see if the item being clicked
-   * in the window is the downloads button wrapper, with the primary button.
-   * This is used to show the downloads button autohide panel.
-   *
-   * @param {MouseEvent} event
-   *   The click event on the window.
-   */
-  #checkForDownloadsClick(event) {
+  _checkForDownloadsClick(event) {
     if (
       event.target.closest("#wrapper-downloads-button") &&
       event.button == 0
     ) {
-      event.view.gCustomizeMode.#showDownloadsAutoHidePanel();
+      event.view.gCustomizeMode._showDownloadsAutoHidePanel();
     }
-  }
+  },
 
-  /**
-   * Adds a click event listener to the top-level window to check to see if the
-   * downloads button is ever clicked while in customize mode. Callers should
-   * ensure that #teardownDownloadAutoHideToggle is called when exiting
-   * customize mode.
-   */
-  #setupDownloadAutoHideToggle() {
-    this.#window.addEventListener("click", this.#checkForDownloadsClick, true);
-  }
+  _setupDownloadAutoHideToggle() {
+    this.window.addEventListener("click", this._checkForDownloadsClick, true);
+  },
 
-  /**
-   * Removes the click event listener on the top-level window that was added by
-   * #setupDownloadAutoHideToggle.
-   */
-  #teardownDownloadAutoHideToggle() {
-    this.#window.removeEventListener(
+  _teardownDownloadAutoHideToggle() {
+    this.window.removeEventListener(
       "click",
-      this.#checkForDownloadsClick,
+      this._checkForDownloadsClick,
       true
     );
     this.$(kDownloadAutohidePanelId).hidePopup();
-  }
+  },
 
-  /**
-   * Attempts to move the downloads button to the navigation toolbar in the
-   * event that they've turned on the autohide feature for the button while
-   * the button is in the palette.
-   */
-  #maybeMoveDownloadsButtonToNavBar() {
+  _maybeMoveDownloadsButtonToNavBar() {
     // If the user toggled the autohide checkbox while the item was in the
     // palette, and hasn't moved it since, move the item to the default
     // location in the navbar for them.
     if (
       !CustomizableUI.getPlacementOfWidget("downloads-button") &&
-      this.#moveDownloadsButtonToNavBar &&
-      this.#window.DownloadsButton.autoHideDownloadsButton
+      this._moveDownloadsButtonToNavBar &&
+      this.window.DownloadsButton.autoHideDownloadsButton
     ) {
       let navbarPlacements = CustomizableUI.getWidgetIdsInArea("nav-bar");
       let insertionPoint = navbarPlacements.indexOf("urlbar-container");
@@ -3592,18 +2585,10 @@ export class CustomizeMode {
         "move-downloads"
       );
     }
-  }
+  },
 
-  /**
-   * Opens the panel that shows the toggle for auto-hiding the downloads button
-   * when there are no downloads underway. If that panel is already open, it
-   * is first closed. This panel is not shown if the downloads button is in
-   * the overflow panel (since when the button is there, it does not autohide).
-   *
-   * @returns {Promise<undefined>}
-   */
-  async #showDownloadsAutoHidePanel() {
-    let doc = this.#document;
+  async _showDownloadsAutoHidePanel() {
+    let doc = this.document;
     let panel = doc.getElementById(kDownloadAutohidePanelId);
     panel.hidePopup();
     let button = doc.getElementById("downloads-button");
@@ -3625,13 +2610,13 @@ export class CustomizeMode {
         panelOnTheLeft = true;
       }
     } else {
-      await this.#window.promiseDocumentFlushed(() => {});
+      await this.window.promiseDocumentFlushed(() => {});
 
-      if (!this.#customizing || !this._wantToBeInCustomizeMode) {
+      if (!this._customizing || !this._wantToBeInCustomizeMode) {
         return;
       }
-      let buttonBounds = this.#getBoundsWithoutFlushing(button);
-      let windowBounds = this.#getBoundsWithoutFlushing(doc.documentElement);
+      let buttonBounds = this._getBoundsWithoutFlushing(button);
+      let windowBounds = this._getBoundsWithoutFlushing(doc.documentElement);
       panelOnTheLeft =
         buttonBounds.left + buttonBounds.width / 2 > windowBounds.width / 2;
     }
@@ -3651,7 +2636,7 @@ export class CustomizeMode {
     }
 
     let checkbox = doc.getElementById(kDownloadAutohideCheckboxId);
-    if (this.#window.DownloadsButton.autoHideDownloadsButton) {
+    if (this.window.DownloadsButton.autoHideDownloadsButton) {
       checkbox.setAttribute("checked", "true");
     } else {
       checkbox.removeAttribute("checked");
@@ -3660,40 +2645,25 @@ export class CustomizeMode {
     // We don't use the icon to anchor because it might be resizing because of
     // the animations for drag/drop. Hence the use of offsets.
     panel.openPopup(button, position, offsetX, offsetY);
-  }
+  },
 
-  /**
-   * Called when the downloads button auto-hide toggle changes value.
-   *
-   * @param {CommandEvent} event
-   *   The event that caused the toggle change.
-   */
-  #onDownloadsAutoHideChange(event) {
+  onDownloadsAutoHideChange(event) {
     let checkbox = event.target.ownerDocument.getElementById(
       kDownloadAutohideCheckboxId
     );
     Services.prefs.setBoolPref(kDownloadAutoHidePref, checkbox.checked);
     // Ensure we move the button (back) after the user leaves customize mode.
-    event.view.gCustomizeMode.#moveDownloadsButtonToNavBar = checkbox.checked;
-  }
+    event.view.gCustomizeMode._moveDownloadsButtonToNavBar = checkbox.checked;
+  },
 
-  /**
-   * Called when the button to customize the macOS touchbar is clicked.
-   */
-  #customizeTouchBar() {
+  customizeTouchBar() {
     let updater = Cc["@mozilla.org/widget/touchbarupdater;1"].getService(
       Ci.nsITouchBarUpdater
     );
     updater.enterCustomizeMode();
-  }
+  },
 
-  /**
-   * This is a method to toggle pong on or off in customize mode. You heard me.
-   *
-   * @param {boolean} enabled
-   *   True if pong should be launched, or false if it should be torn down.
-   */
-  #togglePong(enabled) {
+  togglePong(enabled) {
     // It's possible we're toggling for a reason other than hitting
     // the button (we might be exiting, for example), so make sure that
     // the state and checkbox are in sync.
@@ -3704,7 +2674,7 @@ export class CustomizeMode {
       this.visiblePalette.setAttribute("whimsypong", "true");
       this.pongArena.hidden = false;
       if (!this.uninitWhimsy) {
-        this.uninitWhimsy = this.#whimsypong();
+        this.uninitWhimsy = this.whimsypong();
       }
     } else {
       this.visiblePalette.removeAttribute("whimsypong");
@@ -3714,16 +2684,9 @@ export class CustomizeMode {
       }
       this.pongArena.hidden = true;
     }
-  }
+  },
 
-  /**
-   * This method contains a very simple implementation of a pong-like game.
-   * Calling this method presumes that the pongArea element is visible.
-   *
-   * @returns {Function}
-   *   Returns a clean-up function which tears down the launched pong game.
-   */
-  #whimsypong() {
+  whimsypong() {
     function update() {
       updateBall();
       updatePlayers();
@@ -3924,7 +2887,7 @@ export class CustomizeMode {
     let lives = 5;
     let winScore = 11;
     let quit = false;
-    let document = this.#document;
+    let document = this.document;
     let rAFHandle = 0;
     let elements = {
       arena: document.getElementById("customization-pong-arena"),
@@ -3945,7 +2908,7 @@ export class CustomizeMode {
       elements.arena.querySelector(player).style.background = val;
     }
 
-    let window = this.#window;
+    let window = this.window;
     rAFHandle = window.requestAnimationFrame(function animate() {
       update();
       draw();
@@ -3961,18 +2924,9 @@ export class CustomizeMode {
     });
 
     return uninit;
-  }
-}
+  },
+};
 
-/**
- * A utility function that, when in debug mode, can emit drag data through the
- * debug logging mechanism for various drag and drop events.
- *
- * @param {DragEvent} aEvent
- *   The DragEvent to dump debug information to the log for.
- * @param {string|null} caller
- *   An optional string to indicate the caller of the log message.
- */
 function __dumpDragData(aEvent, caller) {
   if (!gDebug) {
     return;
@@ -4004,4 +2958,8 @@ function __dumpDragData(aEvent, caller) {
   }
   str += "}";
   lazy.log.debug(str);
+}
+
+function dispatchFunction(aFunc) {
+  Services.tm.dispatchToMainThread(aFunc);
 }

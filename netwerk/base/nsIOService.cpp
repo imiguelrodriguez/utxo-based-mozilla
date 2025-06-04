@@ -65,12 +65,11 @@
 #include "nsContentUtils.h"
 #include "mozilla/StaticPrefs_network.h"
 #include "mozilla/StaticPrefs_security.h"
-#include "mozilla/glean/NetwerkMetrics.h"
+#include "mozilla/glean/GleanMetrics.h"
 #include "nsNSSComponent.h"
 #include "IPv4Parser.h"
 #include "ssl.h"
 #include "StaticComponents.h"
-#include "SuspendableChannelWrapper.h"
 
 #ifdef MOZ_WIDGET_ANDROID
 #  include <regex>
@@ -99,6 +98,7 @@ using mozilla::dom::ServiceWorkerDescriptor;
 #define WEBRTC_PREF_PREFIX "media.peerconnection."
 #define NETWORK_DNS_PREF "network.dns."
 #define FORCE_EXTERNAL_PREF_PREFIX "network.protocol-handler.external."
+#define SIMPLE_URI_SCHEMES_PREF "network.url.simple_uri_schemes"
 
 nsIOService* gIOService;
 static bool gHasWarnedUploadChannel2;
@@ -183,7 +183,7 @@ int16_t gBadPortList[] = {
     2049,   // nfs
     3659,   // apple-sasl
     4045,   // lockd
-    4190,   // sieve
+    4160,   // sieve
     5060,   // sip
     5061,   // sips
     6000,   // x11
@@ -243,7 +243,6 @@ static const char* gCallbackPrefsForSocketProcess[] = {
     "network.connectivity-service.",
     "network.captive-portal-service.testMode",
     "network.socket.ip_addr_any.disabled",
-    "network.socket.attach_mock_network_layer",
     nullptr,
 };
 
@@ -904,7 +903,7 @@ nsresult nsIOService::AsyncOnChannelRedirect(
 
 bool nsIOService::UsesExternalProtocolHandler(const nsACString& aScheme) {
   if (aScheme == "file"_ns || aScheme == "chrome"_ns ||
-      aScheme == "resource"_ns || aScheme == "moz-src"_ns) {
+      aScheme == "resource"_ns) {
     // Don't allow file:, chrome: or resource: URIs to be handled with
     // nsExternalProtocolHandler, since internally we rely on being able to
     // use and read from these URIs.
@@ -985,29 +984,6 @@ nsIOService::HostnameIsLocalIPAddress(nsIURI* aURI, bool* aResult) {
 
   NetAddr addr;
   if (NS_SUCCEEDED(addr.InitFromString(host)) && addr.IsIPAddrLocal()) {
-    *aResult = true;
-  }
-
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-nsIOService::HostnameIsIPAddressAny(nsIURI* aURI, bool* aResult) {
-  NS_ENSURE_ARG_POINTER(aURI);
-
-  nsCOMPtr<nsIURI> innerURI = NS_GetInnermostURI(aURI);
-  NS_ENSURE_ARG_POINTER(innerURI);
-
-  nsAutoCString host;
-  nsresult rv = innerURI->GetAsciiHost(host);
-  if (NS_FAILED(rv)) {
-    return rv;
-  }
-
-  *aResult = false;
-
-  NetAddr addr;
-  if (NS_SUCCEEDED(addr.InitFromString(host)) && addr.IsIPAddrAny()) {
     *aResult = true;
   }
 
@@ -1157,13 +1133,14 @@ nsresult nsIOService::NewChannelFromURIWithClientAndController(
     const Maybe<ClientInfo>& aLoadingClientInfo,
     const Maybe<ServiceWorkerDescriptor>& aController, uint32_t aSecurityFlags,
     nsContentPolicyType aContentPolicyType, uint32_t aSandboxFlags,
-    nsIChannel** aResult) {
+    bool aSkipCheckForBrokenURLOrZeroSized, nsIChannel** aResult) {
   return NewChannelFromURIWithProxyFlagsInternal(
       aURI,
       nullptr,  // aProxyURI
       0,        // aProxyFlags
       aLoadingNode, aLoadingPrincipal, aTriggeringPrincipal, aLoadingClientInfo,
-      aController, aSecurityFlags, aContentPolicyType, aSandboxFlags, aResult);
+      aController, aSecurityFlags, aContentPolicyType, aSandboxFlags,
+      aSkipCheckForBrokenURLOrZeroSized, aResult);
 }
 
 NS_IMETHODIMP
@@ -1182,10 +1159,11 @@ nsresult nsIOService::NewChannelFromURIWithProxyFlagsInternal(
     const Maybe<ClientInfo>& aLoadingClientInfo,
     const Maybe<ServiceWorkerDescriptor>& aController, uint32_t aSecurityFlags,
     nsContentPolicyType aContentPolicyType, uint32_t aSandboxFlags,
-    nsIChannel** result) {
-  nsCOMPtr<nsILoadInfo> loadInfo = MOZ_TRY(LoadInfo::Create(
+    bool aSkipCheckForBrokenURLOrZeroSized, nsIChannel** result) {
+  nsCOMPtr<nsILoadInfo> loadInfo = new LoadInfo(
       aLoadingPrincipal, aTriggeringPrincipal, aLoadingNode, aSecurityFlags,
-      aContentPolicyType, aLoadingClientInfo, aController, aSandboxFlags));
+      aContentPolicyType, aLoadingClientInfo, aController, aSandboxFlags,
+      aSkipCheckForBrokenURLOrZeroSized);
   return NewChannelFromURIWithProxyFlagsInternal(aURI, aProxyURI, aProxyFlags,
                                                  loadInfo, result);
 }
@@ -1267,7 +1245,7 @@ nsIOService::NewChannelFromURIWithProxyFlags(
       aURI, aProxyURI, aProxyFlags, aLoadingNode, aLoadingPrincipal,
       aTriggeringPrincipal, Maybe<ClientInfo>(),
       Maybe<ServiceWorkerDescriptor>(), aSecurityFlags, aContentPolicyType, 0,
-      result);
+      /* aSkipCheckForBrokenURLOrZeroSized = */ false, result);
 }
 
 NS_IMETHODIMP
@@ -1286,17 +1264,6 @@ nsIOService::NewChannel(const nsACString& aSpec, const char* aCharset,
   return NewChannelFromURI(uri, aLoadingNode, aLoadingPrincipal,
                            aTriggeringPrincipal, aSecurityFlags,
                            aContentPolicyType, result);
-}
-
-NS_IMETHODIMP
-nsIOService::NewSuspendableChannelWrapper(
-    nsIChannel* aInnerChannel, nsISuspendableChannelWrapper** result) {
-  NS_ENSURE_ARG_POINTER(aInnerChannel);
-
-  nsCOMPtr<nsISuspendableChannelWrapper> wrapper =
-      new SuspendableChannelWrapper(aInnerChannel);
-  wrapper.forget(result);
-  return NS_OK;
 }
 
 NS_IMETHODIMP
@@ -1460,11 +1427,6 @@ nsIOService::SetConnectivity(bool aConnectivity) {
   if (XRE_IsParentProcess()) {
     return NS_ERROR_NOT_AVAILABLE;
   }
-  return SetConnectivityInternal(aConnectivity);
-}
-
-NS_IMETHODIMP
-nsIOService::SetConnectivityForTesting(bool aConnectivity) {
   return SetConnectivityInternal(aConnectivity);
 }
 
@@ -1657,9 +1619,11 @@ void nsIOService::PrefsChanged(const char* pref) {
 
   if (!pref || strncmp(pref, SIMPLE_URI_SCHEMES_PREF,
                        strlen(SIMPLE_URI_SCHEMES_PREF)) == 0) {
-    LOG(("simple_uri_unknown_schemes pref changed, updating the scheme list"));
-    mSimpleURIUnknownSchemes.ParseAndMergePrefSchemes();
-    // runs on parent and child, no need to broadcast
+    LOG((
+        "simple_uri_schemes pref change observed, updating the scheme list\n"));
+    nsAutoCString schemeList;
+    Preferences::GetCString(SIMPLE_URI_SCHEMES_PREF, schemeList);
+    mozilla::net::ParseSimpleURISchemes(schemeList);
   }
 }
 
@@ -2119,7 +2083,7 @@ nsresult nsIOService::SpeculativeConnectInternal(
     nsIInterfaceRequestor* aCallbacks, bool aAnonymous) {
   NS_ENSURE_ARG(aURI);
 
-  if (!SchemeIsHttpOrHttps(aURI)) {
+  if (!aURI->SchemeIs("http") && !aURI->SchemeIs("https")) {
     // We don't speculatively connect to non-HTTP[S] URIs.
     return NS_OK;
   }
@@ -2158,10 +2122,10 @@ nsresult nsIOService::SpeculativeConnectInternal(
   // connection from http to https.
   nsCOMPtr<nsIURI> httpsURI;
   if (aURI->SchemeIs("http")) {
-    nsCOMPtr<nsILoadInfo> httpsOnlyCheckLoadInfo = MOZ_TRY(
-        LoadInfo::Create(loadingPrincipal, loadingPrincipal, nullptr,
-                         nsILoadInfo::SEC_ONLY_FOR_EXPLICIT_CONTENTSEC_CHECK,
-                         nsIContentPolicy::TYPE_SPECULATIVE));
+    nsCOMPtr<nsILoadInfo> httpsOnlyCheckLoadInfo =
+        new LoadInfo(loadingPrincipal, loadingPrincipal, nullptr,
+                     nsILoadInfo::SEC_ONLY_FOR_EXPLICIT_CONTENTSEC_CHECK,
+                     nsIContentPolicy::TYPE_SPECULATIVE);
 
     // Check if https-only, or https-first would upgrade the request
     if (nsHTTPSOnlyUtils::ShouldUpgradeRequest(aURI, httpsOnlyCheckLoadInfo) ||
@@ -2194,20 +2158,6 @@ nsresult nsIOService::SpeculativeConnectInternal(
     channel->GetLoadFlags(&loadFlags);
     loadFlags |= nsIRequest::LOAD_ANONYMOUS;
     channel->SetLoadFlags(loadFlags);
-  }
-
-  if (!aCallbacks) {
-    // Proxy filters are registered, but no callbacks were provided.
-    // When proxyDNS is true, this speculative connection would likely leak a
-    // DNS lookup, so we should return early to avoid that.
-    bool hasProxyFilterRegistered = false;
-    Unused << pps->GetHasProxyFilterRegistered(&hasProxyFilterRegistered);
-    if (hasProxyFilterRegistered) {
-      return NS_ERROR_FAILURE;
-    }
-  } else {
-    rv = channel->SetNotificationCallbacks(aCallbacks);
-    NS_ENSURE_SUCCESS(rv, rv);
   }
 
   nsCOMPtr<nsICancelable> cancelable;
@@ -2338,66 +2288,6 @@ nsIOService::UnregisterProtocolHandler(const nsACString& aScheme) {
   return mRuntimeProtocolHandlers.Remove(scheme)
              ? NS_OK
              : NS_ERROR_FACTORY_NOT_REGISTERED;
-}
-
-NS_IMETHODIMP
-nsIOService::SetSimpleURIUnknownRemoteSchemes(
-    const nsTArray<nsCString>& aRemoteSchemes) {
-  LOG(("nsIOService::SetSimpleUriUnknownRemoteSchemes"));
-  mSimpleURIUnknownSchemes.SetAndMergeRemoteSchemes(aRemoteSchemes);
-
-  if (XRE_IsParentProcess()) {
-    // since we only expect socket, parent and content processes to create URLs
-    // that need to check the bypass list
-    // we only broadcast the list to content processes
-    // (and leave socket process broadcast as todo if necessary)
-    //
-    // sending only the remote-settings schemes to the content,
-    // which already has the pref list
-    for (auto* cp : mozilla::dom::ContentParent::AllProcesses(
-             mozilla::dom::ContentParent::eLive)) {
-      Unused << cp->SendSimpleURIUnknownRemoteSchemes(aRemoteSchemes);
-    }
-  }
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-nsIOService::IsSimpleURIUnknownScheme(const nsACString& aScheme,
-                                      bool* _retval) {
-  *_retval = mSimpleURIUnknownSchemes.IsSimpleURIUnknownScheme(aScheme);
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-nsIOService::GetSimpleURIUnknownRemoteSchemes(nsTArray<nsCString>& _retval) {
-  mSimpleURIUnknownSchemes.GetRemoteSchemes(_retval);
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-nsIOService::AddEssentialDomainMapping(const nsACString& aFrom,
-                                       const nsACString& aTo) {
-  MOZ_ASSERT(NS_IsMainThread());
-  mEssentialDomainMapping.InsertOrUpdate(aFrom, aTo);
-  return NS_OK;
-}
-
-NS_IMETHODIMP
-nsIOService::ClearEssentialDomainMapping() {
-  MOZ_ASSERT(NS_IsMainThread());
-  mEssentialDomainMapping.Clear();
-  return NS_OK;
-}
-
-bool nsIOService::GetFallbackDomain(const nsACString& aDomain,
-                                    nsACString& aFallbackDomain) {
-  MOZ_ASSERT(NS_IsMainThread());
-  if (auto entry = mEssentialDomainMapping.Lookup(aDomain)) {
-    aFallbackDomain = entry.Data();
-    return true;
-  }
-  return false;
 }
 
 }  // namespace net

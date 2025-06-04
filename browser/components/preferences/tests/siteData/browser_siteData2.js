@@ -162,7 +162,7 @@ add_task(async function test_removePartialSites() {
   settingsDialogClosePromise = promiseSettingsDialogClose();
   frameDoc = win.gSubDialog._topDialog._frame.contentDocument;
   cancelBtn = frameDoc.querySelector("dialog").getButton("cancel");
-  removeSelectedSite(hosts.slice(0, 2));
+  await removeSelectedSite(hosts.slice(0, 2));
   assertSitesListed(doc, hosts.slice(2));
   cancelBtn.doCommand();
   await settingsDialogClosePromise;
@@ -178,7 +178,7 @@ add_task(async function test_removePartialSites() {
   frameDoc = win.gSubDialog._topDialog._frame.contentDocument;
   saveBtn = frameDoc.querySelector("dialog").getButton("accept");
   cancelBtn = frameDoc.querySelector("dialog").getButton("cancel");
-  removeSelectedSite(hosts.slice(0, 2));
+  await removeSelectedSite(hosts.slice(0, 2));
   assertSitesListed(doc, hosts.slice(2));
   saveBtn.doCommand();
   await removeDialogOpenPromise;
@@ -193,15 +193,13 @@ add_task(async function test_removePartialSites() {
     REMOVE_DIALOG_URL
   );
   settingsDialogClosePromise = promiseSettingsDialogClose();
-  updatePromise = promiseSiteDataManagerSitesUpdated();
   frameDoc = win.gSubDialog._topDialog._frame.contentDocument;
   saveBtn = frameDoc.querySelector("dialog").getButton("accept");
-  removeSelectedSite(hosts.slice(0, 2));
+  await removeSelectedSite(hosts.slice(0, 2));
   assertSitesListed(doc, hosts.slice(2));
   saveBtn.doCommand();
   await removeDialogOpenPromise;
   await settingsDialogClosePromise;
-  await updatePromise;
   await openSiteDataSettingsDialog();
   assertSitesListed(doc, hosts.slice(2));
 
@@ -277,13 +275,8 @@ add_task(async function () {
   let doc = gBrowser.selectedBrowser.contentDocument;
   let frameDoc = win.gSubDialog._topDialog._frame.contentDocument;
   let searchBox = frameDoc.getElementById("searchBox");
-  await new Promise(resolve => {
-    searchBox.addEventListener("MozInputSearch:search", resolve, {
-      once: true,
-    });
-    searchBox.select();
-    EventUtils.sendString("xyz");
-  });
+  searchBox.value = "xyz";
+  searchBox.doCommand();
   assertSitesListed(
     doc,
     hosts.filter(host => host.includes("xyz"))
@@ -402,13 +395,8 @@ add_task(async function () {
   let doc = gBrowser.selectedBrowser.contentDocument;
   let frameDoc = win.gSubDialog._topDialog._frame.contentDocument;
   let searchBox = frameDoc.getElementById("searchBox");
-  await new Promise(resolve => {
-    searchBox.addEventListener("MozInputSearch:search", resolve, {
-      once: true,
-    });
-    searchBox.select();
-    EventUtils.sendString("xyz");
-  });
+  searchBox.value = "xyz";
+  searchBox.doCommand();
   assertSitesListed(
     doc,
     hosts.filter(host => host.includes("xyz"))

@@ -30,6 +30,8 @@ ConnectionHandle::~ConnectionHandle() {
   }
 }
 
+NS_IMPL_ISUPPORTS0(ConnectionHandle)
+
 nsresult ConnectionHandle::OnHeadersAvailable(nsAHttpTransaction* trans,
                                               nsHttpRequestHead* req,
                                               nsHttpResponseHead* resp,
@@ -48,7 +50,7 @@ nsresult ConnectionHandle::TakeTransport(nsISocketTransport** aTransport,
   return mConn->TakeTransport(aTransport, aInputStream, aOutputStream);
 }
 
-WebTransportSessionBase* ConnectionHandle::GetWebTransportSession(
+Http3WebTransportSession* ConnectionHandle::GetWebTransportSession(
     nsAHttpTransaction* aTransaction) {
   return mConn->GetWebTransportSession(aTransaction);
 }

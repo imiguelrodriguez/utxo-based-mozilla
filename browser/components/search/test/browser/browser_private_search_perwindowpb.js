@@ -18,7 +18,7 @@ add_task(async function () {
   let windowsToClose = [];
 
   function performSearch(aWin, aIsPrivate) {
-    let searchBar = aWin.document.getElementById("searchbar");
+    let searchBar = aWin.BrowserSearch.searchBar;
     ok(searchBar, "got search bar");
 
     let loadPromise = BrowserTestUtils.browserLoaded(
@@ -49,7 +49,7 @@ add_task(async function () {
 
   newWindow = await testOnWindow(false);
 
-  let searchBar = newWindow.document.getElementById("searchbar");
+  let searchBar = newWindow.BrowserSearch.searchBar;
   searchBar.value = "p";
   searchBar.focus();
 

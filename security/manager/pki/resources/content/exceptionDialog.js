@@ -1,12 +1,8 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
-
+/* import-globals-from pippki.js */
 "use strict";
-
-const { setText, viewCertHelper, checkCertHelper } = ChromeUtils.importESModule(
-  "resource://gre/modules/psm/pippki.sys.mjs"
-);
 
 var gDialog;
 var gSecInfo;
@@ -27,13 +23,6 @@ function initExceptionDialog() {
   let confirmButton = gDialog.getButton("extra1");
   let l10nUpdatedElements = [confirmButton, warningText];
   confirmButton.disabled = true;
-
-  document
-    .getElementById("locationTextBox")
-    .addEventListener("input", () => handleTextChange());
-  document
-    .getElementById("viewCertButton")
-    .addEventListener("input", () => viewCertButtonClick());
 
   var args = window.arguments;
   if (args && args[0]) {
@@ -124,7 +113,11 @@ async function checkCert() {
   let uri = getURI();
 
   if (uri) {
-    checkCertHelper(uri, grabCert);
+    let req = new XMLHttpRequest();
+    req.open("GET", uri.prePath);
+    req.onerror = grabCert.bind(this, req);
+    req.onload = grabCert.bind(this, req);
+    req.send(null);
   } else {
     gChecking = false;
     await document.l10n.translateElements(updateCertStatus());
@@ -169,13 +162,13 @@ function resetDialog() {
   document.getElementById("viewCertButton").disabled = true;
   document.getElementById("permanent").disabled = true;
   gDialog.getButton("extra1").disabled = true;
-  setText(document, "headerDescription", "");
-  setText(document, "statusDescription", "");
-  setText(document, "statusLongDescription", "");
-  setText(document, "status2Description", "");
-  setText(document, "status2LongDescription", "");
-  setText(document, "status3Description", "");
-  setText(document, "status3LongDescription", "");
+  setText("headerDescription", "");
+  setText("statusDescription", "");
+  setText("statusLongDescription", "");
+  setText("status2Description", "");
+  setText("status2LongDescription", "");
+  setText("status3Description", "");
+  setText("status3LongDescription", "");
   window.sizeToContent();
 }
 
@@ -327,5 +320,3 @@ function addException() {
 function inPrivateBrowsingMode() {
   return PrivateBrowsingUtils.isWindowPrivate(window);
 }
-
-window.addEventListener("load", () => initExceptionDialog());

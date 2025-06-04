@@ -49,7 +49,7 @@ function ensureSignatureVerificationFailure(certificatePath) {
     certdb,
     cert,
     SEC_ERROR_BAD_SIGNATURE,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
 }
 
@@ -60,7 +60,7 @@ function tamperWithSignatureAndEnsureVerificationFailure(certificatePath) {
     certdb,
     cert,
     SEC_ERROR_BAD_SIGNATURE,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
 }
 
@@ -92,7 +92,7 @@ function tamperWithSerialNumberAndEnsureVerificationFailure(certificatePath) {
     certdb,
     cert,
     SEC_ERROR_BAD_SIGNATURE,
-    Ci.nsIX509CertDB.verifyUsageTLSServer
+    certificateUsageSSLServer
   );
 }
 

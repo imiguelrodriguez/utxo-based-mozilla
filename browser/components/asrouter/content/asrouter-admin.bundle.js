@@ -154,7 +154,6 @@ const MESSAGE_TYPE_LIST = [
   "SPOTLIGHT_TELEMETRY",
   "TOAST_NOTIFICATION_TELEMETRY",
   "MENU_MESSAGE_TELEMETRY",
-  "NEWTAB_MESSAGE_TELEMETRY",
   "AS_ROUTER_TELEMETRY_USER_EVENT",
 
   // Admin types
@@ -252,7 +251,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ });
 /* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(3);
 /* harmony import */ var react__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(react__WEBPACK_IMPORTED_MODULE_0__);
-function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
+function _extends() { _extends = Object.assign ? Object.assign.bind() : function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; }; return _extends.apply(this, arguments); }
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
@@ -501,7 +500,7 @@ const ImpressionsItem = ({
 /******/ 	
 /************************************************************************/
 var __webpack_exports__ = {};
-// This entry needs to be wrapped in an IIFE because it needs to be isolated against other modules in the chunk.
+// This entry need to be wrapped in an IIFE because it need to be isolated against other modules in the chunk.
 (() => {
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -924,7 +923,7 @@ class ASRouterAdminInner extends (react__WEBPACK_IMPORTED_MODULE_1___default().P
     const impressions = this.state.messageImpressions[msg.id] ? this.state.messageImpressions[msg.id].length : 0;
     const isCollapsed = this.state.collapsedMessages.includes(msg.id);
     const isModified = this.state.modifiedMessages.includes(msg.id);
-    const aboutMessagePreviewSupported = ["infobar", "spotlight", "cfr_doorhanger", "feature_callout", "pb_newtab"].includes(msg.template);
+    const aboutMessagePreviewSupported = ["infobar", "spotlight", "cfr_doorhanger", "feature_callout"].includes(msg.template);
     let itemClassName = "message-item";
     if (isBlocked) {
       itemClassName += " blocked";
@@ -1388,7 +1387,7 @@ class ASRouterAdminInner extends (react__WEBPACK_IMPORTED_MODULE_1___default().P
   }
   onChangeAttributionParameters(event) {
     const {
-      name: eventName,
+      eventName,
       value
     } = event.target;
     this.setState(({
@@ -1513,7 +1512,7 @@ class ASRouterAdminInner extends (react__WEBPACK_IMPORTED_MODULE_1___default().P
 }
 const ASRouterAdmin = props => /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_1___default().createElement(_SimpleHashRouter__WEBPACK_IMPORTED_MODULE_3__.SimpleHashRouter, null, /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_1___default().createElement(ASRouterAdminInner, props));
 function renderASRouterAdmin() {
-  react_dom__WEBPACK_IMPORTED_MODULE_2___default().render(/*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_1___default().createElement(ASRouterAdmin, null), document.getElementById("root"));
+  react_dom__WEBPACK_IMPORTED_MODULE_2___default().render( /*#__PURE__*/react__WEBPACK_IMPORTED_MODULE_1___default().createElement(ASRouterAdmin, null), document.getElementById("root"));
 }
 })();
 

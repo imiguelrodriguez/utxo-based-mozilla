@@ -18,7 +18,7 @@ add_heuristic_tests(
             { fieldName: "address-line1" },
             { fieldName: "email" },
             { fieldName: "tel" },
-            { fieldName: "tel-extension", reason: "update-heuristic" },  // Extension
+            { fieldName: "tel" },  // Extension
             { fieldName: "organization" },
           ]
         },
@@ -37,7 +37,7 @@ add_heuristic_tests(
             { fieldName: "address-line1" },
             { fieldName: "email" },
             { fieldName: "tel" },
-            { fieldName: "tel-extension", reason: "update-heuristic" },  // Extension
+            { fieldName: "tel" },  // Extension
             { fieldName: "organization" },
           ],
         },

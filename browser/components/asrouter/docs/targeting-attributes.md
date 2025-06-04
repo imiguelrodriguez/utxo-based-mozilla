@@ -11,7 +11,6 @@ Please note that some targeting attributes require stricter controls on the tele
 * [activeNotifications](#activenotifications)
 * [addonsInfo](#addonsinfo)
 * [addressesSaved](#addressessaved)
-* [alltabsButtonAreaType](#alltabsButtonAreaType)
 * [archBits](#archbits)
 * [attachedFxAOAuthClients](#attachedfxaoauthclients)
 * [attributionData](#attributiondata)
@@ -19,12 +18,9 @@ Please note that some targeting attributes require stricter controls on the tele
 * [blockedCountByType](#blockedcountbytype)
 * [browserIsSelected](#browserisselected)
 * [browserSettings](#browsersettings)
-* [buildId](#buildId)
 * [canCreateSelectableProfiles](#cancreateselectableprofiles)
 * [creditCardsSaved](#creditcardssaved)
 * [currentDate](#currentdate)
-* [currentTabGroups](#currenttabgroups)
-* [currentProfileId](#currentprofileid)
 * [defaultPDFHandler](#defaultpdfhandler)
 * [devToolsOpenedCount](#devtoolsopenedcount)
 * [distributionId](#distributionid)
@@ -53,7 +49,6 @@ Please note that some targeting attributes require stricter controls on the tele
 * [isMajorUpgrade](#ismajorupgrade)
 * [isMSIX](#ismsix)
 * [isRTAMO](#isrtamo)
-* [unhandledCampaignAction](#unhandledCampaignAction)
 * [launchOnLoginEnabled](#launchonloginenabled)
 * [locale](#locale)
 * [localeLanguageCode](#localelanguagecode)
@@ -61,19 +56,16 @@ Please note that some targeting attributes require stricter controls on the tele
 * [messageImpressions](#messageimpressions)
 * [needsUpdate](#needsupdate)
 * [newtabSettings](#newtabsettings)
-* [packageFamilyName](#packagefamilyname)
 * [pinnedSites](#pinnedsites)
 * [platformName](#platformname)
 * [previousSessionEnd](#previoussessionend)
 * [primaryResolution](#primaryresolution)
 * [profileAgeCreated](#profileagecreated)
 * [profileAgeReset](#profileagereset)
-* [profileGroupId](#profilegroupid)
 * [profileRestartCount](#profilerestartcount)
 * [providerCohorts](#providercohorts)
 * [recentBookmarks](#recentbookmarks)
 * [region](#region)
-* [savedTabGroups](#savedtabgroups)
 * [screenImpressions](#screenimpressions)
 * [searchEngines](#searchengines)
 * [sync](#sync)
@@ -134,8 +126,6 @@ interface AddonsInfoResponse {
     // When was it installed? e.g. "2018-03-10T03:41:06.000Z"
     installDate: string;
   };
-  // Has the user installed addons beyond the built in and system addons?
-  hasInstalledAddons: boolean;
 }
 ```
 ### `attributionData`
@@ -206,24 +196,6 @@ declare const browserSettings: {
     enabled: boolean;
   }
 }
-```
-
-### `buildId`
-
-The build ID (`MOZ_BUILDID`) parsed as a number to allow for comparisons.
-
-#### Examples
-
-* Is the build from at least Jan 01 2025
-
-```java
-buildId >= 202501010000
-```
-
-#### Definition
-
-```ts
-declare const buildId: number;
 ```
 
 ### `currentDate`
@@ -370,21 +342,6 @@ Does the client have the latest available version installed
 
 ```ts
 declare const needsUpdate: boolean;
-```
-
-### `packageFamilyName`
-Provides the package family name as given by the MSIX that Firefox was
-installed from, or the empty string if not installed from MSIX.
-
-#### Examples
-* Is the user running MSIX Nightly?
-```ts
-"MozillaNightly" in packageFamilyName
-```
-
-#### Definition
-```ts
-declare const packageFamilyName: string;
 ```
 
 ### `pinnedSites`
@@ -662,13 +619,6 @@ Pref used by system administrators to disallow add-ons from installed altogether
 ```ts
 declare const xpinstallEnabled: boolean;
 ```
-### `currentTabGroups`
-
-Returns the number of currently open tab groups.
-
-### `savedTabGroups`
-
-Returns the number of tab groups the user has saved.
 
 ### `hasPinnedTabs`
 
@@ -1059,10 +1009,6 @@ is no distribution associated with the build.
 
 A string of the name of the container where the Firefox View button is shown, null if the button has been removed.
 
-### `alltabsButtonAreaType`
-
-A string of the name of the container where the Tab Overflow button (or All Tabs button) is shown, null if the button has been removed.
-
 ### `hasMigratedBookmarks`
 
 A boolean. `true` if the user ever used the Migration Wizard to migrate bookmarks since Firefox 113 released. Available in Firefox 113+; will not be true if the user had only ever migrated bookmarks prior to Firefox 113 being released.
@@ -1095,10 +1041,6 @@ A boolean. `true` when both the current install and current profile support crea
 
 A boolean. `true` when the `toolkit.profiles.storeID` pref has a value. Indicates that the profile is part of a profile group managed by the `SelectableProfileService`, and the user has used the multiple profiles feature. `false` otherwise.
 
-### `unhandledCampaignAction`
-
-A string. A special message action to be executed on first-run. For example, `"SET_DEFAULT_BROWSER"` when the user selected to set as default via the [install marketing page](https://www.mozilla.org/firefox/new/) and set default has not yet been automatically triggered, `null` otherwise.
-
 ### `isMSIX`
 
 A boolean. `true` when hasPackageId is `true` on Windows, `false` otherwise.
@@ -1129,11 +1071,3 @@ declare const systemArch: string | null;
 ### `totalSearches`
 
 Returns the number of times a user has completed a search in the URL Bar. The number is arbitrarily capped at 100.
-
-### `profileGroupId`
-
-Returns the stable profile group ID used for data reporting.
-
-### `currentProfileId`
-
-The integer-valued identifier of the current selectable profile, as reported by `SelectableProfileService`, converted to a string.

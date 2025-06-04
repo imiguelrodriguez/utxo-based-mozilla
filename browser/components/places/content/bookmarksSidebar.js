@@ -10,7 +10,7 @@ var { XPCOMUtils } = ChromeUtils.importESModule(
 
 ChromeUtils.defineESModuleGetters(this, {
   PlacesTransactions: "resource://gre/modules/PlacesTransactions.sys.mjs",
-  PlacesUIUtils: "moz-src:///browser/components/places/PlacesUIUtils.sys.mjs",
+  PlacesUIUtils: "resource:///modules/PlacesUIUtils.sys.mjs",
   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
 });
@@ -28,63 +28,33 @@ XPCOMUtils.defineLazyScriptGetter(
 /* End Shared Places Import */
 var gCumulativeSearches = 0;
 
-window.addEventListener("load", () => {
+function init() {
   let uidensity = window.top.document.documentElement.getAttribute("uidensity");
   if (uidensity) {
     document.documentElement.setAttribute("uidensity", uidensity);
   }
 
-  let view = document.getElementById("bookmarks-view");
-  view.place =
+  document.getElementById("bookmarks-view").place =
     "place:type=" + Ci.nsINavHistoryQueryOptions.RESULTS_AS_ROOTS_QUERY;
-  view.addEventListener("keypress", event =>
-    PlacesUIUtils.onSidebarTreeKeyPress(event)
-  );
-  view.addEventListener("click", event =>
-    PlacesUIUtils.onSidebarTreeClick(event)
-  );
-  view.addEventListener("mousemove", event =>
-    PlacesUIUtils.onSidebarTreeMouseMove(event)
-  );
-  view.addEventListener("mouseout", () =>
-    PlacesUIUtils.setMouseoverURL("", window)
-  );
+}
 
-  document
-    .getElementById("search-box")
-    .addEventListener("MozInputSearch:search", searchBookmarks);
-
-  let bhTooltip = document.getElementById("bhTooltip");
-  bhTooltip.addEventListener("popupshowing", event => {
-    window.top.BookmarksEventHandler.fillInBHTooltip(bhTooltip, event);
-  });
-  bhTooltip.addEventListener("popuphiding", () =>
-    bhTooltip.removeAttribute("position")
-  );
-
-  document
-    .getElementById("sidebar-panel-close")
-    .addEventListener("click", closeSidebarPanel);
-});
-
-function searchBookmarks(event) {
-  let { value } = event.currentTarget;
-
+function searchBookmarks(aSearchString) {
   var tree = document.getElementById("bookmarks-view");
-  if (!value) {
+  if (!aSearchString) {
     // eslint-disable-next-line no-self-assign
     tree.place = tree.place;
   } else {
     Glean.sidebar.search.bookmarks.add(1);
     gCumulativeSearches++;
-    tree.applyFilter(value, PlacesUtils.bookmarks.userContentRoots);
+    tree.applyFilter(aSearchString, PlacesUtils.bookmarks.userContentRoots);
   }
 }
 
 function updateTelemetry(urlsOpened = []) {
-  Glean.bookmarksSidebar.cumulativeSearches.accumulateSingleSample(
-    gCumulativeSearches
+  let searchesHistogram = Services.telemetry.getHistogramById(
+    "PLACES_BOOKMARKS_SEARCHBAR_CUMULATIVE_SEARCHES"
   );
+  searchesHistogram.add(gCumulativeSearches);
   clearCumulativeCounter();
 
   Glean.sidebar.link.bookmarks.add(urlsOpened.length);
@@ -94,17 +64,9 @@ function clearCumulativeCounter() {
   gCumulativeSearches = 0;
 }
 
-window.addEventListener("unload", () => {
+function unloadBookmarksSidebar() {
   clearCumulativeCounter();
   PlacesUIUtils.setMouseoverURL("", window);
-});
-
-function closeSidebarPanel(e) {
-  e.preventDefault();
-  let view = e.target.getAttribute("view");
-  window.browsingContext.embedderWindowGlobal.browsingContext.window.SidebarController.toggle(
-    view
-  );
 }
 
 window.addEventListener("SidebarFocused", () =>

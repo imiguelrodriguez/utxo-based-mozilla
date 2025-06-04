@@ -5,9 +5,20 @@
 
 #include "nsISupports.idl"
 
+%{C++
+// Forward-declare mozilla::net::SpdyPushCache
+namespace mozilla {
+namespace net {
+class SpdyPushCache;
+}
+}
+%}
+
 interface nsILoadGroup;
 interface nsIChannel;
 interface nsIStreamListener;
+
+[ptr] native SpdyPushCachePtr(mozilla::net::SpdyPushCache);
 
 /**
  * Requests capable of tail-blocking must implement this
@@ -73,6 +84,14 @@ interface nsIRequestContext : nsISupports
    * blockers.
    */
   unsigned long removeBlockingTransaction();
+
+  /**
+   * This gives out a weak pointer to the push cache.
+   * The nsIRequestContext implementation owns the cache
+   * and will destroy it when overwritten or when the context
+   * ends.
+   */
+  [notxpcom,nostdcall] attribute SpdyPushCachePtr spdyPushCache;
 
   /**
    * Increases/decrease the number of non-tailed requests in this context.

@@ -6,6 +6,14 @@
 
 "use strict";
 
+// `UrlbarProviderQuickSuggest.#merino` is lazily created on the first Merino
+// fetch, so it's easiest to create `gClient` lazily too.
+ChromeUtils.defineLazyGetter(
+  this,
+  "gClient",
+  () => UrlbarProviderQuickSuggest._test_merino
+);
+
 add_setup(async () => {
   await MerinoTestUtils.server.start();
   await QuickSuggestTestUtils.ensureQuickSuggestInit({
@@ -168,17 +176,13 @@ function endEngagement({ controller, context = null, state = "engagement" }) {
   }
 
   Assert.strictEqual(
-    merinoClient().sessionID,
+    gClient.sessionID,
     null,
     "sessionID is null after engagement"
   );
   Assert.strictEqual(
-    merinoClient()._test_sessionTimer,
+    gClient._test_sessionTimer,
     null,
     "sessionTimer is null after engagement"
   );
-}
-
-function merinoClient() {
-  return QuickSuggest.getFeature("SuggestBackendMerino")?.client;
 }

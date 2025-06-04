@@ -92,7 +92,8 @@ __attribute__((constructor)) static void SSE2Check() {
   // Using write() in order to avoid jemalloc-based buffering. Ignoring return
   // values, since there isn't much we could do on failure and there is no
   // point in trying to recover from errors.
-  MOZ_UNUSED(write(STDERR_FILENO, sSSE2Message, std::size(sSSE2Message) - 1));
+  MOZ_UNUSED(
+      write(STDERR_FILENO, sSSE2Message, MOZ_ARRAY_LENGTH(sSSE2Message) - 1));
   // _exit() instead of exit() to avoid running the usual "at exit" code.
   _exit(255);
 }
@@ -158,7 +159,7 @@ static bool IsArg(const char* arg, const char* s) {
   return false;
 }
 
-MOZ_RUNINIT Bootstrap::UniquePtr gBootstrap;
+Bootstrap::UniquePtr gBootstrap;
 
 static int do_main(int argc, char* argv[], char* envp[]) {
   // Allow firefox.exe to launch XULRunner apps via -app <application.ini>
@@ -266,7 +267,7 @@ uint32_t gBlocklistInitFlags = eDllBlocklistInitFlagDefault;
 #if defined(XP_UNIX)
 static void ReserveDefaultFileDescriptors() {
   // Reserve the lower positions of the file descriptors to make sure
-  // we don't reuse stdin/stdout/stderr in case they were closed
+  // we don't reuse stdin/stdout/stderr in case they we closed
   // before launch.
   // Otherwise code explicitly writing to fd 1 or 2 might accidentally
   // write to something else, like in bug 1820896 where FD 1 is

@@ -19,5 +19,8 @@ console.info(
   "webkitSpeechRecognition was shimmed for compatibility reasons. See https://webcompat.com/issues/117770 for details."
 );
 
-Object.getPrototypeOf(window).wrappedJSObject.webkitSpeechRecognition =
-  class {};
+Object.defineProperty(window.wrappedJSObject, "webkitSpeechRecognition", {
+  value: exportFunction(function () {
+    return class {};
+  }, window),
+});

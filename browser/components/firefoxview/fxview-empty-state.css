@@ -64,12 +64,18 @@
 .icon {
   background-position: center center;
   background-repeat: no-repeat;
-  width: var(--icon-size-medium);
-  height: var(--icon-size-medium);
+  width: 20px;
+  height: 20px;
 
   &:not([hidden]) {
     display: inline-block;
   }
+}
+
+
+.info {
+  -moz-context-properties: fill;
+  fill: var(--in-content-primary-button-background);
 }
 
 .description {

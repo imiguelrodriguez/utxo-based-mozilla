@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
@@ -45,7 +46,7 @@ class TestPingSubmitted(MarionetteTestCase):
         # Record an event for the ping to eventually submit.
         self.marionette.execute_script(
             """
-            const { SERPCategorizationRecorder } = ChromeUtils.importESModule("moz-src:///browser/components/search/SERPCategorization.sys.mjs");
+            const { SERPCategorizationRecorder } = ChromeUtils.importESModule("resource:///modules/SearchSERPTelemetry.sys.mjs");
             SERPCategorizationRecorder.recordCategorizationTelemetry({
                 organic_category: "3",
                 organic_num_domains: "1",

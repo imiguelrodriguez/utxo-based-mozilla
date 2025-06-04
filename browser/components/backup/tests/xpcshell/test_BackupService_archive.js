@@ -127,8 +127,9 @@ add_task(async function test_createArchive_encrypted() {
   const TEST_RECOVERY_CODE = "This is some recovery code.";
 
   let bs = new BackupService();
-  let { instance: encState } =
-    await ArchiveEncryptionState.initialize(TEST_RECOVERY_CODE);
+  let { instance: encState } = await ArchiveEncryptionState.initialize(
+    TEST_RECOVERY_CODE
+  );
 
   const FAKE_ARCHIVE_PATH = PathUtils.join(
     testProfilePath,
@@ -244,8 +245,9 @@ add_task(async function test_createArchive_encrypted_truncated() {
   const TEST_RECOVERY_CODE = "This is some recovery code.";
 
   let bs = new BackupService();
-  let { instance: encState } =
-    await ArchiveEncryptionState.initialize(TEST_RECOVERY_CODE);
+  let { instance: encState } = await ArchiveEncryptionState.initialize(
+    TEST_RECOVERY_CODE
+  );
 
   const FAKE_ARCHIVE_PATH = PathUtils.join(
     testProfilePath,
@@ -325,8 +327,9 @@ add_task(async function test_createArchive_early_binary_stream_close() {
   const TEST_RECOVERY_CODE = "This is some recovery code.";
 
   let bs = new BackupService();
-  let { instance: encState } =
-    await ArchiveEncryptionState.initialize(TEST_RECOVERY_CODE);
+  let { instance: encState } = await ArchiveEncryptionState.initialize(
+    TEST_RECOVERY_CODE
+  );
 
   const FAKE_ARCHIVE_PATH = PathUtils.join(
     testProfilePath,

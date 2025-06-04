@@ -2,6 +2,19 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+:root {
+  --toolbarbutton-icon-fill-attention: AccentColor;
+  --toolbarbutton-icon-fill-attention-text: AccentColorText;
+  --warning-icon-bgcolor: light-dark(#FFA436, #FFBD4F);
+  &[lwtheme] {
+    --toolbarbutton-icon-fill-attention: var(--lwt-toolbarbutton-icon-fill-attention, light-dark(rgb(0, 97, 224), rgb(0, 221, 255)));
+    /* FIXME(emilio): This could have poor contrast on some themes, maybe use
+     * contrast-color() once that's available, or compute a new variable in
+     * LightWeightThemeConsumer */
+    --toolbarbutton-icon-fill-attention-text: var(--toolbar-field-background-color);
+  }
+}
+
 .toolbarbutton-animatable-box,
 .toolbarbutton-1 {
   color: inherit;
@@ -191,7 +204,7 @@
 
 #sidebar-button {
   /* stylelint-disable-next-line media-query-no-invalid */
-  @media not -moz-pref("sidebar.revamp") {
+  @media not (-moz-bool-pref: "sidebar.revamp") {
     list-style-image: url("chrome://browser/skin/sidebars-right.svg");
 
     &:-moz-locale-dir(ltr):not([positionend]),
@@ -201,14 +214,11 @@
   }
 
   /* stylelint-disable-next-line media-query-no-invalid */
-  @media -moz-pref("sidebar.revamp") {
+  @media (-moz-bool-pref: "sidebar.revamp") {
     list-style-image: url("chrome://browser/skin/sidebar-collapsed-right.svg");
 
-    /* stylelint-disable-next-line media-query-no-invalid */
-    @media -moz-pref("sidebar.verticalTabs") {
-      &:hover {
-        list-style-image: url("chrome://browser/skin/sidebar-expanded-right.svg");
-      }
+    &:hover {
+      list-style-image: url("chrome://browser/skin/sidebar-expanded-right.svg");
     }
 
     &[expanded] {
@@ -223,11 +233,8 @@
     &:-moz-locale-dir(rtl)[positionend] {
       list-style-image: url("chrome://browser/skin/sidebar-collapsed.svg");
 
-      /* stylelint-disable-next-line media-query-no-invalid */
-      @media -moz-pref("sidebar.verticalTabs") {
-        &:hover {
-          list-style-image: url("chrome://browser/skin/sidebar-expanded.svg");
-        }
+      &:hover {
+        list-style-image: url("chrome://browser/skin/sidebar-expanded.svg");
       }
 
       &[expanded] {
@@ -300,7 +307,7 @@
 
 /* Apply crisp rendering for favicons at exactly 2x resolution */
 @media (resolution: 2x) {
-  :is(.bookmark-item, .menuitem-with-favicon) > .menu-icon,
+  :is(.bookmark-item, .menuitem-with-favicon) > .menu-iconic-left > .menu-iconic-icon,
   .bookmark-item > .toolbarbutton-icon {
     image-rendering: -moz-crisp-edges;
   }
@@ -318,12 +325,12 @@
   list-style-image: url("chrome://browser/skin/firefox-view.svg");
 }
 
-.content-analysis-indicator {
+#content-analysis-indicator {
   -moz-context-properties: fill, stroke;
   stroke: var(--toolbarbutton-icon-fill);
   list-style-image: url("chrome://global/skin/icons/content-analysis.svg");
 }
 
-#fxms-bmb-button {
+.fxms-bmb-button {
   list-style-image: url("chrome://branding/content/about-logo.png");
 }

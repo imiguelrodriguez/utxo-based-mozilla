@@ -14,11 +14,6 @@ const SLOW_PAGE2 =
     "chrome://mochitests/content",
     "http://mochi.test:8888"
   ) + "slow-page.sjs?faster";
-const SLOW_PAGE3 =
-  getRootDirectory(gTestPath).replace(
-    "chrome://mochitests/content",
-    "http://mochi.test:8888"
-  ) + "slow-page.sjs?slower";
 
 /**
  * Check that if we:
@@ -239,20 +234,12 @@ add_task(async function testCorrectUrlBarAfterGoingBackDuringAnotherLoad() {
     true,
     true
   );
-  // Give the example.org entry user interaction.
-  await SpecialPowers.spawn(tab.linkedBrowser, [], async () => {
-    content.document.notifyUserGestureActivation();
-  });
 
   // Load example.com in the same browser
   let page1 = "http://example.com/";
-  let loaded = BrowserTestUtils.browserLoaded(tab.linkedBrowser);
+  let loaded = BrowserTestUtils.browserLoaded(tab.linkedBrowser, false, page1);
   BrowserTestUtils.startLoadingURIString(tab.linkedBrowser, page1);
   await loaded;
-  // Give the example.com entry user interaction.
-  await SpecialPowers.spawn(tab.linkedBrowser, [], async () => {
-    content.document.notifyUserGestureActivation();
-  });
 
   let initialValue = gURLBar.untrimmedValue;
   let expectedURLBarChange = SLOW_PAGE;
@@ -338,7 +325,7 @@ add_task(async function testCorrectUrlBarAfterReloadingDuringSlowPageLoad() {
   );
 
   let initialValue = gURLBar.untrimmedValue;
-  let expectedURLBarChange = SLOW_PAGE3;
+  let expectedURLBarChange = SLOW_PAGE;
   let sawChange = false;
   let hasReloaded = false;
   let handler = () => {
@@ -362,8 +349,8 @@ add_task(async function testCorrectUrlBarAfterReloadingDuringSlowPageLoad() {
   let obs = new MutationObserver(handler);
 
   obs.observe(gURLBar.textbox, { attributes: true });
-  // Start loading SLOW_PAGE3
-  gURLBar.value = SLOW_PAGE3;
+  // Start loading SLOW_PAGE
+  gURLBar.value = SLOW_PAGE;
   gURLBar.handleCommand();
 
   // Copied from the first test: If this ever starts going intermittent,
@@ -381,7 +368,7 @@ add_task(async function testCorrectUrlBarAfterReloadingDuringSlowPageLoad() {
   hasReloaded = true;
   is(
     gURLBar.untrimmedValue,
-    SLOW_PAGE3,
+    SLOW_PAGE,
     "Should not have changed URL bar value synchronously."
   );
   // Wait for page1 to be loaded due to a reload while the slow page was still loading

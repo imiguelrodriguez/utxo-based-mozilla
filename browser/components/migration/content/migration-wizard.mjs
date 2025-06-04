@@ -25,6 +25,8 @@ export class MigrationWizard extends HTMLElement {
   #chooseImportFromFile = null;
   #getPermissionsButton = null;
   #safariPermissionButton = null;
+  #safariPasswordImportSkipButton = null;
+  #safariPasswordImportSelectButton = null;
   #selectAllCheckbox = null;
   #resourceSummary = null;
   #expandedDetails = false;
@@ -244,25 +246,8 @@ export class MigrationWizard extends HTMLElement {
               </li>
             </ol>
             <moz-button-group class="buttons" part="buttons">
-              <button class="manual-password-import-skip" data-l10n-id="migration-manual-password-import-skip-button"></button>
-              <button class="manual-password-import-select primary" data-l10n-id="migration-manual-password-import-select-button"></button>
-            </moz-button-group>
-          </div>
-
-          <div name="page-chrome-windows-password-permission">
-            <h1 data-l10n-id="migration-chrome-windows-password-import-header" part="header"></h1>
-            <span data-l10n-id="migration-chrome-windows-password-import-steps-header"></span>
-            <ol>
-              <li data-l10n-id="migration-chrome-windows-password-import-step1"><img class="chrome-icon-3dots" data-l10n-name="chrome-icon-3dots"/></li>
-              <li data-l10n-id="migration-chrome-windows-password-import-step2"></li>
-              <li data-l10n-id="migration-chrome-windows-password-import-step3"></li>
-            </ol>
-            <p>
-              <span data-l10n-id="migration-chrome-windows-password-import-step4"></span>
-            </p>
-            <moz-button-group class="buttons" part="buttons">
-              <button class="manual-password-import-skip" data-l10n-id="migration-manual-password-import-skip-button"></button>
-              <button class="manual-password-import-select primary" data-l10n-id="migration-manual-password-import-select-button"></button>
+              <button id="safari-password-import-skip" data-l10n-id="migration-safari-password-import-skip-button"></button>
+              <button id="safari-password-import-select" class="primary" data-l10n-id="migration-safari-password-import-select-button"></button>
             </moz-button-group>
           </div>
 
@@ -360,19 +345,15 @@ export class MigrationWizard extends HTMLElement {
 
     this.#selectAllCheckbox = shadow.querySelector("#select-all").control;
 
-    let manualPasswordImportSkipButtons = shadow.querySelectorAll(
-      ".manual-password-import-skip"
+    this.#safariPasswordImportSkipButton = shadow.querySelector(
+      "#safari-password-import-skip"
     );
-    for (let button of manualPasswordImportSkipButtons) {
-      button.addEventListener("click", this);
-    }
+    this.#safariPasswordImportSkipButton.addEventListener("click", this);
 
-    let manualPasswordImportSelectButtons = shadow.querySelectorAll(
-      ".manual-password-import-select"
+    this.#safariPasswordImportSelectButton = shadow.querySelector(
+      "#safari-password-import-select"
     );
-    for (let button of manualPasswordImportSelectButtons) {
-      button.addEventListener("click", this);
-    }
+    this.#safariPasswordImportSelectButton.addEventListener("click", this);
 
     this.#extensionsSuccessLink = shadow.querySelector(
       "#extensions-success-link"
@@ -1113,11 +1094,11 @@ export class MigrationWizard extends HTMLElement {
    * @property {boolean} autoMigration
    *   True if the migration is occurring automatically, without the user
    *   having selected any items explicitly from the wizard.
-   * @property {string} [manualPasswordFilePath=null]
+   * @property {string} [safariPasswordFilePath=null]
    *   An optional string argument that points to the path of a passwords
-   *   export file from another browser. This file will have password imported
-   *   from if supplied. This argument is ignored if the key is not for the
-   *   Safari browser or the Chrome browser on Windows.
+   *   export file from Safari. This file will have password imported from if
+   *   supplied. This argument is ignored if the key is not for the
+   *   Safari browser.
    */
 
   /**
@@ -1198,13 +1179,12 @@ export class MigrationWizard extends HTMLElement {
 
   /**
    * Sends a request to get a string path for a passwords file exported
-   * from another browser (like Safari on macOS, or Chrome on Windows)
-   * where we cannot currently import automatically.
+   * from Safari.
    */
-  #selectManualPasswordFile() {
+  #selectSafariPasswordFile() {
     let migrationEventDetail = this.#gatherMigrationEventDetails();
     this.dispatchEvent(
-      new CustomEvent("MigrationWizard:SelectManualPasswordFile", {
+      new CustomEvent("MigrationWizard:SelectSafariPasswordFile", {
         bubbles: true,
         detail: migrationEventDetail,
       })
@@ -1475,8 +1455,8 @@ export class MigrationWizard extends HTMLElement {
           },
         })
       );
-    } else if (event.target.classList.contains("manual-password-import-skip")) {
-      // If the user chose to skip importing passwords manually from a CSV, we
+    } else if (event.target == this.#safariPasswordImportSkipButton) {
+      // If the user chose to skip importing passwords from Safari, we
       // programmatically uncheck the PASSWORDS resource type and re-request
       // import.
       let checkbox = this.#shadowRoot.querySelector(
@@ -1495,10 +1475,8 @@ export class MigrationWizard extends HTMLElement {
       } else {
         this.#doImport();
       }
-    } else if (
-      event.target.classList.contains("manual-password-import-select")
-    ) {
-      this.#selectManualPasswordFile();
+    } else if (event.target == this.#safariPasswordImportSelectButton) {
+      this.#selectSafariPasswordFile();
     } else if (event.target == this.#extensionsSuccessLink) {
       this.dispatchEvent(
         new CustomEvent("MigrationWizard:OpenAboutAddons", {

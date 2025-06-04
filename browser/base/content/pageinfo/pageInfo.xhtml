@@ -2,7 +2,6 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
-<?csp default-src chrome:; img-src data: *; media-src data: *; style-src chrome: 'unsafe-inline'; ?>
 
 <window id="main-window"
   xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
@@ -13,8 +12,9 @@
   windowtype="Browser:page-info"
 #ifdef XP_MACOSX
   drawtitle="true"
-  customtitlebar="true"
+  chromemargin="0,0,0,0"
 #endif
+  onload="onLoadPageInfo()"
   align="stretch"
   screenX="10" screenY="10"
   persist="screenX screenY width height sizemode">
@@ -47,8 +47,8 @@
   </stringbundleset>
 
   <commandset id="pageInfoCommandSet">
-    <command id="cmd_close"/>
-    <command id="cmd_help"/>
+    <command id="cmd_close"     oncommand="window.close();"/>
+    <command id="cmd_help"      oncommand="doHelpButton();"/>
   </commandset>
 
   <keyset id="pageInfoKeySet">
@@ -71,10 +71,14 @@
 
   <vbox id="topBar">
     <radiogroup id="viewGroup" class="chromeclass-toolbar" orient="horizontal">
-      <radio id="generalTab"  data-l10n-id="general-tab"/>
-      <radio id="mediaTab"    data-l10n-id="media-tab" hidden="true"/>
-      <radio id="permTab"     data-l10n-id="perm-tab"/>
-      <radio id="securityTab" data-l10n-id="security-tab"/>
+      <radio id="generalTab"  data-l10n-id="general-tab"
+           oncommand="showTab('general');"/>
+      <radio id="mediaTab"    data-l10n-id="media-tab"
+           oncommand="showTab('media');" hidden="true"/>
+      <radio id="permTab"     data-l10n-id="perm-tab"
+           oncommand="showTab('perm');"/>
+      <radio id="securityTab" data-l10n-id="security-tab"
+           oncommand="showTab('security');"/>
     </radiogroup>
   </vbox>
 
@@ -155,10 +159,12 @@
         <tree id="metatree" flex="1" hidecolumnpicker="true" contextmenu="picontext">
           <treecols>
             <treecol id="meta-name" data-l10n-id="general-meta-name"
-                     persist="width" style="flex: 1 auto;"/>
+                     persist="width" style="flex: 1 auto;"
+                     onclick="gMetaView.onPageMediaSort('meta-name');"/>
             <splitter class="tree-splitter"/>
             <treecol id="meta-content" data-l10n-id="general-meta-content"
-                     persist="width" style="flex: 4 4 auto"/>
+                     persist="width" style="flex: 4 4 auto"
+                     onclick="gMetaView.onPageMediaSort('meta-content');"/>
           </treecols>
           <treechildren id="metatreechildren" flex="1"/>
         </tree>
@@ -170,22 +176,28 @@
 
     <!-- Media information -->
     <vbox id="mediaPanel">
-      <tree id="imagetree" contextmenu="picontext">
+      <tree id="imagetree" onselect="onImageSelect();" contextmenu="picontext"
+            ondragstart="onBeginLinkDrag(event, 'image-address', 'image-alt')">
         <treecols>
           <treecol primary="true" persist="width" style="flex: 10 10 auto"
-                   width="10" id="image-address" data-l10n-id="media-address"/>
+                   width="10" id="image-address" data-l10n-id="media-address"
+                   onclick="gImageView.onPageMediaSort('image-address');"/>
           <splitter class="tree-splitter"/>
           <treecol persist="hidden width" style="flex: 2 2 auto"
-                   width="2" id="image-type" data-l10n-id="media-type"/>
+                   width="2" id="image-type" data-l10n-id="media-type"
+                   onclick="gImageView.onPageMediaSort('image-type');"/>
           <splitter class="tree-splitter"/>
           <treecol hidden="true" persist="hidden width" style="flex: 2 2 auto"
-                   width="2" id="image-size"  data-l10n-id="media-size" value="size"/>
+                   width="2" id="image-size"  data-l10n-id="media-size" value="size"
+                   onclick="gImageView.onPageMediaSort('image-size');"/>
           <splitter class="tree-splitter"/>
           <treecol hidden="true" persist="hidden width" style="flex: 4 4 auto"
-                   width="4"  id="image-alt" data-l10n-id="media-alt-header"/>
+                   width="4"  id="image-alt" data-l10n-id="media-alt-header"
+                   onclick="gImageView.onPageMediaSort('image-alt');"/>
           <splitter class="tree-splitter"/>
           <treecol hidden="true" persist="hidden width" style="flex: 1 1 auto"
-                   width="1"  id="image-count"    data-l10n-id="media-count"/>
+                   width="1"  id="image-count"    data-l10n-id="media-count"
+                   onclick="gImageView.onPageMediaSort('image-count');"/>
         </treecols>
         <treechildren id="imagetreechildren" flex="1"/>
       </tree>
@@ -243,8 +255,12 @@
         </table>
         <hbox id="imageSaveBox" align="end">
           <spacer id="imageSaveBoxSpacer" flex="1"/>
-          <button data-l10n-id="media-select-all" id="selectallbutton"/>
-          <button data-l10n-id="media-save-as" id="imagesaveasbutton"/>
+          <button data-l10n-id="media-select-all"
+                  id="selectallbutton"
+                  oncommand="doSelectAllMedia();"/>
+          <button data-l10n-id="media-save-as"
+                  id="imagesaveasbutton"
+                  oncommand="saveMedia();"/>
         </hbox>
         <vbox id="imagecontainerbox" flex="1">
           <hbox id="theimagecontainer">
@@ -257,7 +273,9 @@
       </vbox>
       <hbox id="mediaSaveBox" collapsed="true">
         <spacer id="mediaSaveBoxSpacer" flex="1"/>
-        <button data-l10n-id="media-save-image-as" id="mediasaveasbutton"/>
+        <button data-l10n-id="media-save-image-as"
+                id="mediasaveasbutton"
+                oncommand="saveMedia();"/>
       </hbox>
       <hbox pack="end">
         <button command="cmd_help" data-l10n-id="help-button" class="help-button"/>
@@ -316,7 +334,8 @@
                 <input id="security-identity-verifier-value" readonly="readonly"
                             data-l10n-attrs="value"/>
                 <xul:button id="security-view-cert" data-l10n-id="security-view"
-                            collapsed="true"/>
+                            collapsed="true"
+                            oncommand="security.viewCert();"/>
               </div>
             </td>
           </tr>
@@ -357,7 +376,8 @@
                 <xul:label id="security-privacy-sitedata-value" data-l10n-id="security-view-unknown"/>
                 <xul:button id="security-clear-sitedata"
                             disabled="true"
-                            data-l10n-id="security-view-privacy-clearsitedata"/>
+                            data-l10n-id="security-view-privacy-clearsitedata"
+                            oncommand="security.clearSiteData();"/>
               </div>
             </td>
           </tr>
@@ -371,7 +391,8 @@
                 <xul:label id="security-privacy-passwords-value"
                            data-l10n-id="security-view-unknown"/>
                 <xul:button id="security-view-password"
-                            data-l10n-id="security-view-privacy-viewpasswords"/>
+                            data-l10n-id="security-view-privacy-viewpasswords"
+                            oncommand="security.viewPasswords();"/>
               </div>
             </td>
           </tr>

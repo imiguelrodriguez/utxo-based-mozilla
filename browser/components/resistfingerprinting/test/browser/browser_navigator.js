@@ -81,12 +81,19 @@ const DEFAULT_UA_OS = {
   other: "X11; Linux x86_64",
 };
 
-const SPOOFED_UA_OS = {
+const SPOOFED_UA_NAVIGATOR_OS = {
   linux: "X11; Linux x86_64",
   win: "Windows NT 10.0; Win64; x64",
   macosx: "Macintosh; Intel Mac OS X 10.15",
   android: "Android 10; Mobile",
   other: "X11; Linux x86_64",
+};
+const SPOOFED_UA_HTTPHEADER_OS = {
+  linux: "Windows NT 10.0; Win64; x64",
+  win: "Windows NT 10.0; Win64; x64",
+  macosx: "Windows NT 10.0; Win64; x64",
+  android: "Android 10; Mobile",
+  other: "Windows NT 10.0; Win64; x64",
 };
 const SPOOFED_HW_CONCURRENCY = 2;
 
@@ -136,7 +143,7 @@ async function testUserAgentHeader() {
 
   is(
     result,
-    expectedResults.userAgent,
+    expectedResults.userAgentHeader,
     `Checking ${expectedResults.testDesc} User Agent HTTP Header.`
   );
 
@@ -170,7 +177,7 @@ async function testNavigator() {
   );
   is(
     result.userAgent,
-    expectedResults.userAgent,
+    expectedResults.userAgentNavigator,
     `Checking ${testDesc} navigator.userAgent.`
   );
   is(
@@ -275,7 +282,7 @@ async function testWorkerNavigator() {
   );
   is(
     result.userAgent,
-    expectedResults.userAgent,
+    expectedResults.userAgentNavigator,
     `Checking ${testDesc} worker navigator.userAgent.`
   );
   is(
@@ -331,7 +338,8 @@ add_task(async function setupDefaultUserAgent() {
     oscpu: DEFAULT_OSCPU[AppConstants.platform],
     platform: DEFAULT_PLATFORM[AppConstants.platform],
     pluginsLength: 5,
-    userAgent: defaultUserAgent,
+    userAgentNavigator: defaultUserAgent,
+    userAgentHeader: defaultUserAgent,
   };
 
   await testNavigator();
@@ -363,7 +371,8 @@ add_task(async function setupRFPExemptions() {
     oscpu: DEFAULT_OSCPU[AppConstants.platform],
     platform: DEFAULT_PLATFORM[AppConstants.platform],
     pluginsLength: 5,
-    userAgent: defaultUserAgent,
+    userAgentNavigator: defaultUserAgent,
+    userAgentHeader: defaultUserAgent,
   };
 
   await testNavigator();
@@ -412,7 +421,8 @@ add_task(async function setupETPToggleExemptions() {
     oscpu: DEFAULT_OSCPU[AppConstants.platform],
     platform: DEFAULT_PLATFORM[AppConstants.platform],
     pluginsLength: 5,
-    userAgent: defaultUserAgent,
+    userAgentNavigator: defaultUserAgent,
+    userAgentHeader: defaultUserAgent,
   };
 
   await testNavigator();
@@ -446,8 +456,12 @@ add_task(async function setupResistFingerprinting() {
 
   let spoofedGeckoTrail = SPOOFED_UA_GECKO_TRAIL[AppConstants.platform];
 
-  let spoofedUserAgent = `Mozilla/5.0 (${
-    SPOOFED_UA_OS[AppConstants.platform]
+  let spoofedUserAgentNavigator = `Mozilla/5.0 (${
+    SPOOFED_UA_NAVIGATOR_OS[AppConstants.platform]
+  }; rv:${appVersion}.0) Gecko/${spoofedGeckoTrail} Firefox/${appVersion}.0`;
+
+  let spoofedUserAgentHeader = `Mozilla/5.0 (${
+    SPOOFED_UA_HTTPHEADER_OS[AppConstants.platform]
   }; rv:${appVersion}.0) Gecko/${spoofedGeckoTrail} Firefox/${appVersion}.0`;
 
   expectedResults = {
@@ -458,7 +472,8 @@ add_task(async function setupResistFingerprinting() {
     oscpu: SPOOFED_OSCPU[AppConstants.platform],
     platform: DEFAULT_PLATFORM[AppConstants.platform],
     pluginsLength: 5,
-    userAgent: spoofedUserAgent,
+    userAgentNavigator: spoofedUserAgentNavigator,
+    userAgentHeader: spoofedUserAgentHeader,
   };
 
   await testNavigator();

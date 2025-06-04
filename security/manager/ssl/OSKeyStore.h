@@ -12,7 +12,6 @@
 
 #include "nsCOMPtr.h"
 #include "nsIOSKeyStore.h"
-#include "nsISerialEventTarget.h"
 #include "nsString.h"
 #include "ScopedNSSTypes.h"
 
@@ -59,8 +58,12 @@ class AbstractOSKeyStore {
 };
 
 #define NS_OSKEYSTORE_CONTRACTID "@mozilla.org/security/oskeystore;1"
-#define NS_OSKEYSTORE_CID \
-  {0x57972956, 0x5718, 0x42d2, {0x80, 0x70, 0xb3, 0xfc, 0x72, 0x21, 0x2e, 0xaf}}
+#define NS_OSKEYSTORE_CID                            \
+  {                                                  \
+    0x57972956, 0x5718, 0x42d2, {                    \
+      0x80, 0x70, 0xb3, 0xfc, 0x72, 0x21, 0x2e, 0xaf \
+    }                                                \
+  }
 
 nsresult GetPromise(JSContext* aCx,
                     /* out */ RefPtr<mozilla::dom::Promise>& aPromise);
@@ -92,7 +95,6 @@ class OSKeyStore final : public nsIOSKeyStore {
   ~OSKeyStore() = default;
 
   std::unique_ptr<AbstractOSKeyStore> mKs;
-  nsCOMPtr<nsISerialEventTarget> mBackgroundSerialEventTarget;
 };
 
 #endif  // OSKeyStore_h

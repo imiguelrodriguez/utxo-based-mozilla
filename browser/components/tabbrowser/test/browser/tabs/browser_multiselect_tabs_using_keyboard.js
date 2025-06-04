@@ -9,7 +9,7 @@ function synthesizeKeyAndWaitForFocus(element, keyCode, options) {
 
 function synthesizeKeyAndWaitForTabToGetKeyboardFocus(tab, keyCode, options) {
   let focused = TestUtils.waitForCondition(() => {
-    return tab.classList.contains("tablist-keyboard-focus");
+    return tab.classList.contains("keyboard-focused-tab");
   }, "Waiting for tab to get keyboard focus");
   EventUtils.synthesizeKey(keyCode, options);
   return focused;
@@ -19,10 +19,6 @@ add_setup(async function () {
   // The DevEdition has the DevTools button in the toolbar by default. Remove it
   // to prevent branch-specific rules what button should be focused.
   CustomizableUI.removeWidgetFromArea("developer-button");
-
-  await SpecialPowers.pushPrefEnv({
-    set: [["browser.urlbar.scotchBonnet.enableOverride", true]],
-  });
 
   let prevActiveElement = document.activeElement;
   registerCleanupFunction(() => {
@@ -44,16 +40,18 @@ add_task(async function changeSelectionUsingKeyboard() {
   is(document.activeElement, gURLBar.inputField, "urlbar should be focused");
 
   info("Move focus to the selected tab using the keyboard");
-  let unifiedSearchButton = document.querySelector(
-    "#urlbar-searchmode-switcher"
+  let trackingProtectionIconContainer = document.querySelector(
+    "#tracking-protection-icon-container"
   );
-  await synthesizeKeyAndWaitForFocus(unifiedSearchButton, "VK_TAB", {
-    shiftKey: true,
-  });
+  await synthesizeKeyAndWaitForFocus(
+    trackingProtectionIconContainer,
+    "VK_TAB",
+    { shiftKey: true }
+  );
   is(
     document.activeElement,
-    unifiedSearchButton,
-    "Unified Search Button should be focused"
+    trackingProtectionIconContainer,
+    "tracking protection icon container should be focused"
   );
   await synthesizeKeyAndWaitForFocus(
     document.getElementById("reload-button"),

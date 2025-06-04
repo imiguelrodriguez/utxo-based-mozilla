@@ -75,14 +75,8 @@ var tests = [
   },
   {
     name: "chrome:",
-    location: "chrome://global/content/mozilla.html",
-    hostForDisplay: "chrome://global/content/mozilla.html",
-    hasSubview: false,
-  },
-  {
-    name: "about:logo with nested moz-safe-about:logo",
-    location: "about:logo",
-    hostForDisplay: "about:logo",
+    location: "chrome://global/skin/in-content/info-pages.css",
+    hostForDisplay: "chrome://global/skin/in-content/info-pages.css",
     hasSubview: false,
   },
 ];

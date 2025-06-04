@@ -15,15 +15,12 @@
 #include "PendingTransactionQueue.h"
 #include "nsHttpHandler.h"
 #include "mozilla/ChaosMode.h"
-#include "mozilla/StaticPrefs_network.h"
 
 namespace mozilla {
 namespace net {
 
 static uint64_t TabIdForQueuing(nsAHttpTransaction* transaction) {
-  return StaticPrefs::network_http_active_tab_priority()
-             ? transaction->BrowserId()
-             : 0;
+  return gHttpHandler->ActiveTabPriority() ? transaction->BrowserId() : 0;
 }
 
 // This function decides the transaction's order in the pending queue.

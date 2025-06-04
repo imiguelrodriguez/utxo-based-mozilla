@@ -139,6 +139,8 @@ menu-view-history-button =
     .label = History
 menu-view-synced-tabs-sidebar =
     .label = Synced Tabs
+menu-view-megalist-sidebar =
+    .label = Passwords
 menu-view-full-zoom =
     .label = Zoom
     .accesskey = Z
@@ -246,15 +248,6 @@ menu-bookmarks-other =
 menu-bookmarks-mobile =
     .label = Mobile Bookmarks
 
-## Profiles Menu
-
-menu-profiles =
-    .label = Profiles
-menu-profiles-manage-profiles =
-    .label = Manage profiles
-menu-profiles-new-profile =
-    .label = New profile
-
 ## Tools Menu
 
 menu-tools =
@@ -263,9 +256,9 @@ menu-tools =
 menu-tools-downloads =
     .label = Downloads
     .accesskey = D
-menu-tools-extensions-and-themes =
-    .label = Extensions and Themes
-    .accesskey = E
+menu-tools-addons-and-themes =
+    .label = Add-ons and Themes
+    .accesskey = A
 menu-tools-fxa-sign-in2 =
     .label = Sign In
     .accesskey = g
@@ -327,6 +320,8 @@ menu-get-help =
 menu-help-more-troubleshooting-info =
     .label = More Troubleshooting Information
     .accesskey = T
+menu-help-report-site-issue =
+    .label = Report Site Issue…
 menu-help-share-ideas =
     .label = Share Ideas and Feedback…
     .accesskey = S

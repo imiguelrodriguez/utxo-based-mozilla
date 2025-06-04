@@ -56,10 +56,6 @@ var gClearSiteDataDialog = {
     this._clearCacheCheckbox.addEventListener("command", e =>
       this.onCheckboxCommand(e)
     );
-
-    document
-      .getElementById("key_close")
-      .addEventListener("command", () => window.close());
   },
 
   onCheckboxCommand() {

@@ -96,12 +96,19 @@ const DEFAULT_UA_OS = {
   other: "X11; Linux x86_64",
 };
 
-const SPOOFED_UA_OS = {
+const SPOOFED_UA_NAVIGATOR_OS = {
   linux: "X11; Linux x86_64",
   win: "Windows NT 10.0; Win64; x64",
   macosx: "Macintosh; Intel Mac OS X 10.15",
   android: "Android 10; Mobile",
   other: "X11; Linux x86_64",
+};
+const SPOOFED_UA_HTTPHEADER_OS = {
+  linux: "Windows NT 10.0; Win64; x64",
+  win: "Windows NT 10.0; Win64; x64",
+  macosx: "Windows NT 10.0; Win64; x64",
+  android: "Android 10; Mobile",
+  other: "Windows NT 10.0; Win64; x64",
 };
 const SPOOFED_HW_CONCURRENCY = 2;
 
@@ -153,12 +160,12 @@ async function testNavigator(result, expectedResults, extraData) {
   );
   is(
     result.userAgent,
-    expectedResults.userAgent,
+    expectedResults.userAgentNavigator,
     `Checking ${testDesc} navigator.userAgent.`
   );
   is(
     result.userAgentHTTPHeader,
-    expectedResults.userAgent,
+    expectedResults.userAgentHTTPHeader,
     `Checking ${testDesc} userAgentHTTPHeader.`
   );
   is(
@@ -235,7 +242,7 @@ async function testNavigator(result, expectedResults, extraData) {
   );
   is(
     result.worker_userAgent,
-    expectedResults.userAgent,
+    expectedResults.userAgentNavigator,
     `Checking ${testDesc} worker navigator.userAgent.`
   );
   is(
@@ -262,7 +269,8 @@ async function testNavigator(result, expectedResults, extraData) {
 }
 
 let defaultUserAgent;
-let spoofedUserAgent;
+let spoofedUserAgentNavigator;
+let spoofedUserAgentHeader;
 let allNotSpoofed;
 let allSpoofed;
 
@@ -274,8 +282,14 @@ add_setup(async () => {
     DEFAULT_UA_GECKO_TRAIL[AppConstants.platform]
   } Firefox/${appVersion}.0`;
 
-  spoofedUserAgent = `Mozilla/5.0 (${
-    SPOOFED_UA_OS[AppConstants.platform]
+  spoofedUserAgentNavigator = `Mozilla/5.0 (${
+    SPOOFED_UA_NAVIGATOR_OS[AppConstants.platform]
+  }; rv:${appVersion}.0) Gecko/${
+    SPOOFED_UA_GECKO_TRAIL[AppConstants.platform]
+  } Firefox/${appVersion}.0`;
+
+  spoofedUserAgentHeader = `Mozilla/5.0 (${
+    SPOOFED_UA_HTTPHEADER_OS[AppConstants.platform]
   }; rv:${appVersion}.0) Gecko/${
     SPOOFED_UA_GECKO_TRAIL[AppConstants.platform]
   } Firefox/${appVersion}.0`;
@@ -291,7 +305,8 @@ add_setup(async () => {
     oscpu: DEFAULT_OSCPU[AppConstants.platform],
     platform: DEFAULT_PLATFORM[AppConstants.platform],
     pluginsLength: 5,
-    userAgent: defaultUserAgent,
+    userAgentNavigator: defaultUserAgent,
+    userAgentHTTPHeader: defaultUserAgent,
     framer_crossOrigin_userAgentHTTPHeader: defaultUserAgent,
     framee_crossOrigin_userAgentHTTPHeader: defaultUserAgent,
   };
@@ -302,9 +317,10 @@ add_setup(async () => {
     oscpu: SPOOFED_OSCPU[AppConstants.platform],
     platform: DEFAULT_PLATFORM[AppConstants.platform],
     pluginsLength: 5,
-    userAgent: spoofedUserAgent,
-    framer_crossOrigin_userAgentHTTPHeader: spoofedUserAgent,
-    framee_crossOrigin_userAgentHTTPHeader: spoofedUserAgent,
+    userAgentNavigator: spoofedUserAgentNavigator,
+    userAgentHTTPHeader: spoofedUserAgentHeader,
+    framer_crossOrigin_userAgentHTTPHeader: spoofedUserAgentHeader,
+    framee_crossOrigin_userAgentHTTPHeader: spoofedUserAgentHeader,
   };
 });
 
@@ -343,7 +359,8 @@ add_task(async () => {
 add_task(async () => {
   expectedResults = structuredClone(allSpoofed);
   expectedResults.framer_crossOrigin_userAgentHTTPHeader = defaultUserAgent;
-  expectedResults.framee_crossOrigin_userAgentHTTPHeader = spoofedUserAgent;
+  expectedResults.framee_crossOrigin_userAgentHTTPHeader =
+    spoofedUserAgentHeader;
   await testC(uri, testNavigator, expectedResults);
 });
 
@@ -351,7 +368,8 @@ add_task(async () => {
 add_task(async () => {
   expectedResults = structuredClone(allSpoofed);
   expectedResults.framer_crossOrigin_userAgentHTTPHeader = defaultUserAgent;
-  expectedResults.framee_crossOrigin_userAgentHTTPHeader = spoofedUserAgent;
+  expectedResults.framee_crossOrigin_userAgentHTTPHeader =
+    spoofedUserAgentHeader;
   await testD(uri, testNavigator, expectedResults);
 });
 

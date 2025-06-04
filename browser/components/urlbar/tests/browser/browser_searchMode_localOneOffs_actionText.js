@@ -225,7 +225,7 @@ add_task(async function localOneOff_withVisit() {
   );
   Assert.equal(
     result.image,
-    "chrome://browser/skin/tabs.svg",
+    "chrome://browser/skin/tab.svg",
     "Check the heuristic icon"
   );
 

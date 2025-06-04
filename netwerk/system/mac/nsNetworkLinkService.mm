@@ -34,7 +34,7 @@
 #include "mozilla/Base64.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/Services.h"
-#include "mozilla/glean/NetwerkMetrics.h"
+#include "mozilla/Telemetry.h"
 #include "nsNetworkLinkService.h"
 #include "../../base/IPv6Utils.h"
 #include "../LinkServiceCommon.h"
@@ -427,7 +427,6 @@ bool nsNetworkLinkService::RoutingFromKernel(nsTArray<nsCString>& aHash) {
     LOG(("RoutingFromKernel: Can create a socket for network id"));
     return false;
   }
-  auto sockfd_guard = mozilla::MakeScopeExit([sockfd] { close(sockfd); });
 
   MOZ_ASSERT(!NS_IsMainThread());
 
@@ -656,18 +655,18 @@ void nsNetworkLinkService::calculateNetworkIdInternal(void) {
     if (mNetworkId != output) {
       // new id
       if (found4 && !found6) {
-        glean::network::id.AccumulateSingleSample(1);  // IPv4 only
+        Telemetry::Accumulate(Telemetry::NETWORK_ID2, 1);  // IPv4 only
       } else if (!found4 && found6) {
-        glean::network::id.AccumulateSingleSample(3);  // IPv6 only
+        Telemetry::Accumulate(Telemetry::NETWORK_ID2, 3);  // IPv6 only
       } else {
-        glean::network::id.AccumulateSingleSample(4);  // Both!
+        Telemetry::Accumulate(Telemetry::NETWORK_ID2, 4);  // Both!
       }
       mNetworkId = output;
       idChanged = true;
     } else {
       // same id
       LOG(("Same network id"));
-      glean::network::id.AccumulateSingleSample(2);
+      Telemetry::Accumulate(Telemetry::NETWORK_ID2, 2);
     }
   } else {
     // no id
@@ -676,7 +675,7 @@ void nsNetworkLinkService::calculateNetworkIdInternal(void) {
     if (!mNetworkId.IsEmpty()) {
       mNetworkId.Truncate();
       idChanged = true;
-      glean::network::id.AccumulateSingleSample(0);
+      Telemetry::Accumulate(Telemetry::NETWORK_ID2, 0);
     }
   }
 
@@ -773,7 +772,7 @@ nsresult nsNetworkLinkService::Init(void) {
 
   if (inet_pton(AF_INET, ROUTE_CHECK_IPV4, &mRouteCheckIPv4) != 1) {
     LOG(("Cannot parse address " ROUTE_CHECK_IPV4));
-    MOZ_DIAGNOSTIC_CRASH("Cannot parse address " ROUTE_CHECK_IPV4);
+    MOZ_DIAGNOSTIC_ASSERT(false, "Cannot parse address " ROUTE_CHECK_IPV4);
     return NS_ERROR_UNEXPECTED;
   }
 

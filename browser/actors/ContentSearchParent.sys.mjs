@@ -5,13 +5,12 @@
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
-  BrowserSearchTelemetry:
-    "moz-src:///browser/components/search/BrowserSearchTelemetry.sys.mjs",
+  BrowserSearchTelemetry: "resource:///modules/BrowserSearchTelemetry.sys.mjs",
   BrowserUtils: "resource://gre/modules/BrowserUtils.sys.mjs",
   FormHistory: "resource://gre/modules/FormHistory.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   SearchSuggestionController:
-    "moz-src:///toolkit/components/search/SearchSuggestionController.sys.mjs",
+    "resource://gre/modules/SearchSuggestionController.sys.mjs",
   UrlbarPrefs: "resource:///modules/UrlbarPrefs.sys.mjs",
 });
 
@@ -333,12 +332,7 @@ export let ContentSearch = {
     return true;
   },
 
-  /**
-   * Construct a state object representing the search engine state.
-   *
-   * @returns {Object} state
-   */
-  async currentStateObj() {
+  async currentStateObj(window) {
     let state = {
       engines: [],
       currentEngine: await this._currentEngineObj(false),
@@ -352,6 +346,13 @@ export let ContentSearch = {
         hidden: engine.hideOneOffButton,
         isAppProvided: engine.isAppProvided,
       });
+    }
+
+    if (window) {
+      state.isInPrivateBrowsingMode =
+        lazy.PrivateBrowsingUtils.isContentWindowPrivate(window);
+      state.isAboutPrivateBrowsing =
+        window.gBrowser.currentURI.spec == "about:privatebrowsing";
     }
 
     return state;
@@ -410,19 +411,21 @@ export let ContentSearch = {
     }
   },
 
-  async _onMessageGetState({ actor }) {
-    let state = await this.currentStateObj();
-    return this._reply(actor, "State", state);
+  _onMessageGetState({ actor, browser }) {
+    return this.currentStateObj(browser.ownerGlobal).then(state => {
+      this._reply(actor, "State", state);
+    });
   },
 
-  async _onMessageGetEngine({ actor }) {
-    let state = await this.currentStateObj();
-    let { usePrivateBrowsing } = actor.browsingContext;
-    return this._reply(actor, "Engine", {
-      isPrivateEngine: usePrivateBrowsing,
-      engine: usePrivateBrowsing
-        ? state.currentPrivateEngine
-        : state.currentEngine,
+  _onMessageGetEngine({ actor, browser }) {
+    return this.currentStateObj(browser.ownerGlobal).then(state => {
+      this._reply(actor, "Engine", {
+        isPrivateEngine: state.isInPrivateBrowsingMode,
+        isAboutPrivateBrowsing: state.isAboutPrivateBrowsing,
+        engine: state.isInPrivateBrowsingMode
+          ? state.currentPrivateEngine
+          : state.currentEngine,
+      });
     });
   },
 

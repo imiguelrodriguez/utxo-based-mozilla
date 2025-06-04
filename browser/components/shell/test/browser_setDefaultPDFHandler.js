@@ -3,8 +3,8 @@
 
 ChromeUtils.defineESModuleGetters(this, {
   ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
+  ExperimentFakes: "resource://testing-common/NimbusTestUtils.sys.mjs",
   NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
-  NimbusTestUtils: "resource://testing-common/NimbusTestUtils.sys.mjs",
   sinon: "resource://testing-common/Sinon.sys.mjs",
 });
 
@@ -43,6 +43,8 @@ registerCleanupFunction(() => {
   defaultAgentStub.restore();
   _userChoiceImpossibleTelemetryResultStub.restore();
   shellStub.restore();
+
+  ExperimentAPI._store._deleteForTests("shellService");
 });
 
 add_task(async function ready() {
@@ -53,7 +55,7 @@ add_task(async function ready() {
 Assert.ok(AppConstants.platform == "win", "Platform is Windows");
 
 add_task(async function remoteEnableWithPDF() {
-  let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig(
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig(
     {
       featureId: NimbusFeatures.shellService.featureId,
       value: {
@@ -85,11 +87,11 @@ add_task(async function remoteEnableWithPDF() {
     [".pdf", "FirefoxPDF"],
   ]);
 
-  await doCleanup();
+  doCleanup();
 });
 
 add_task(async function remoteEnableWithPDF_testOnlyReplaceBrowsers() {
-  let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig(
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig(
     {
       featureId: NimbusFeatures.shellService.featureId,
       value: {
@@ -147,11 +149,11 @@ add_task(async function remoteEnableWithPDF_testOnlyReplaceBrowsers() {
     `Will not take default from non-browser`
   );
 
-  await doCleanup();
+  doCleanup();
 });
 
 add_task(async function remoteEnableWithoutPDF() {
-  let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig(
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig(
     {
       featureId: NimbusFeatures.shellService.featureId,
       value: {
@@ -179,11 +181,11 @@ add_task(async function remoteEnableWithoutPDF() {
   Assert.ok(setDefaultBrowserUserChoiceStub.called);
   Assert.deepEqual(setDefaultBrowserUserChoiceStub.firstCall.args, [aumi, []]);
 
-  await doCleanup();
+  doCleanup();
 });
 
 add_task(async function remoteDisable() {
-  let doCleanup = await NimbusTestUtils.enrollWithFeatureConfig(
+  let doCleanup = await ExperimentFakes.enrollWithFeatureConfig(
     {
       featureId: NimbusFeatures.shellService.featureId,
       value: {
@@ -210,7 +212,7 @@ add_task(async function remoteDisable() {
   Assert.ok(setDefaultBrowserUserChoiceStub.notCalled);
   Assert.ok(setDefaultStub.called);
 
-  await doCleanup();
+  doCleanup();
 });
 
 add_task(async function test_setAsDefaultPDFHandler_knownBrowser() {

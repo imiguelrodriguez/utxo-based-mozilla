@@ -12,18 +12,16 @@
  * Shimming requestPictureInPicture to `{}` makes the videos play.
  */
 
-/* globals exportFunction, cloneInto */
+/* globals exportFunction */
 
 console.info(
-  "PictureInPicture APIs are being shimmed for compatibility reasons. See https://bugzilla.mozilla.org/show_bug.cgi?id=1899937 for details."
+  "requestPictureInPicture was shimmed for compatibility reasons. See https://bugzilla.mozilla.org/show_bug.cgi?id=1899937 for details."
 );
 
-const win = window.wrappedJSObject;
+const proto = HTMLVideoElement.wrappedJSObject.prototype;
 
-const proto = win.HTMLVideoElement.prototype;
-const promise = win.Promise.resolve();
-proto.requestPictureInPicture = exportFunction(() => promise, window);
-
-win.Document.prototype.pictureInPictureElement = null;
-win.PictureInPictureWindow = exportFunction(class {}, window);
-win.PictureInPictureEvent = exportFunction(class {}, window);
+Object.defineProperty(proto, "requestPictureInPicture", {
+  value: exportFunction(function () {
+    return {};
+  }, window),
+});

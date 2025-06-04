@@ -5,8 +5,7 @@
 @import url("chrome://global/skin/in-content/common.css");
 
 @media not print {
-  html,
-  body {
+  html, body {
     height: 100%;
   }
 }
@@ -19,6 +18,31 @@ body {
 #sectionTitle {
   float: inline-start;
   padding-inline-start: 1rem;
+}
+
+/** Categories **/
+
+.category {
+  cursor: pointer;
+  /* Center category names */
+  display: flex;
+  align-items: center;
+}
+
+.category .category-name {
+  pointer-events: none;
+}
+
+#category-active {
+  background-image: url("chrome://browser/content/policies/policies-active.svg");
+}
+
+#category-documentation {
+  background-image: url("chrome://browser/content/policies/policies-documentation.svg");
+}
+
+#category-errors {
+  background-image: url("chrome://browser/content/policies/policies-error.svg");
 }
 
 /** Content area **/
@@ -37,7 +61,7 @@ body {
 }
 
 tbody tr {
-  transition: background cubic-bezier(0.07, 0.95, 0, 1) 250ms;
+  transition: background cubic-bezier(.07, .95, 0, 1) 250ms;
 }
 
 tbody tr:hover {
@@ -45,9 +69,7 @@ tbody tr:hover {
   color: var(--in-content-item-hover-text);
 }
 
-th,
-td,
-table {
+th, td, table {
   border-collapse: collapse;
   border: none;
   text-align: start;
@@ -72,7 +94,7 @@ td {
 .active-policies tr.odd:not(:hover),
 .errors tr:nth-child(odd):not(:hover),
 tbody:nth-child(4n + 1) {
-  background-color: var(--table-row-background-color-alternate);
+  background-color: var(--in-content-box-background-odd);
 }
 
 .arr_sep.odd:not(:last-child) td:not(:first-child) {
@@ -97,8 +119,8 @@ tbody:nth-child(4n + 1) {
   height: 14px;
   vertical-align: middle;
   width: 14px;
-  margin-top: -0.125rem;
-  margin-left: 0.5rem;
+  margin-top: -.125rem;
+  margin-left: .5rem;
 }
 
 .collapsible {

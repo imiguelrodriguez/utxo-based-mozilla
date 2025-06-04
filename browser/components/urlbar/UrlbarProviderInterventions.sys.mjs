@@ -16,15 +16,17 @@ ChromeUtils.defineESModuleGetters(lazy, {
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   ResetProfile: "resource://gre/modules/ResetProfile.sys.mjs",
   Sanitizer: "resource:///modules/Sanitizer.sys.mjs",
-  UrlbarProviderGlobalActions:
-    "resource:///modules/UrlbarProviderGlobalActions.sys.mjs",
   UrlbarResult: "resource:///modules/UrlbarResult.sys.mjs",
   UrlbarTokenizer: "resource:///modules/UrlbarTokenizer.sys.mjs",
 });
 
 ChromeUtils.defineLazyGetter(lazy, "appUpdater", () => new lazy.AppUpdater());
 
-// The possible tips to show.
+// The possible tips to show.  These names (except NONE) are used in the names
+// of keys in the `urlbar.tips` keyed scalar telemetry (see telemetry.rst).
+// Don't modify them unless you've considered that.  If you do modify them or
+// add new tips, then you are also adding new `urlbar.tips` keys and therefore
+// need an expanded data collection review.
 const TIPS = {
   NONE: "",
   CLEAR: "intervention_clear",
@@ -474,7 +476,9 @@ class ProviderInterventions extends UrlbarProvider {
   }
 
   /**
-   * @returns {Values<typeof UrlbarUtils.PROVIDER_TYPE>}
+   * The type of the provider, must be one of UrlbarUtils.PROVIDER_TYPE.
+   *
+   * @returns {UrlbarUtils.PROVIDER_TYPE}
    */
   get type() {
     return UrlbarUtils.PROVIDER_TYPE.PROFILE;
@@ -486,8 +490,9 @@ class ProviderInterventions extends UrlbarProvider {
    * with this provider, to save on resources.
    *
    * @param {UrlbarQueryContext} queryContext The query context object
+   * @returns {boolean} Whether this provider should be invoked for the search.
    */
-  async isActive(queryContext) {
+  isActive(queryContext) {
     if (
       !queryContext.searchString ||
       queryContext.searchString.length > UrlbarUtils.MAX_TEXT_LENGTH ||
@@ -495,8 +500,7 @@ class ProviderInterventions extends UrlbarProvider {
         queryContext.searchString
       ) ||
       !EN_LOCALE_MATCH.test(Services.locale.appLocaleAsBCP47) ||
-      !Services.policies.isAllowed("urlbarinterventions") ||
-      (await lazy.UrlbarProviderGlobalActions.isActive(queryContext))
+      !Services.policies.isAllowed("urlbarinterventions")
     ) {
       return false;
     }
@@ -705,6 +709,16 @@ class ProviderInterventions extends UrlbarProvider {
     if (details.selType == "tip") {
       this.#pickResult(details.result, controller.browserWindow);
     }
+  }
+
+  onImpression(state, queryContext, controller, providerVisibleResults) {
+    providerVisibleResults.forEach(({ result }) => {
+      Services.telemetry.keyedScalarAdd(
+        "urlbar.tips",
+        `${result.payload.type}-shown`,
+        1
+      );
+    });
   }
 
   /**

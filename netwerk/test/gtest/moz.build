@@ -9,12 +9,10 @@ UNIFIED_SOURCES += [
     "TestBind.cpp",
     "TestBufferedInputStream.cpp",
     "TestCacheControlParser.cpp",
-    "TestCapsule.cpp",
     "TestCommon.cpp",
     "TestCookie.cpp",
     "TestDNSPacket.cpp",
     "TestHeaders.cpp",
-    "TestHttp2WebTransport.cpp",
     "TestHttpAtom.cpp",
     "TestHttpAuthUtils.cpp",
     "TestHttpChannel.cpp",
@@ -23,7 +21,6 @@ UNIFIED_SOURCES += [
     "TestInputStreamTransport.cpp",
     "TestIsValidIp.cpp",
     "TestLinkHeader.cpp",
-    "TestLocalNetworkAccess.cpp",
     "TestMIMEInputStream.cpp",
     "TestMozURL.cpp",
     "TestPACMan.cpp",
@@ -35,7 +32,6 @@ UNIFIED_SOURCES += [
     "TestStandardURL.cpp",
     "TestUDPSocket.cpp",
     "TestURIMutator.cpp",
-    "TestWebTransportFlowControl.cpp",
 ]
 
 if CONFIG["OS_TARGET"] == "WINNT":

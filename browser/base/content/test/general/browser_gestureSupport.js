@@ -26,10 +26,6 @@ var test_normalTab;
 async function test() {
   waitForExplicitFinish();
 
-  await SpecialPowers.pushPrefEnv({
-    set: [["test.wait300msAfterTabSwitch", true]],
-  });
-
   // Disable the default gestures support during this part of the test
   gGestureSupport.init(false);
 
@@ -571,7 +567,7 @@ async function test_emitLatchedEvents(eventPrefix, initialDelta, cmd) {
 function test_addCommand(prefName, id) {
   let cmd = test_commandset.appendChild(document.createXULElement("command"));
   cmd.setAttribute("id", id);
-  cmd.addEventListener("command", event => event.target.callCount++);
+  cmd.setAttribute("oncommand", "this.callCount++;");
 
   cmd.origPrefName = prefName;
   cmd.origPrefValue = Services.prefs.getCharPref(prefName);

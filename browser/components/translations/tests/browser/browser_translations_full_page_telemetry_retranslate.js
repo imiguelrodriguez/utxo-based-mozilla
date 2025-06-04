@@ -17,10 +17,10 @@ add_task(async function test_translations_telemetry_retranslate() {
     "The button is available."
   );
 
-  await FullPageTranslationsTestUtils.assertPageIsNotTranslated(runInPage);
+  await FullPageTranslationsTestUtils.assertPageIsUntranslated(runInPage);
 
   await FullPageTranslationsTestUtils.openPanel({
-    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewIntro,
+    onOpenPanel: FullPageTranslationsTestUtils.assertPanelViewDefault,
   });
 
   await FullPageTranslationsTestUtils.changeSelectedFromLanguage({
@@ -31,7 +31,7 @@ add_task(async function test_translations_telemetry_retranslate() {
     downloadHandler: resolveDownloads,
   });
 
-  await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated({
+  await FullPageTranslationsTestUtils.assertPageIsTranslated({
     fromLanguage: "fr",
     toLanguage: "en",
     runInPage,
@@ -43,6 +43,11 @@ add_task(async function test_translations_telemetry_retranslate() {
       ["full_page", 1],
       ["select", 0],
     ]
+  );
+  await TestTranslationsTelemetry.assertCounter(
+    "RequestCount",
+    Glean.translations.requestsCount,
+    1
   );
   await TestTranslationsTelemetry.assertEvent(Glean.translationsPanel.open, {
     expectNewFlowId: true,
@@ -81,7 +86,7 @@ add_task(async function test_translations_telemetry_retranslate() {
         to_language: "en",
         auto_translate: false,
         document_language: "es",
-        top_preferred_language: "en-US",
+        top_preferred_language: "en",
         request_target: "full_page",
       },
     }
@@ -100,7 +105,7 @@ add_task(async function test_translations_telemetry_retranslate() {
     downloadHandler: resolveDownloads,
   });
 
-  await FullPageTranslationsTestUtils.assertOnlyIntersectingNodesAreTranslated({
+  await FullPageTranslationsTestUtils.assertPageIsTranslated({
     fromLanguage: "fr",
     toLanguage: "uk",
     runInPage,
@@ -112,6 +117,11 @@ add_task(async function test_translations_telemetry_retranslate() {
       ["full_page", 2],
       ["select", 0],
     ]
+  );
+  await TestTranslationsTelemetry.assertCounter(
+    "RequestCount",
+    Glean.translations.requestsCount,
+    2
   );
   await TestTranslationsTelemetry.assertEvent(Glean.translationsPanel.open, {
     expectNewFlowId: true,
@@ -155,10 +165,6 @@ add_task(async function test_translations_telemetry_retranslate() {
       },
     }
   );
-
-  await TestTranslationsTelemetry.assertTranslationsEnginePerformance({
-    expectedEventCount: 2,
-  });
 
   await cleanup();
 });

@@ -23,18 +23,12 @@ ChromeUtils.defineLazyGetter(lazy, "gFluentStrings", function () {
   return new Localization(["browser/browser.ftl"]);
 });
 
-/**
+/*
  * This Map stores key-value pairs where each key is a restrict token
- * and each value is an array containing the localized keyword and the
- * english keyword.
- *
- * For example,
- * "*" maps to "Bookmarks" for english locales
- * "*" maps to "Marcadores, Bookmarks" for es-ES
- *
- * @type {Map<string, string[]>}
+ * and each value is a corresponding localized restrict keyword.
+ * E.g. "*" maps to "Bookmarks"
  */
-let tokenToKeywords = new Map();
+let tokenToKeyword = new Map();
 
 export var UrlbarTokenizer = {
   // Regex matching on whitespaces.
@@ -116,36 +110,23 @@ export var UrlbarTokenizer = {
       })
     );
 
-    let englishSearchStrings = new Localization([
-      "preview/enUS-searchFeatures.ftl",
-    ]);
-
-    let englishKeywords = await englishSearchStrings.formatValues(
-      lazy.UrlbarUtils.LOCAL_SEARCH_MODES.map(mode => {
-        let name = lazy.UrlbarUtils.getResultSourceName(mode.source);
-        return { id: `urlbar-search-mode-${name}-en` };
-      })
-    );
-
     for (let { restrict } of lazy.UrlbarUtils.LOCAL_SEARCH_MODES) {
-      let uniqueKeywords = [
-        ...new Set([l10nKeywords.shift(), englishKeywords.shift()]),
-      ];
-
-      tokenToKeywords.set(restrict, uniqueKeywords);
+      tokenToKeyword.set(restrict, l10nKeywords.shift());
     }
   },
 
   /**
    * Gets the cached localized restrict keywords. If keywords are not cached
    * fetch the localized keywords first and then return the keywords.
+   *
+   * @returns {Map} The tokenToKeyword Map.
    */
   async getL10nRestrictKeywords() {
-    if (tokenToKeywords.size === 0) {
+    if (tokenToKeyword.size === 0) {
       await this.loadL10nRestrictKeywords();
     }
 
-    return tokenToKeywords;
+    return tokenToKeyword;
   },
 
   /**
@@ -156,8 +137,7 @@ export var UrlbarTokenizer = {
    *
    * @param {string} token
    *        The string token to verify
-   * @param {object} [options]
-   * @param {boolean} [options.requirePath] The url must have a path
+   * @param {boolean} [requirePath] The url must have a path
    * @returns {boolean} whether the token looks like a URL.
    */
   looksLikeUrl(token, { requirePath = false } = {}) {
@@ -300,9 +280,10 @@ export var UrlbarTokenizer = {
    *          tokens property.
    */
   tokenize(queryContext) {
-    lazy.logger.debug("Tokenizing search string", {
-      searchString: queryContext.searchString,
-    });
+    lazy.logger.debug(
+      "Tokenizing search string",
+      JSON.stringify(queryContext.searchString)
+    );
     if (!queryContext.trimmedSearchString) {
       queryContext.tokens = [];
       return queryContext;
@@ -341,7 +322,11 @@ const CHAR_TO_TYPE_MAP = new Map(
  *
  * @param {UrlbarQueryContext} queryContext
  *        The query context object to tokenize.
- * @returns {string[]} An array of string tokens.
+ * @param {string} queryContext.searchString
+ *        The search string to split.
+ * @param {object} queryContext.searchMode
+ *        A search mode object.
+ * @returns {Array} An array of string tokens.
  */
 function splitString({ searchString, searchMode }) {
   // The first step is splitting on unicode whitespaces. We ignore whitespaces
@@ -383,7 +368,9 @@ function splitString({ searchString, searchMode }) {
   }
 
   // Check for an unambiguous restriction char at the beginning of the first
-  // token.
+  // token, or at the end of the last token. We only count trailing restriction
+  // chars if they are the search restriction char, which is "?". This is to
+  // allow for a typed question to yield only search results.
   if (
     CHAR_TO_TYPE_MAP.has(firstToken[0]) &&
     !UrlbarTokenizer.REGEXP_PERCENT_ENCODED_START.test(firstToken) &&
@@ -392,6 +379,16 @@ function splitString({ searchString, searchMode }) {
     tokens[0] = firstToken.substring(1);
     tokens.splice(0, 0, firstToken[0]);
     return tokens;
+  }
+
+  const lastIndex = tokens.length - 1;
+  const lastToken = tokens[lastIndex];
+  if (
+    lastToken[lastToken.length - 1] == UrlbarTokenizer.RESTRICT.SEARCH &&
+    !UrlbarTokenizer.looksLikeUrl(lastToken, { requirePath: true })
+  ) {
+    tokens[lastIndex] = lastToken.substring(0, lastToken.length - 1);
+    tokens.push(lastToken[lastToken.length - 1]);
   }
 
   return tokens;

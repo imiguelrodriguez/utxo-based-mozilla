@@ -8,14 +8,12 @@ ChromeUtils.defineESModuleGetters(this, {
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
   BuiltInThemes: "resource:///modules/BuiltInThemes.sys.mjs",
   CFRMessageProvider: "resource:///modules/asrouter/CFRMessageProvider.sys.mjs",
-  ClientID: "resource://gre/modules/ClientID.sys.mjs",
   ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
+  ExperimentFakes: "resource://testing-common/NimbusTestUtils.sys.mjs",
   FxAccounts: "resource://gre/modules/FxAccounts.sys.mjs",
   HomePage: "resource:///modules/HomePage.sys.mjs",
-  InfoBar: "resource:///modules/asrouter/InfoBar.sys.mjs",
   NewTabUtils: "resource://gre/modules/NewTabUtils.sys.mjs",
   NimbusFeatures: "resource://nimbus/ExperimentAPI.sys.mjs",
-  NimbusTestUtils: "resource://testing-common/NimbusTestUtils.sys.mjs",
   PlacesTestUtils: "resource://testing-common/PlacesTestUtils.sys.mjs",
   ProfileAge: "resource://gre/modules/ProfileAge.sys.mjs",
   QueryCache: "resource:///modules/asrouter/ASRouterTargeting.sys.mjs",
@@ -221,27 +219,6 @@ add_task(async function check_canCreateSelectableProfiles() {
     return;
   }
 
-  // Reset profiles prefs
-  await pushPrefs(
-    ["browser.profiles.enabled", false],
-    ["browser.profiles.created", false]
-  );
-
-  is(
-    await ASRouterTargeting.Environment.canCreateSelectableProfiles,
-    false,
-    "The new profiles feature doesn't support standalone profiles which are used in automation."
-  );
-
-  // We have to fake there being a real profile available and enable the profiles feature
-  await pushPrefs(
-    ["browser.profiles.enabled", true],
-    ["browser.profiles.created", false]
-  );
-  await ProfilesDatastoreService.resetProfileService({ currentProfile: {} });
-  await SelectableProfileService.uninit();
-  await SelectableProfileService.init();
-
   is(
     await ASRouterTargeting.Environment.canCreateSelectableProfiles,
     true,
@@ -254,8 +231,6 @@ add_task(async function check_canCreateSelectableProfiles() {
     message,
     "should select correct item by canCreateSelectableProfiles"
   );
-
-  await ProfilesDatastoreService.resetProfileService(null);
 });
 
 add_task(async function check_hasSelectableProfiles() {
@@ -265,7 +240,7 @@ add_task(async function check_hasSelectableProfiles() {
     "should return false before the pref is set"
   );
 
-  await pushPrefs(["browser.profiles.created", true]);
+  await pushPrefs(["toolkit.profiles.storeID", "someValue"]);
   is(
     await ASRouterTargeting.Environment.hasSelectableProfiles,
     true,
@@ -530,15 +505,6 @@ add_task(async function checkAddonsInfo() {
   const FAKE_NAME = "Test Addon";
   const FAKE_VERSION = "0.5.7";
 
-  let { hasInstalledAddons: installedAddons } =
-    await ASRouterTargeting.Environment.addonsInfo;
-
-  Assert.strictEqual(
-    installedAddons,
-    false,
-    "should correctly return hasInstalledAddons"
-  );
-
   const xpi = AddonTestUtils.createTempWebExtensionFile({
     manifest: {
       browser_specific_settings: { gecko: { id: FAKE_ID } },
@@ -557,11 +523,8 @@ add_task(async function checkAddonsInfo() {
     "service",
   ]);
 
-  const {
-    addons: asRouterAddons,
-    isFullData,
-    hasInstalledAddons,
-  } = await ASRouterTargeting.Environment.addonsInfo;
+  const { addons: asRouterAddons, isFullData } = await ASRouterTargeting
+    .Environment.addonsInfo;
 
   ok(
     addons.every(({ id }) => asRouterAddons[id]),
@@ -635,8 +598,6 @@ add_task(async function checkAddonsInfo() {
       Math.abs(Date.now() - new Date(testAddon.installDate)) < 60 * 1000,
     "should correctly provide `installDate` property from full data"
   );
-
-  ok(hasInstalledAddons, "should correctly return hasInstalledAddons");
 });
 
 add_task(async function checkFrecentSites() {
@@ -1362,31 +1323,6 @@ add_task(async function test_fxViewButtonAreaType_removed() {
   CustomizableUI.reset();
 });
 
-add_task(async function test_alltabsButtonAreaType_default() {
-  is(
-    typeof (await ASRouterTargeting.Environment.alltabsButtonAreaType),
-    "string",
-    "Should return a string"
-  );
-
-  is(
-    await ASRouterTargeting.Environment.alltabsButtonAreaType,
-    "toolbar",
-    "Should return name of container if button hasn't been removed"
-  );
-});
-
-add_task(async function test_alltabsButtonAreaType_removed() {
-  CustomizableUI.removeWidgetFromArea("alltabs-button");
-
-  is(
-    await ASRouterTargeting.Environment.alltabsButtonAreaType,
-    null,
-    "Should return null if button has been removed"
-  );
-  CustomizableUI.reset();
-});
-
 add_task(async function test_creditCardsSaved() {
   await SpecialPowers.pushPrefEnv({
     set: [
@@ -1568,64 +1504,6 @@ add_task(async function check_isMSIX() {
     Services.sysinfo.getProperty("hasWinPackageId"),
     "Should match the value from sysinfo"
   );
-});
-
-add_task(async function check_packageFamilyName() {
-  if (AppConstants.platform !== "win") {
-    is(
-      ASRouterTargeting.Environment.packageFamilyName,
-      null,
-      "Should always be null on non-Windows"
-    );
-    return;
-  }
-
-  let winPackageFamilyName = Services.sysinfo.getProperty(
-    "winPackageFamilyName"
-  );
-  if (winPackageFamilyName === "") {
-    is(
-      ASRouterTargeting.Environment.packageFamilyName,
-      null,
-      "Should be null if sysinfo is empty"
-    );
-  } else {
-    is(
-      ASRouterTargeting.Environment.packageFamilyName,
-      winPackageFamilyName,
-      "Should match non-empty sysinfo"
-    );
-  }
-});
-
-add_task(async function check_msixConsistency() {
-  if (ASRouterTargeting.Environment.isMSIX) {
-    Assert.greater(
-      ASRouterTargeting.Environment.packageFamilyName.length,
-      0,
-      "packageFamilyName should be non-empty if installed by MSIX"
-    );
-  } else {
-    is(
-      ASRouterTargeting.Environment.packageFamilyName,
-      null,
-      "packageFamilyName should be empty if not installed by MSIX"
-    );
-  }
-
-  if (ASRouterTargeting.Environment.packageFamilyName === null) {
-    is(
-      ASRouterTargeting.Environment.isMSIX,
-      false,
-      "isMSIX should be false if packageFamilyName is not present"
-    );
-  } else {
-    is(
-      ASRouterTargeting.Environment.isMSIX,
-      true,
-      "isMSIX should be true if packageFamilyName is present"
-    );
-  }
 });
 
 add_task(async function check_isRTAMO() {
@@ -1953,31 +1831,6 @@ add_task(
   }
 );
 
-add_task(async function check_activeNotifications_infobar_shown() {
-  let message = {
-    ...(await CFRMessageProvider.getMessages()).find(
-      m => m.id === "INFOBAR_ACTION_86"
-    ),
-  };
-
-  let dispatchStub = sinon.stub();
-  let infobar = await InfoBar.showInfoBarMessage(
-    BrowserWindowTracker.getTopWindow().gBrowser.selectedBrowser,
-    message,
-    dispatchStub
-  );
-
-  is(
-    await ASRouterTargeting.Environment.activeNotifications,
-    true,
-    "activeNotifications should be true when an Infobar is rendered"
-  );
-
-  // dismiss infobar
-  infobar.notification.closeButton.click();
-  dispatchStub.reset();
-});
-
 add_task(
   async function check_activeNotifications_newtab_topic_selection_modal_shown_recently() {
     // 1 second ago
@@ -1994,117 +1847,3 @@ add_task(
     );
   }
 );
-
-add_task(async function check_unhandledCampaignAction() {
-  is(
-    typeof ASRouterTargeting.Environment.unhandledCampaignAction,
-    "object",
-    "Should return an object" // is null unless an unhandled action is present
-  );
-
-  const DID_HANDLE_CAMAPAIGN_ACTION_PREF =
-    "trailhead.firstrun.didHandleCampaignAction";
-
-  const TEST_CASES = [
-    {
-      title: "unsupported open_url campaign action",
-      attributionData: {
-        campaign: "open_url",
-      },
-      expected: null,
-      after: () => {
-        QueryCache.queries.UnhandledCampaignAction.expire();
-      },
-    },
-    {
-      title: "supported and unhandled set default browser campaign action",
-      attributionData: {
-        campaign: "set_default_browser",
-      },
-      expected: "SET_DEFAULT_BROWSER",
-      after: () => {
-        QueryCache.queries.UnhandledCampaignAction.expire();
-      },
-    },
-    {
-      title: "supported and handled set default browser campaign action",
-      attributionData: {
-        campaign: "set_default_browser",
-      },
-      expected: null,
-      before: async () => {
-        await pushPrefs([DID_HANDLE_CAMAPAIGN_ACTION_PREF, true]);
-      },
-      after: () => {
-        Services.prefs.clearUserPref(DID_HANDLE_CAMAPAIGN_ACTION_PREF);
-        QueryCache.queries.UnhandledCampaignAction.expire();
-      },
-    },
-  ];
-
-  const sandbox = sinon.createSandbox();
-  registerCleanupFunction(async () => {
-    sandbox.restore();
-  });
-
-  const stub = sandbox.stub(AttributionCode, "getCachedAttributionData");
-
-  for (const {
-    title,
-    attributionData,
-    expected,
-    before,
-    after,
-  } of TEST_CASES) {
-    if (before) {
-      await before();
-    }
-    stub.returns(attributionData);
-    is(
-      ASRouterTargeting.Environment.unhandledCampaignAction,
-      expected,
-      `${title} - Expected unhandledCampaignAction to have the expected value`
-    );
-    if (after) {
-      after();
-    }
-  }
-});
-
-add_task(async function check_profileGroupIdTargeting() {
-  const expected = await ClientID.getCachedProfileGroupID();
-  const result = await ASRouterTargeting.Environment.profileGroupId;
-
-  is(typeof result, "string", "profileGroupId should be a string");
-
-  is(result, expected, "it should be equal to the profile group id");
-
-  const message = {
-    id: "foo",
-    targeting: `profileGroupId == "${expected.toString()}"`,
-  };
-  is(
-    await ASRouterTargeting.findMatchingMessage({ messages: [message] }),
-    message,
-    "should select correct item by profile group id"
-  );
-});
-
-add_task(async function test_buildId() {
-  is(
-    typeof ASRouterTargeting.Environment.buildId,
-    "number",
-    "Should return a number"
-  );
-
-  const message = {
-    id: "foo",
-    // Later than January 2025
-    targeting: `buildId >= 20251010000`,
-  };
-  is(
-    await ASRouterTargeting.findMatchingMessage({ messages: [message] }),
-    message,
-    "should select correct item when filtering by build ID"
-  );
-});
